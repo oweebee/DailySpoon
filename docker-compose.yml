@@ -1,0 +1,39 @@
+services:
+  web:
+    build: .
+    command: ["web"]
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      FRESHRSS_BASE_URL: ${FRESHRSS_BASE_URL}
+      FRESHRSS_USERNAME: ${FRESHRSS_USERNAME}
+      FRESHRSS_API_PASSWORD: ${FRESHRSS_API_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_SECRET: ${ADMIN_SECRET}
+      CRON_SECRET: ${CRON_SECRET}
+      NODE_ENV: production
+
+  worker:
+    build: .
+    command: ["worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      FRESHRSS_BASE_URL: ${FRESHRSS_BASE_URL}
+      FRESHRSS_USERNAME: ${FRESHRSS_USERNAME}
+      FRESHRSS_API_PASSWORD: ${FRESHRSS_API_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      EDITION_HOUR: ${EDITION_HOUR:-6}
+      EDITION_MINUTE: ${EDITION_MINUTE:-0}
+      EDITION_TZ: ${EDITION_TZ:-Europe/Paris}
+      RUN_ON_START: ${RUN_ON_START:-false}
+      NODE_ENV: production
+
+# DATABASE_URL is expected to point at your own Postgres (e.g. your RDS
+# instance). If you'd rather run Postgres in Docker too, uncomment below
+# and set DATABASE_URL to postgresql://dailyspoon:os
