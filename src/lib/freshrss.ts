@@ -210,6 +210,21 @@ export async function fetchOgImage(url: string): Promise<string | null> {
 }
 
 /**
+ * Dernier recours si ni le flux ni og:image n'ont donné d'illustration : le
+ * favicon du site source, via le service public de Google (aucune clé
+ * requise, quasi toujours disponible) — pour ne jamais laisser un article
+ * sans image du tout plutôt que d'afficher rien.
+ */
+export function faviconFallback(pageUrl: string): string | null {
+  try {
+    const { hostname } = new URL(pageUrl);
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=128`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch recent items from FreshRSS's global reading list, then keep only
  * the ones tagged with a category the user has selected in DailySpoon's
  * admin, that aren't from a feed the user explicitly excluded, and that we
@@ -256,10 +271,13 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
 
     let imageUrl = extractImageUrl(item);
     if (!imageUrl && canonicalUrl) {
-      // Rien dans le flux — dernier recours, on va chercher l'og:image sur
-      // la page source (uniquement pour les nouveaux articles, jamais
-      // re-tenté pour ceux déjà en base).
+      // Rien dans le flux — on va chercher l'og:image sur la page source.
       imageUrl = await fetchOgImage(canonicalUrl);
+    }
+    if (!imageUrl && canonicalUrl) {
+      // Toujours rien — favicon du site en dernier recours, plutôt que pas
+      // d'image du tout.
+      imageUrl = faviconFallback(canonicalUrl);
     }
 
     items.push({

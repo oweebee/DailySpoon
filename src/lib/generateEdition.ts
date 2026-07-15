@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { fetchNewItemsFromSelectedCategories, fetchOgImage } from "./freshrss";
+import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback } from "./freshrss";
 import { processArticles } from "./ai";
 import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
 
@@ -130,11 +130,18 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
     // stripped below.
     let backfilledImage = !article.imageUrl ? extractFirstImageSrc(article.sourceExcerpt) : null;
 
-    // Toujours rien trouvé dans le HTML déjà stocké — dernier recours,
-    // og:image sur la page source, avec un plafond par run.
+    // Toujours rien trouvé dans le HTML déjà stocké — og:image sur la page
+    // source, avec un plafond par run (vraie requête réseau sortante).
     if (!article.imageUrl && !backfilledImage && article.sourceUrl && ogBackfillsUsed < MAX_OG_BACKFILL_PER_RUN) {
       ogBackfillsUsed++;
       backfilledImage = await fetchOgImage(article.sourceUrl);
+    }
+
+    // Toujours rien — favicon du site en dernier recours (pas de requête
+    // réseau de notre côté, juste une URL construite, donc pas de plafond
+    // nécessaire ici : tous les articles restants sont couverts d'un coup).
+    if (!article.imageUrl && !backfilledImage && article.sourceUrl) {
+      backfilledImage = faviconFallback(article.sourceUrl);
     }
 
     if (!dirty && !backfilledImage) continue;
