@@ -16,6 +16,27 @@ export type FreshRssCategory = {
   label: string;
 };
 
+/**
+ * FreshRSS's summary/content fields are raw HTML straight from the source
+ * feed (paragraphs, links, embedded images, sometimes whole <figure> blocks).
+ * Strip it down to plain text so articles read cleanly instead of showing
+ * literal tags — both for direct display (no-AI fallback mode) and as
+ * cleaner input to the AI rewrite prompt.
+ */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function config() {
   const { freshrssBaseUrl: baseUrl, freshrssUsername: username, freshrssApiPassword: password } =
     await getSettings();
@@ -118,7 +139,8 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     if (exists) continue;
 
     const canonicalUrl = item.canonical?.[0]?.href || item.alternate?.[0]?.href || "";
-    const excerpt: string | null = item.summary?.content || item.content?.content || null;
+    const rawExcerpt: string | null = item.summary?.content || item.content?.content || null;
+    const excerpt = rawExcerpt ? stripHtml(rawExcerpt) : null;
 
     items.push({
       freshrssItemId: item.id,

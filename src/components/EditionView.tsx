@@ -7,6 +7,7 @@ export type ArticleLike = {
   sourceUrl: string;
   sourceTitle: string;
   feedTitle: string;
+  publishedAt: Date | string | null;
 };
 
 export function EditionView({ articles }: { articles: ArticleLike[] }) {
@@ -21,11 +22,25 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
   const sorted = [...articles].sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
   const [hero, ...rest] = sorted;
 
+  const MAX_PER_CATEGORY = 20;
+
   const byCategory = new Map<string, ArticleLike[]>();
   for (const article of rest) {
     const cat = article.category || "Autre";
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(article);
+  }
+
+  // Les plus récents d'abord, toutes sources confondues, et on plafonne à
+  // 20 par rubrique pour ne pas la laisser grossir indéfiniment au fil des
+  // régénérations (bouton "Aspirer les news" notamment).
+  for (const [cat, arts] of byCategory) {
+    arts.sort((a, b) => {
+      const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return tb - ta;
+    });
+    byCategory.set(cat, arts.slice(0, MAX_PER_CATEGORY));
   }
 
   const categories = [...byCategory.keys()].sort((a, b) => a.localeCompare(b));
