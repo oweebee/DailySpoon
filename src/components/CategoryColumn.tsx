@@ -5,7 +5,7 @@ import type { ArticleLike } from "./EditionView";
 import { SourceLine, formatStamp } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 
-const INITIAL_COUNT = 3;
+const INITIAL_COUNT = 5;
 const STEP = 5;
 
 export function CategoryColumn({ label, articles }: { label: string; articles: ArticleLike[] }) {
