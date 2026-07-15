@@ -66,15 +66,26 @@ async function testFreshRss(baseUrlRaw: string, username: string, password: stri
   }
 }
 
+// Règle du projet : on évite de consommer des tokens quand ce n'est pas
+// nécessaire. `models.list()` est un appel de métadonnées (authentification +
+// liste des modèles disponibles) qui ne génère aucun token de complétion —
+// contrairement à un vrai appel à messages.create(), donc coût nul.
 async function testAnthropic(apiKey: string, model?: string): Promise<TestResult> {
   try {
     const client = new Anthropic({ apiKey });
-    await client.messages.create({
-      model: (model || "claude-sonnet-4-5") as any,
-      max_tokens: 1,
-      messages: [{ role: "user", content: "ping" }]
-    });
-    return { ok: true, message: "Clé Anthropic valide." };
+    const models = await client.models.list();
+
+    if (model) {
+      const known = models.data.some((m) => m.id === model);
+      if (!known) {
+        return {
+          ok: true,
+          message: `Clé Anthropic valide, mais le modèle "${model}" n'apparaît pas dans la liste des modèles disponibles pour ce compte — vérifie l'orthographe.`
+        };
+      }
+    }
+
+    return { ok: true, message: "Clé Anthropic valide (vérifiée sans consommer de tokens)." };
   } catch (err: any) {
     return { ok: false, message: `Clé Anthropic invalide ou erreur : ${err?.message || "erreur inconnue"}` };
   }

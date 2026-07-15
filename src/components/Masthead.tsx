@@ -18,7 +18,7 @@ export function Masthead({ date }: { date: Date }) {
 
       {/* Masthead gothique centré */}
       <div className="py-6 text-center">
-        <Link href="/" className="font-masthead text-6xl tracking-wide md:text-8xl">
+        <Link href="/" className="font-masthead text-5xl font-black uppercase tracking-tight md:text-7xl">
           DailySpoon
         </Link>
       </div>

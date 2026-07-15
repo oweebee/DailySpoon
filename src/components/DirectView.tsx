@@ -10,7 +10,13 @@ export function DirectView({ initialArticles }: { initialArticles: ArticleLike[]
   async function pull() {
     setPulling(true);
     setMessage(null);
-    const res = await fetch("/api/cron/generate", { method: "POST" });
+    // Règle du projet : /direct est un aperçu rapide, jamais d'IA, même si une
+    // clé Anthropic est configurée pour l'édition quotidienne (économie de tokens).
+    const res = await fetch("/api/cron/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ noAi: true })
+    });
     const body = await res.json().catch(() => ({}));
     setPulling(false);
     if (res.ok) {

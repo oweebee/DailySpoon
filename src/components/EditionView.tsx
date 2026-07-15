@@ -1,3 +1,5 @@
+import { CategoryColumn } from "./CategoryColumn";
+
 export type ArticleLike = {
   id: string;
   headline: string | null;
@@ -52,10 +54,10 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
         <p className="mb-3 text-xs uppercase tracking-[0.35em] text-journal">
           ✦ À la une ✦
         </p>
-        <h1 className="mx-auto mb-5 max-w-4xl font-display text-4xl font-black leading-tight md:text-6xl">
+        <h1 className="mx-auto mb-5 max-w-3xl font-display text-3xl font-black leading-tight md:text-5xl">
           {hero.headline}
         </h1>
-        <p className="drop-cap newsprint mx-auto max-w-2xl text-lg leading-relaxed text-neutral-800 md:columns-2 md:gap-8 md:text-left">
+        <p className="drop-cap newsprint mx-auto max-w-2xl text-base leading-snug text-neutral-800 md:columns-2 md:gap-8 md:text-left">
           {hero.summary}
         </p>
         <div className="mt-4">
@@ -64,26 +66,9 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
       </article>
 
       {/* ——— Rubriques en colonnes avec filets verticaux ——— */}
-      <div className="grid gap-x-0 gap-y-12 md:grid-cols-3 md:divide-x md:divide-ink/30">
+      <div className="grid gap-x-0 gap-y-8 md:grid-cols-2 md:divide-x md:divide-ink/30 lg:grid-cols-4">
         {categories.map((cat) => (
-          <section key={cat} className="md:px-6 md:first:pl-0 md:last:pr-0">
-            <h2 className="mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-              {cat}
-            </h2>
-            <div className="divide-y divide-ink/20">
-              {byCategory.get(cat)!.map((article) => (
-                <article key={article.id} className="py-4 first:pt-0">
-                  <h3 className="font-display text-lg font-bold leading-snug">
-                    {article.headline}
-                  </h3>
-                  <p className="newsprint mt-1.5 text-sm leading-relaxed text-neutral-700">
-                    {article.summary}
-                  </p>
-                  <SourceLine article={article} />
-                </article>
-              ))}
-            </div>
-          </section>
+          <CategoryColumn key={cat} label={cat} articles={byCategory.get(cat)!} />
         ))}
       </div>
 
@@ -93,7 +78,7 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
   );
 }
 
-function SourceLine({ article }: { article: ArticleLike }) {
+export function SourceLine({ article }: { article: ArticleLike }) {
   return (
     <a
       href={article.sourceUrl}

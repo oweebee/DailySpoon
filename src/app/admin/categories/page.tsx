@@ -62,7 +62,7 @@ export default function AdminCategoriesPage() {
     <main className="mx-auto w-full lg:w-3/4 rounded-sm bg-paper/70 px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
       {/* Masthead miniature */}
       <div className="mb-8 text-center">
-        <a href="/" className="font-masthead text-5xl">
+        <a href="/" className="font-masthead text-4xl font-black uppercase tracking-tight">
           DailySpoon
         </a>
         <div className="double-rule mt-3" />

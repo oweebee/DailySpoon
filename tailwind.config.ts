@@ -7,7 +7,7 @@ const config: Config = {
       fontFamily: {
         serif: ["Georgia", "Cambria", "Times New Roman", "Times", "serif"],
         display: ['"Playfair Display"', "Georgia", "serif"],
-        masthead: ['"UnifrakturMaguntia"', '"Old English Text MT"', "serif"],
+        masthead: ['"Playfair Display"', "Georgia", "serif"],
         sans: ["-apple-system", "Segoe UI", "Helvetica", "Arial", "sans-serif"]
       },
       colors: {

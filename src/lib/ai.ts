@@ -34,7 +34,17 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * Falls back to a naive local heuristic if no ANTHROPIC_API_KEY is configured,
  * so the app still runs end-to-end without an AI provider connected.
  */
-export async function processArticles(items: RawItem[]): Promise<ProcessedArticle[]> {
+export async function processArticles(
+  items: RawItem[],
+  options: { forceNoAi?: boolean } = {}
+): Promise<ProcessedArticle[]> {
+  if (options.forceNoAi) {
+    // Règle du projet : pas de conso de tokens là où ce n'est pas nécessaire.
+    // /direct ("Aspirer les news") est un aperçu rapide et brut — jamais d'IA,
+    // même si une clé Anthropic est configurée pour l'édition quotidienne.
+    return items.map(fallbackProcess);
+  }
+
   const { anthropicApiKey: apiKey, anthropicModel } = await getSettings();
   if (!apiKey) {
     console.warn("[ai] Anthropic API key not set (env or /admin/settings) — using fallback heuristic processing.");

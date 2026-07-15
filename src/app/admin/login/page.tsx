@@ -59,7 +59,7 @@ export default function AdminLoginPage() {
     <main className="mx-auto w-full max-w-md rounded-sm bg-paper/70 px-8 py-16 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10">
       {/* Masthead miniature */}
       <div className="mb-8 text-center">
-        <p className="font-masthead text-6xl">DailySpoon</p>
+        <p className="font-masthead text-5xl font-black uppercase tracking-tight">DailySpoon</p>
         <div className="double-rule mt-4" />
         <p className="py-1.5 text-[0.65rem] uppercase tracking-[0.3em] text-sepia">
           Édition quotidienne personnelle

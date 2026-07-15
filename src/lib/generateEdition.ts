@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories } from "./freshrss";
 import { processArticles } from "./ai";
+import { stripHtml, looksLikeHtml } from "./text";
 
 function todayDateOnly(): Date {
   const now = new Date();
@@ -13,7 +14,7 @@ function todayDateOnly(): Date {
  * assemble today's edition. Safe to re-run the same day: new articles get
  * appended to the existing edition and the hero headline is recomputed.
  */
-export async function generateDailyEdition() {
+export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}) {
   const date = todayDateOnly();
 
   const edition = await prisma.edition.upsert({
@@ -21,6 +22,8 @@ export async function generateDailyEdition() {
     update: {},
     create: { date, status: "draft" }
   });
+
+  await cleanExistingHtmlArtifacts(edition.id);
 
   const rawItems = await fetchNewItemsFromSelectedCategories();
   console.log(`[edition] Fetched ${rawItems.length} new items from FreshRSS.`);
@@ -30,7 +33,7 @@ export async function generateDailyEdition() {
     return { editionId: edition.id, articleCount: 0 };
   }
 
-  const processed = rawItems.length > 0 ? await processArticles(rawItems) : [];
+  const processed = rawItems.length > 0 ? await processArticles(rawItems, options) : [];
 
   for (let i = 0; i < rawItems.length; i++) {
     const raw = rawItems[i];
@@ -75,4 +78,40 @@ export async function generateDailyEdition() {
   console.log(`[edition] Edition ${date.toISOString().slice(0, 10)} ready with ${articleCount} articles.`);
 
   return { editionId: edition.id, articleCount };
+}
+
+/**
+ * One-off retroactive fix: articles fetched before stripHtml() existed still
+ * have raw HTML (tables, <img>, tracking links — Reddit-sourced feeds are
+ * the worst offenders) sitting in their text fields. Clean them in place on
+ * every generation run instead of requiring a manual wipe-and-refetch.
+ */
+async function cleanExistingHtmlArtifacts(editionId: string): Promise<void> {
+  const candidates = await prisma.article.findMany({
+    where: { editionId },
+    select: { id: true, sourceTitle: true, sourceExcerpt: true, headline: true, summary: true }
+  });
+
+  for (const article of candidates) {
+    const dirty =
+      looksLikeHtml(article.sourceTitle) ||
+      looksLikeHtml(article.sourceExcerpt) ||
+      looksLikeHtml(article.headline) ||
+      looksLikeHtml(article.summary);
+    if (!dirty) continue;
+
+    await prisma.article.update({
+      where: { id: article.id },
+      data: {
+        sourceTitle: article.sourceTitle ? stripHtml(article.sourceTitle) : article.sourceTitle,
+        sourceExcerpt: article.sourceExcerpt ? stripHtml(article.sourceExcerpt) : article.sourceExcerpt,
+        headline: article.headline ? stripHtml(article.headline) : article.headline,
+        summary: article.summary ? stripHtml(article.summary) : article.summary
+      }
+    });
+  }
+
+  if (candidates.length > 0) {
+    console.log(`[edition] Checked ${candidates.length} existing article(s) for leftover HTML.`);
+  }
 }

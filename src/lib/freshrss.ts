@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
+import { stripHtml } from "./text";
 
 export type RawItem = {
   freshrssItemId: string;
@@ -15,27 +16,6 @@ export type FreshRssCategory = {
   freshrssId: string; // e.g. "user/1005921/label/Tech"
   label: string;
 };
-
-/**
- * FreshRSS's summary/content fields are raw HTML straight from the source
- * feed (paragraphs, links, embedded images, sometimes whole <figure> blocks).
- * Strip it down to plain text so articles read cleanly instead of showing
- * literal tags — both for direct display (no-AI fallback mode) and as
- * cleaner input to the AI rewrite prompt.
- */
-function stripHtml(html: string): string {
-  return html
-    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0?39;/gi, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 async function config() {
   const { freshrssBaseUrl: baseUrl, freshrssUsername: username, freshrssApiPassword: password } =

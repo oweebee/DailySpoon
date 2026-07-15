@@ -17,8 +17,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const body = await req.json().catch(() => ({}));
+  const forceNoAi = body?.noAi === true;
+
   try {
-    const result = await generateDailyEdition();
+    const result = await generateDailyEdition({ forceNoAi });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("[cron/generate] failed:", err);
