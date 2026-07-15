@@ -7,8 +7,10 @@
 body {
   background-color: #f6f1e3;
   color: #1a1a1a;
-  /* Léger grain "papier jauni" */
-  background-image: radial-gradient(ellipse at center, #faf6ea 0%, #f3ecda 70%, #ece3cb 100%);
+  /* Papier jauni : vignette + grain de papier journal (bruit SVG) */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at center, #faf6ea 0%, #f3ecda 70%, #e9dfc4 100%);
   background-attachment: fixed;
 }
 
