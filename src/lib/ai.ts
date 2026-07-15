@@ -106,7 +106,7 @@ function buildPrompt(batch: RawItem[]): string {
     index: i,
     source: item.feedTitle,
     title: item.sourceTitle,
-    excerpt: (item.sourceExcerpt || "").slice(0, 1500),
+    excerpt: (item.sourceExcerpt || "").slice(0, 3000),
     categoryHint: item.categoryLabel
   }));
 
@@ -138,7 +138,7 @@ function clamp(n: number, min: number, max: number): number {
 function fallbackProcess(item: RawItem): ProcessedArticle {
   return {
     headline: item.sourceTitle,
-    summary: (item.sourceExcerpt || "").slice(0, 400),
+    summary: (item.sourceExcerpt || "").slice(0, 800),
     category: item.categoryLabel || "Autre",
     priorityScore: 40
   };

@@ -1,11 +1,12 @@
 /**
  * FreshRSS's summary/content fields (and some feed titles) are raw HTML
  * straight from the source — paragraphs, links, whole embedded <table>/
- * <img> blocks (Reddit-sourced feeds are especially bad for this), and
- * sometimes that markup arrives HTML-entity-encoded (&lt;span&gt;...) rather
- * than literal. Decode + strip in a small loop (decoding can reveal new
- * literal tags) so the result is always clean plain text, regardless of how
- * the source feed encoded things.
+ * <img> blocks, and sometimes that markup arrives HTML-entity-encoded
+ * (&lt;span&gt;...) rather than literal. Some feeds also hand back content
+ * pre-truncated by the publisher mid-tag (e.g. "...<a href=" with no
+ * closing ">" at all) — decode + strip in a loop for well-formed tags,
+ * then a final pass mops up any dangling, unclosed tag fragments so nothing
+ * broken ever reaches the page.
  */
 export function stripHtml(html: string): string {
   let text = html;
@@ -23,6 +24,13 @@ export function stripHtml(html: string): string {
       .replace(/<[^>]+>/g, " ");
     if (text === before) break;
   }
+
+  // Anything still starting with "<" or "</" at this point is a broken,
+  // never-closed tag fragment (e.g. a source feed truncated its own
+  // content mid-markup) — the well-formed-tag loop above can't match it
+  // since there's no closing ">" to find. Strip through to the next "<"
+  // (or end of string) rather than leave raw markup visible.
+  text = text.replace(/<\/?[a-zA-Z][^<]*/g, " ");
 
   return text.replace(/\s+/g, " ").trim();
 }
