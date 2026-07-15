@@ -50,4 +50,17 @@ function LoginForm() {
       >
         {loading ? "Connexion..." : "Se connecter"}
       </button>
-  
+    </form>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <main className="max-w-sm mx-auto px-6 py-24 font-sans">
+      <h1 className="text-2xl font-bold mb-6">Connexion admin</h1>
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
+    </main>
+  );
+}
