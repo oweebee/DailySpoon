@@ -145,12 +145,12 @@ function clamp(n: number, min: number, max: number): number {
 }
 
 function fallbackProcess(item: RawItem): ProcessedArticle {
+  // Pas de troncature : on affiche le texte complet fourni par le flux
+  // (nettoyé du HTML), sans le couper à une longueur arbitraire.
   const fullText = item.sourceExcerpt || "";
-  // Aperçu doublé pour les articles longs plutôt qu'une coupe fixe pour tous.
-  const previewLen = fullText.length > LONG_SOURCE_THRESHOLD ? BASE_SUMMARY_LEN * 2 : BASE_SUMMARY_LEN;
   return {
     headline: item.sourceTitle,
-    summary: fullText.slice(0, previewLen),
+    summary: fullText,
     category: item.categoryLabel || "Autre",
     priorityScore: 40
   };

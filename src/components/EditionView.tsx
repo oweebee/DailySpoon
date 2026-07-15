@@ -38,7 +38,11 @@ export function EditionView({
   }
 
   const sorted = [...articles].sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
-  const [hero, ...rest] = sorted;
+  // "À la une" affiche les 2 articles les plus prioritaires côte à côte
+  // (au lieu d'un seul en pleine largeur) ; le reste part dans les colonnes
+  // de rubriques comme avant.
+  const [heroA, heroB, ...rest] = sorted;
+  const heroes = [heroA, heroB].filter((a): a is ArticleLike => Boolean(a));
 
   const MAX_PER_CATEGORY = 20;
 
@@ -72,29 +76,40 @@ export function EditionView({
 
   return (
     <div>
-      {/* ——— À la une ——— */}
-      <article className="mb-10 border-b-2 border-ink pb-10 text-center">
-        <p className="mb-3 text-xs uppercase tracking-[0.35em] text-journal">
+      {/* ——— À la une ——— : les 2 articles les plus prioritaires côte à
+          côte (en largeur), pas un seul en pleine largeur. */}
+      <div className="mb-10 border-b-2 border-ink pb-10">
+        <p className="mb-5 text-center text-xs uppercase tracking-[0.35em] text-journal">
           ✦ À la une ✦
         </p>
-        <h1 className="mx-auto mb-5 max-w-3xl font-display text-3xl font-black leading-tight md:text-5xl">
-          {hero.headline}
-        </h1>
-        {hero.imageUrl && (
-          <ArticleImage
-            src={hero.imageUrl}
-            alt={hero.headline || hero.sourceTitle}
-            dateLabel={formatStamp(hero.publishedAt)}
-            className="mx-auto mb-5 aspect-[16/9] w-full max-w-2xl"
-          />
-        )}
-        <p className="drop-cap newsprint mx-auto max-w-2xl text-base leading-snug text-neutral-800 md:columns-2 md:gap-8 md:text-left">
-          {hero.summary}
-        </p>
-        <div className="mt-4">
-          <SourceLine article={hero} showDate={!hero.imageUrl} />
+        <div
+          className={`grid gap-x-10 gap-y-10 ${
+            heroes.length > 1 ? "md:grid-cols-2 md:divide-x md:divide-ink/30" : ""
+          }`}
+        >
+          {heroes.map((hero) => (
+            <article key={hero.id} className="text-center md:px-6 md:first:pl-0 md:last:pr-0">
+              <h1 className="mx-auto mb-5 max-w-2xl font-display text-2xl font-black leading-tight md:text-4xl">
+                {hero.headline}
+              </h1>
+              {hero.imageUrl && (
+                <ArticleImage
+                  src={hero.imageUrl}
+                  alt={hero.headline || hero.sourceTitle}
+                  dateLabel={formatStamp(hero.publishedAt)}
+                  className="mx-auto mb-5 aspect-[16/9] w-full max-w-xl"
+                />
+              )}
+              <p className="newsprint mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">
+                {hero.summary}
+              </p>
+              <div className="mt-4">
+                <SourceLine article={hero} showDate={!hero.imageUrl} />
+              </div>
+            </article>
+          ))}
         </div>
-      </article>
+      </div>
 
       {/* ——— Rubriques en colonnes avec filets verticaux ———
           Note : pas de "divide-x" ici. Cette classe ajoute un filet à

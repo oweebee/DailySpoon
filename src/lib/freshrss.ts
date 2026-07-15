@@ -159,7 +159,7 @@ function extractImageUrl(item: any): string | null {
  * ou refuse la requête — une image manquante reste acceptable, un import
  * bloqué ne l'est pas.
  */
-async function fetchOgImage(url: string): Promise<string | null> {
+export async function fetchOgImage(url: string): Promise<string | null> {
   if (!url) return null;
   try {
     const controller = new AbortController();

@@ -1,7 +1,14 @@
 import { prisma } from "./prisma";
-import { fetchNewItemsFromSelectedCategories } from "./freshrss";
+import { fetchNewItemsFromSelectedCategories, fetchOgImage } from "./freshrss";
 import { processArticles } from "./ai";
 import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
+
+// Nombre max d'articles déjà en base pour lesquels on va chercher une
+// og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
+// centaines d'articles sans image ne déclenche des centaines de requêtes
+// réseau vers autant de sites différents d'un coup — le rattrapage se fait
+// alors progressivement, sur plusieurs générations successives.
+const MAX_OG_BACKFILL_PER_RUN = 25;
 
 function todayDateOnly(): Date {
   const now = new Date();
@@ -89,6 +96,12 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
  * a manual wipe-and-refetch. Checked across every article in the DB (not
  * just the edition being generated today) since the site now shows recent
  * articles across all editions, not just today's.
+ *
+ * Sert aussi de rattrapage pour l'illustration : les articles stockés avant
+ * que l'extraction d'image existe (ou dont le flux n'en fournissait aucune
+ * à l'époque) sont maintenant retentés — d'abord depuis le HTML déjà en
+ * base, puis via og:image sur la page source si besoin (plafonné par
+ * MAX_OG_BACKFILL_PER_RUN pour ne pas déclencher une rafale de requêtes).
  */
 async function cleanExistingHtmlArtifacts(): Promise<void> {
   const candidates = await prisma.article.findMany({
@@ -96,11 +109,14 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
       id: true,
       sourceTitle: true,
       sourceExcerpt: true,
+      sourceUrl: true,
       headline: true,
       summary: true,
       imageUrl: true
     }
   });
+
+  let ogBackfillsUsed = 0;
 
   for (const article of candidates) {
     const dirty =
@@ -112,7 +128,14 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
     // Backfill the illustration for articles fetched before imageUrl
     // existed, extracted from the still-dirty excerpt before it gets
     // stripped below.
-    const backfilledImage = !article.imageUrl ? extractFirstImageSrc(article.sourceExcerpt) : null;
+    let backfilledImage = !article.imageUrl ? extractFirstImageSrc(article.sourceExcerpt) : null;
+
+    // Toujours rien trouvé dans le HTML déjà stocké — dernier recours,
+    // og:image sur la page source, avec un plafond par run.
+    if (!article.imageUrl && !backfilledImage && article.sourceUrl && ogBackfillsUsed < MAX_OG_BACKFILL_PER_RUN) {
+      ogBackfillsUsed++;
+      backfilledImage = await fetchOgImage(article.sourceUrl);
+    }
 
     if (!dirty && !backfilledImage) continue;
 
@@ -129,6 +152,9 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
   }
 
   if (candidates.length > 0) {
-    console.log(`[edition] Checked ${candidates.length} existing article(s) for leftover HTML.`);
+    console.log(
+      `[edition] Checked ${candidates.length} existing article(s) for leftover HTML` +
+        (ogBackfillsUsed > 0 ? ` (${ogBackfillsUsed} og:image lookup(s) attempted).` : ".")
+    );
   }
 }
