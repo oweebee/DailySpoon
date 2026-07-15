@@ -6,6 +6,7 @@ type Category = {
   freshrssId: string;
   label: string;
   selected: boolean;
+  order: number | null;
 };
 
 type Feed = {
@@ -23,6 +24,18 @@ export default function AdminCategoriesPage() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [feedsLoading, setFeedsLoading] = useState(true);
   const [feedsError, setFeedsError] = useState<string | null>(null);
+
+  // Catégories repliées dans l'arborescence (par défaut tout est déplié).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(freshrssId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(freshrssId)) next.delete(freshrssId);
+      else next.add(freshrssId);
+      return next;
+    });
+  }
 
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<string | null>(null);
@@ -69,6 +82,35 @@ export default function AdminCategoriesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ freshrssId: cat.freshrssId, label: cat.label, selected: !cat.selected })
     });
+  }
+
+  // Réorganisation par glisser-déposer : on saisit le titre d'une
+  // catégorie et on la dépose ailleurs dans la liste, sans bouton ni
+  // poignée visible. Le nouvel ordre est persisté en base immédiatement
+  // (comme tous les autres réglages) — effectif dans l'édition et "En
+  // direct", et conservé après redémarrage/redéploiement.
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
+  async function persistOrder(reordered: Category[]) {
+    setCategories(reordered);
+    await fetch("/api/admin/categories/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssIds: reordered.map((c) => c.freshrssId) })
+    });
+  }
+
+  function handleDrop(targetId: string) {
+    if (!draggedId || draggedId === targetId) return;
+    const fromIndex = categories.findIndex((c) => c.freshrssId === draggedId);
+    const toIndex = categories.findIndex((c) => c.freshrssId === targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const reordered = [...categories];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    persistOrder(reordered);
+    setDraggedId(null);
   }
 
   async function toggleFeed(feed: Feed) {
@@ -125,9 +167,9 @@ export default function AdminCategoriesPage() {
 
       <p className="newsprint mb-6 text-sm text-neutral-700">
         La gestion des flux (ajout, suppression, organisation) se fait directement dans FreshRSS.
-        Ici, tu choisis quelles catégories — et quels flux précis — DailySpoon doit inclure. Décocher
-        une catégorie ou un flux le retire immédiatement de l’édition (partout, articles déjà
-        récupérés compris), pas seulement des futures récupérations.
+        Ici, tu choisis quelles catégories — et quels flux précis, regroupés dessous — DailySpoon
+        doit inclure. Décocher une catégorie ou un flux le retire immédiatement de l’édition
+        (partout, articles déjà récupérés compris), pas seulement des futures récupérations.
       </p>
 
       <div className="mb-8 flex items-center gap-3">
@@ -142,7 +184,7 @@ export default function AdminCategoriesPage() {
       </div>
 
       <h2 className="mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-        Catégories
+        Catégories & flux
       </h2>
 
       {loading ? (
@@ -160,70 +202,131 @@ export default function AdminCategoriesPage() {
           </p>
         </div>
       ) : (
-        <ul className="border-t-2 border-ink">
-          {categories.map((cat) => (
-            <li
-              key={cat.freshrssId}
-              className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
-            >
-              <span className="font-display font-bold">{cat.label}</span>
-              <label className="flex items-center gap-2 text-xs italic text-sepia">
-                <input
-                  type="checkbox"
-                  checked={cat.selected}
-                  onChange={() => toggle(cat)}
-                  className="accent-ink"
-                />
-                inclure dans l’édition
-              </label>
-            </li>
-          ))}
-          {categories.length === 0 && (
-            <p className="py-6 text-center italic text-sepia">
-              Aucune catégorie trouvée dans FreshRSS.
-            </p>
+        <>
+          {feedsError && <p className="mb-3 text-sm text-journal">{feedsError}</p>}
+          {feedsLoading && (
+            <p className="mb-3 italic text-sepia">Chargement des flux depuis FreshRSS...</p>
           )}
-        </ul>
-      )}
 
-      <h2 className="mb-4 mt-12 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-        Flux
-      </h2>
+          <ul className="border-t-2 border-ink">
+            {categories.map((cat) => {
+              const childFeeds = feeds.filter((f) => f.categoryLabels.includes(cat.label));
+              const isCollapsed = collapsed.has(cat.freshrssId);
+              return (
+                <li
+                  key={cat.freshrssId}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handleDrop(cat.freshrssId);
+                  }}
+                  className={`border-b border-ink/30 ${draggedId === cat.freshrssId ? "opacity-40" : ""}`}
+                >
+                  <div className="flex items-center justify-between gap-4 py-3">
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={() => setDraggedId(cat.freshrssId)}
+                      onDragEnd={() => setDraggedId(null)}
+                      onClick={() => toggleExpanded(cat.freshrssId)}
+                      className="flex cursor-grab items-center gap-2 text-left font-display font-bold hover:underline active:cursor-grabbing"
+                    >
+                      <span className="inline-block w-3 text-xs text-sepia">
+                        {isCollapsed ? "▸" : "▾"}
+                      </span>
+                      {cat.label}
+                      {!feedsLoading && (
+                        <span className="text-xs font-normal italic text-sepia">
+                          ({childFeeds.length})
+                        </span>
+                      )}
+                    </button>
+                    <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
+                      <input
+                        type="checkbox"
+                        checked={cat.selected}
+                        onChange={() => toggle(cat)}
+                        className="accent-ink"
+                      />
+                      inclure la catégorie
+                    </label>
+                  </div>
 
-      {feedsLoading ? (
-        <p className="italic text-sepia">Chargement des flux...</p>
-      ) : feedsError ? (
-        <p className="text-sm text-journal">{feedsError}</p>
-      ) : (
-        <ul className="border-t-2 border-ink">
-          {feeds.map((feed) => (
-            <li
-              key={feed.freshrssId}
-              className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
-            >
-              <div>
-                <span className="font-display font-bold">{feed.title}</span>
-                {feed.categoryLabels.length > 0 && (
-                  <span className="ml-2 text-xs italic text-sepia">
-                    ({feed.categoryLabels.join(", ")})
-                  </span>
-                )}
-              </div>
-              <label className="flex items-center gap-2 text-xs italic text-sepia">
-                <input
-                  type="checkbox"
-                  checked={feed.included}
-                  onChange={() => toggleFeed(feed)}
-                  className="accent-ink"
-                />
-                inclure dans l’édition
-              </label>
-            </li>
-          ))}
-          {feeds.length === 0 && (
-            <p className="py-6 text-center italic text-sepia">Aucun flux trouvé dans FreshRSS.</p>
-          )}
-        </ul>
+                  {!isCollapsed && !feedsLoading && (
+                    <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
+                      {childFeeds.map((feed) => (
+                        <li
+                          key={feed.freshrssId}
+                          className="flex items-center justify-between gap-4 py-1.5"
+                        >
+                          <span className="text-sm">{feed.title}</span>
+                          <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={feed.included}
+                              onChange={() => toggleFeed(feed)}
+                              className="accent-ink"
+                            />
+                            inclure le flux
+                          </label>
+                        </li>
+                      ))}
+                      {childFeeds.length === 0 && (
+                        <p className="py-1.5 text-xs italic text-sepia">
+                          Aucun flux trouvé pour cette catégorie.
+                        </p>
+                      )}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+            {categories.length === 0 && (
+              <p className="py-6 text-center italic text-sepia">
+                Aucune catégorie trouvée dans FreshRSS.
+              </p>
+            )}
+          </ul>
+
+          {!feedsLoading &&
+            (() => {
+              const knownLabels = new Set(categories.map((c) => c.label));
+              const orphanFeeds = feeds.filter(
+                (f) => f.categoryLabels.length === 0 || f.categoryLabels.every((l) => !knownLabels.has(l))
+              );
+              if (orphanFeeds.length === 0) return null;
+              return (
+                <div className="mt-2 border-b border-ink/30 pb-3">
+                  <div className="flex items-center gap-2 py-3 font-display font-bold">
+                    <span className="inline-block w-3 text-xs text-sepia">▾</span>
+                    Sans catégorie
+                    <span className="text-xs font-normal italic text-sepia">
+                      ({orphanFeeds.length})
+                    </span>
+                  </div>
+                  <ul className="ml-2 border-l border-dashed border-ink/40 pl-5">
+                    {orphanFeeds.map((feed) => (
+                      <li
+                        key={feed.freshrssId}
+                        className="flex items-center justify-between gap-4 py-1.5"
+                      >
+                        <span className="text-sm">{feed.title}</span>
+                        <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
+                          <input
+                            type="checkbox"
+                            checked={feed.included}
+                            onChange={() => toggleFeed(feed)}
+                            className="accent-ink"
+                          />
+                          inclure le flux
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
+        </>
       )}
 
       <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>

@@ -15,6 +15,7 @@ model SelectedCategory {
   id         String   @id @default(cuid())
   freshrssId String   @unique // FreshRSS category stream id, e.g. "user/1005921/label/Tech"
   label      String // human-readable category name, e.g. "Tech"
+  order      Int      @default(0) // display order of the column in EditionView, set from /admin/categories
   createdAt  DateTime @default(now())
 }
 

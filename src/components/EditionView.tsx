@@ -14,7 +14,17 @@ export type ArticleLike = {
   publishedAt: Date | string | null;
 };
 
-export function EditionView({ articles }: { articles: ArticleLike[] }) {
+export function EditionView({
+  articles,
+  categoryOrder = []
+}: {
+  articles: ArticleLike[];
+  /** Ordre persisté (SelectedCategory.order, réglable dans /admin/categories,
+   *  boutons ▲▼) des libellés de catégorie FreshRSS. Les catégories absentes
+   *  de cette liste (ex. rubriques éditoriales choisies par l'IA quand elle
+   *  est activée) sont affichées après, par ordre alphabétique. */
+  categoryOrder?: string[];
+}) {
   if (articles.length === 0) {
     return (
       <p className="py-24 text-center italic text-sepia">
@@ -47,7 +57,13 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
     byCategory.set(cat, arts.slice(0, MAX_PER_CATEGORY));
   }
 
-  const categories = [...byCategory.keys()].sort((a, b) => a.localeCompare(b));
+  const orderIndex = new Map(categoryOrder.map((label, i) => [label, i]));
+  const categories = [...byCategory.keys()].sort((a, b) => {
+    const ia = orderIndex.has(a) ? orderIndex.get(a)! : Number.MAX_SAFE_INTEGER;
+    const ib = orderIndex.has(b) ? orderIndex.get(b)! : Number.MAX_SAFE_INTEGER;
+    if (ia !== ib) return ia - ib;
+    return a.localeCompare(b);
+  });
 
   return (
     <div>
@@ -75,8 +91,15 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
         </div>
       </article>
 
-      {/* ——— Rubriques en colonnes avec filets verticaux ——— */}
-      <div className="grid gap-x-0 gap-y-8 md:grid-cols-2 md:divide-x md:divide-ink/30 lg:grid-cols-4">
+      {/* ——— Rubriques en colonnes avec filets verticaux ———
+          Note : pas de "divide-x" ici. Cette classe ajoute un filet à
+          gauche de chaque colonne sauf la 1ère du DOM, sans tenir compte
+          des retours à la ligne de la grille (2 col en md, 4 en lg) — le
+          filet réapparaît alors à gauche de la 1ère colonne de la rangée
+          suivante au lieu de rester à droite. Les filets sont donc posés
+          directement dans CategoryColumn, calculés par position réelle
+          dans la rangée (nth-child) pour chaque taille d'écran. */}
+      <div className="grid gap-x-0 gap-y-8 md:grid-cols-2 lg:grid-cols-4">
         {categories.map((cat) => (
           <CategoryColumn key={cat} label={cat} articles={byCategory.get(cat)!} />
         ))}

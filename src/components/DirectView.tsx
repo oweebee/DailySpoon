@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { EditionView, type ArticleLike } from "./EditionView";
 
-export function DirectView({ initialArticles }: { initialArticles: ArticleLike[] }) {
+export function DirectView({
+  initialArticles,
+  categoryOrder = []
+}: {
+  initialArticles: ArticleLike[];
+  categoryOrder?: string[];
+}) {
   const [pulling, setPulling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -51,7 +57,7 @@ export function DirectView({ initialArticles }: { initialArticles: ArticleLike[]
           articles.
         </p>
       ) : (
-        <EditionView articles={initialArticles} />
+        <EditionView articles={initialArticles} categoryOrder={categoryOrder} />
       )}
     </div>
   );

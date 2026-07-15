@@ -19,12 +19,24 @@ export async function GET(req: NextRequest) {
       prisma.selectedCategory.findMany()
     ]);
     const selectedIds = new Set(selected.map((s) => s.freshrssId));
+    const orderById = new Map(selected.map((s) => [s.freshrssId, s.order]));
 
-    const categories = freshrssCategories.map((c) => ({
-      freshrssId: c.freshrssId,
-      label: c.label,
-      selected: selectedIds.has(c.freshrssId)
-    }));
+    // Catégories sélectionnées d'abord, dans l'ordre choisi dans
+    // /admin/categories (persisté en base) ; le reste ensuite, par ordre
+    // alphabétique.
+    const categories = freshrssCategories
+      .map((c) => ({
+        freshrssId: c.freshrssId,
+        label: c.label,
+        selected: selectedIds.has(c.freshrssId),
+        order: orderById.get(c.freshrssId) ?? null
+      }))
+      .sort((a, b) => {
+        if (a.order !== null && b.order !== null) return a.order - b.order;
+        if (a.order !== null) return -1;
+        if (b.order !== null) return 1;
+        return a.label.localeCompare(b.label);
+      });
 
     return NextResponse.json({ categories });
   } catch (err: any) {
@@ -52,10 +64,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (selected) {
+    // Nouvelle sélection : on l'ajoute à la fin de l'ordre actuel plutôt
+    // qu'en position 0, pour ne pas bousculer l'ordre déjà choisi.
+    const maxOrder = await prisma.selectedCategory.aggregate({ _max: { order: true } });
     await prisma.selectedCategory.upsert({
       where: { freshrssId },
       update: { label },
-      create: { freshrssId, label }
+      create: { freshrssId, label, order: (maxOrder._max.order ?? -1) + 1 }
     });
   } else {
     await prisma.selectedCategory.deleteMany({ where: { freshrssId } });
