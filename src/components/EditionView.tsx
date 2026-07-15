@@ -1,4 +1,4 @@
-type ArticleLike = {
+export type ArticleLike = {
   id: string;
   headline: string | null;
   summary: string | null;

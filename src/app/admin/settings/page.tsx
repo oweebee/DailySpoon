@@ -103,7 +103,7 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
+    <main className="mx-auto w-full lg:w-3/4 max-w-6xl rounded-sm bg-paper/70 px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
       <div className="mb-8 text-center">
         <a href="/" className="font-masthead text-5xl">
           DailySpoon
@@ -213,14 +213,14 @@ export default function AdminSettingsPage() {
             <button
               onClick={save}
               disabled={saving}
-              className="border-2 border-ink bg-ink px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
+              className="stamp-button border-2 border-ink bg-ink px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
             >
               {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
             <button
               onClick={test}
               disabled={testing}
-              className="border-2 border-ink bg-paper px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-ink transition-colors hover:bg-ink hover:text-paper disabled:opacity-50"
+              className="stamp-button border-2 border-ink bg-paper px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-ink transition-colors hover:bg-ink hover:text-paper disabled:opacity-50"
             >
               {testing ? "Test en cours..." : "Tester les réglages"}
             </button>
@@ -254,7 +254,7 @@ function Field({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-neutral-400 bg-paper px-3 py-2 text-sm"
+        className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm placeholder:italic placeholder:text-sepia/70 focus:outline-none focus:ring-1 focus:ring-ink"
       />
     </label>
   );

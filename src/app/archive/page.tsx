@@ -12,7 +12,7 @@ export default async function ArchivePage() {
   });
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto w-full lg:w-3/4 max-w-6xl rounded-sm bg-paper/70 px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
       <Masthead date={new Date()} />
       <h1 className="mb-6 text-center font-display text-3xl font-black uppercase tracking-[0.2em]">
         Archives

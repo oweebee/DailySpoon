@@ -59,7 +59,7 @@ export default function AdminCategoriesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto w-full lg:w-3/4 max-w-6xl rounded-sm bg-paper/70 px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
       {/* Masthead miniature */}
       <div className="mb-8 text-center">
         <a href="/" className="font-masthead text-5xl">
@@ -91,7 +91,7 @@ export default function AdminCategoriesPage() {
         <button
           onClick={regenerate}
           disabled={generating}
-          className="border-2 border-ink bg-ink px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
+          className="stamp-button border-2 border-ink bg-ink px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
         >
           {generating ? "Génération en cours..." : "Régénérer l’édition maintenant"}
         </button>

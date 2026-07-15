@@ -28,6 +28,9 @@ export function Masthead({ date }: { date: Date }) {
       <div className="flex items-center justify-between py-1.5 text-xs uppercase tracking-[0.2em]">
         <span className="capitalize">{formatted}</span>
         <nav className="space-x-6">
+          <Link href="/direct" className="text-journal hover:underline">
+            En direct
+          </Link>
           <Link href="/archive" className="hover:underline">
             Archives
           </Link>

@@ -46,7 +46,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full border-2 border-ink bg-ink px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
+        className="stamp-button w-full border-2 border-ink bg-ink px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
       >
         {loading ? "Connexion..." : "Se connecter"}
       </button>
@@ -56,7 +56,7 @@ function LoginForm() {
 
 export default function AdminLoginPage() {
   return (
-    <main className="mx-auto max-w-md px-6 py-24">
+    <main className="mx-auto w-full max-w-md rounded-sm bg-paper/70 px-8 py-16 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10">
       {/* Masthead miniature */}
       <div className="mb-8 text-center">
         <p className="font-masthead text-6xl">DailySpoon</p>
