@@ -9,6 +9,12 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 FROM base AS build
+# Dummy value: docker-compose's "environment:" only applies to the running
+# container, never to the build stage. Prisma generate / next build only
+# need DATABASE_URL to be *present* to resolve env("DATABASE_URL") in the
+# schema — they don't actually connect to a database at this point. The
+# real value is injected at runtime via docker-compose.
+ENV DATABASE_URL="postgresql://user:password@localhost:5432/dailyspoon?schema=public"
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
