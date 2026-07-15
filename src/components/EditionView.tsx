@@ -88,17 +88,42 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
   );
 }
 
-export function formatPublished(d: Date | string | null): string | null {
-  if (!d) return null;
-  const date = new Date(d);
-  if (isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("fr-FR", {
+// IMPORTANT: le fuseau horaire doit être fixé explicitement ici.
+// Sans "timeZone", Intl.DateTimeFormat utilise le fuseau du runtime :
+// UTC côté serveur (Node) mais Europe/Paris côté navigateur, ce qui produit
+// une heure différente entre le rendu serveur et l'hydratation client
+// -> erreur d'hydratation React -> les boutons de la page cessent de répondre.
+// On force donc le même fuseau des deux côtés, et on assemble la chaîne
+// nous-mêmes à partir de formatToParts pour éviter aussi tout écart de
+// caractères d'espacement entre les implémentations ICU serveur/navigateur.
+const DISPLAY_TZ = "Europe/Paris";
+
+function getFrDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: DISPLAY_TZ,
     day: "numeric",
     month: "short",
     year: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    day: get("day"),
+    month: get("month").replace(".", ""),
+    year: get("year"),
+    hour: get("hour"),
+    minute: get("minute")
+  };
+}
+
+export function formatPublished(d: Date | string | null): string | null {
+  if (!d) return null;
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return null;
+  const p = getFrDateParts(date);
+  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}`;
 }
 
 /** Short caps format for the on-photo "stamp", e.g. "15 JUIL 2026 14:32". */
@@ -106,15 +131,8 @@ export function formatStamp(d: Date | string | null): string | null {
   if (!d) return null;
   const date = new Date(d);
   if (isNaN(date.getTime())) return null;
-  const parts = new Intl.DateTimeFormat("fr-FR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("day")} ${get("month").replace(".", "")} ${get("year")} ${get("hour")}:${get("minute")}`.toUpperCase();
+  const p = getFrDateParts(date);
+  return `${p.day} ${p.month} ${p.year} ${p.hour}:${p.minute}`.toUpperCase();
 }
 
 export function SourceLine({ article, showDate = true }: { article: ArticleLike; showDate?: boolean }) {

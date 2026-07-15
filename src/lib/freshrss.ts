@@ -125,21 +125,6 @@ export async function listAllFeeds(): Promise<FreshRssFeed[]> {
 }
 
 /**
- * Reddit-sourced RSS feeds wrap everything in nested <table>/<img>/tracking-
- * link markup (and sometimes entity-encode it on top) — even after cleanup
- * the "content" is often just a thumbnail with no real article text. Rather
- * than keep patching around it, skip these feeds entirely by default (the
- * user can also exclude any other feed explicitly from /admin/categories).
- */
-function isRedditSource(item: any, canonicalUrl: string): boolean {
-  const haystack = [item.origin?.htmlUrl, item.origin?.streamId, canonicalUrl]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes("reddit.com");
-}
-
-/**
  * Best-effort illustration for an article: a media enclosure if the feed
  * declares one (podcasts/some feeds), otherwise the first <img> found in the
  * raw (pre-stripHtml) content/summary HTML — most feeds lead with a
@@ -194,7 +179,6 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     if (exists) continue;
 
     const canonicalUrl = item.canonical?.[0]?.href || item.alternate?.[0]?.href || "";
-    if (isRedditSource(item, canonicalUrl)) continue;
 
     const rawExcerpt: string | null = item.summary?.content || item.content?.content || null;
     const excerpt = rawExcerpt ? stripHtml(rawExcerpt) : null;

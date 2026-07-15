@@ -23,8 +23,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     create: { date, status: "draft" }
   });
 
-  await removeExistingRedditArticles();
-  await cleanExistingHtmlArtifacts(edition.id);
+  await cleanExistingHtmlArtifacts();
 
   const rawItems = await fetchNewItemsFromSelectedCategories();
   console.log(`[edition] Fetched ${rawItems.length} new items from FreshRSS.`);
@@ -85,13 +84,14 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 
 /**
  * One-off retroactive fix: articles fetched before stripHtml() existed still
- * have raw HTML (tables, <img>, tracking links — Reddit-sourced feeds are
- * the worst offenders) sitting in their text fields. Clean them in place on
- * every generation run instead of requiring a manual wipe-and-refetch.
+ * have raw HTML (tables, <img>, tracking links) sitting in their text
+ * fields. Clean them in place on every generation run instead of requiring
+ * a manual wipe-and-refetch. Checked across every article in the DB (not
+ * just the edition being generated today) since the site now shows recent
+ * articles across all editions, not just today's.
  */
-async function cleanExistingHtmlArtifacts(editionId: string): Promise<void> {
+async function cleanExistingHtmlArtifacts(): Promise<void> {
   const candidates = await prisma.article.findMany({
-    where: { editionId },
     select: {
       id: true,
       sourceTitle: true,
@@ -130,20 +130,5 @@ async function cleanExistingHtmlArtifacts(editionId: string): Promise<void> {
 
   if (candidates.length > 0) {
     console.log(`[edition] Checked ${candidates.length} existing article(s) for leftover HTML.`);
-  }
-}
-
-/**
- * Reddit-sourced feeds are excluded going forward (see isRedditSource in
- * freshrss.ts), but articles fetched before that filter existed are still
- * sitting in the DB across every edition. Purge them site-wide, not just
- * from today's edition.
- */
-async function removeExistingRedditArticles(): Promise<void> {
-  const { count } = await prisma.article.deleteMany({
-    where: { sourceUrl: { contains: "reddit.com" } }
-  });
-  if (count > 0) {
-    console.log(`[edition] Removed ${count} existing Reddit-sourced article(s).`);
   }
 }
