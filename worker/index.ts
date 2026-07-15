@@ -1,32 +1,78 @@
 import cron from "node-cron";
 import { generateDailyEdition } from "../src/lib/generateEdition";
+import { getSettings } from "../src/lib/settings";
 
 // Self-hosted daily scheduler (no Vercel cron needed).
-// Runs once a day at HOUR:MINUTE in the given timezone — configurable via env
-// so you can pick when your "morning edition" comes out.
-const HOUR = process.env.EDITION_HOUR || "6";
-const MINUTE = process.env.EDITION_MINUTE || "0";
-const TZ = process.env.EDITION_TZ || "Europe/Paris";
-const CRON_EXPR = `${MINUTE} ${HOUR} * * *`;
+// Checked every minute against the current /admin/settings (or env var
+// fallback) so that changing the schedule from the admin UI takes effect
+// immediately — no restart or redeploy needed.
 
-console.log(`[worker] DailySpoon worker started. Daily edition scheduled at ${HOUR}:${MINUTE} (${TZ}).`);
-console.log(`[worker] Cron expression: "${CRON_EXPR}"`);
+let lastRunDate: string | null = null;
+
+function currentHourMinuteInTz(tz: string): { hour: number; minute: number; dateKey: string } {
+  const now = new Date();
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(now);
+  } catch {
+    console.warn(`[worker] Invalid timezone "${tz}", falling back to UTC.`);
+    parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(now);
+  }
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  return {
+    hour: Number(get("hour")),
+    minute: Number(get("minute")),
+    dateKey: `${get("year")}-${get("month")}-${get("day")}`
+  };
+}
 
 async function runOnce() {
   console.log(`[worker] Generating edition — ${new Date().toISOString()}`);
   try {
     const result = await generateDailyEdition();
-    console.log(`[worker] Done:`, result);
+    console.log("[worker] Done:", result);
   } catch (err) {
     console.error("[worker] Generation failed:", err);
   }
 }
 
-cron.schedule(CRON_EXPR, runOnce, { timezone: TZ });
+async function tick() {
+  const settings = await getSettings();
+  const { hour, minute, dateKey } = currentHourMinuteInTz(settings.editionTz);
+
+  if (hour === settings.editionHour && minute === settings.editionMinute && lastRunDate !== dateKey) {
+    lastRunDate = dateKey;
+    await runOnce();
+  }
+}
+
+console.log("[worker] DailySpoon worker started — checking the schedule (from /admin/settings) every minute.");
+
+cron.schedule("* * * * *", tick);
 
 // Also run once immediately on boot if RUN_ON_START=true (handy for first deploy/testing).
 if (process.env.RUN_ON_START === "true") {
-  runOnce();
+  getSettings().then((settings) => {
+    lastRunDate = currentHourMinuteInTz(settings.editionTz).dateKey;
+    runOnce();
+  });
 }
 
 // Keep the process alive.

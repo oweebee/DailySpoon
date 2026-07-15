@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { getSettings } from "./settings";
 
 export type RawItem = {
   freshrssItemId: string;
@@ -15,13 +16,13 @@ export type FreshRssCategory = {
   label: string;
 };
 
-function config() {
-  const baseUrl = process.env.FRESHRSS_BASE_URL;
-  const username = process.env.FRESHRSS_USERNAME;
-  const password = process.env.FRESHRSS_API_PASSWORD;
+async function config() {
+  const { freshrssBaseUrl: baseUrl, freshrssUsername: username, freshrssApiPassword: password } =
+    await getSettings();
   if (!baseUrl || !username || !password) {
     throw new Error(
-      "FreshRSS n'est pas configuré : renseigne FRESHRSS_BASE_URL, FRESHRSS_USERNAME et FRESHRSS_API_PASSWORD."
+      "FreshRSS n'est pas configuré : renseigne l'URL, l'identifiant et le mot de passe API dans " +
+        "/admin/settings (ou FRESHRSS_BASE_URL / FRESHRSS_USERNAME / FRESHRSS_API_PASSWORD)."
     );
   }
   return { baseUrl: baseUrl.replace(/\/+$/, ""), username, password };
@@ -33,7 +34,7 @@ function config() {
  * https://freshrss.github.io/FreshRSS/en/developers/06_GoogleReader_API.html
  */
 async function login(): Promise<{ baseUrl: string; token: string }> {
-  const { baseUrl, username, password } = config();
+  const { baseUrl, username, password } = await config();
 
   const res = await fetch(`${baseUrl}/api/greader.php/accounts/ClientLogin`, {
     method: "POST",

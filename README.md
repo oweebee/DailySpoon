@@ -97,9 +97,14 @@ docker compose up --build
 Une fois déployé :
 
 1. Va sur `https://ton-domaine/admin/login`, connecte-toi avec `ADMIN_PASSWORD`.
-2. Dans `/admin/categories`, coche les catégories FreshRSS que DailySpoon doit inclure dans
+2. Dans `/admin/settings`, vérifie/renseigne l'URL, l'identifiant et le mot de passe API
+   FreshRSS ainsi que la clé Anthropic et l'heure de l'édition — un bouton **Tester les
+   réglages** vérifie la connexion avant d'enregistrer. Ces valeurs remplacent les variables
+   d'environnement correspondantes une fois enregistrées ici, sans redéploiement ; laisse un
+   champ vide pour revenir à la variable d'environnement.
+3. Dans `/admin/categories`, coche les catégories FreshRSS que DailySpoon doit inclure dans
    l'édition du jour (la liste est chargée en direct depuis FreshRSS).
-3. Clique sur **Régénérer l'édition maintenant** pour générer une première édition sans attendre
+4. Clique sur **Régénérer l'édition maintenant** pour générer une première édition sans attendre
    le lendemain matin.
 4. Le worker prendra ensuite le relais tout seul, une fois par jour.
 

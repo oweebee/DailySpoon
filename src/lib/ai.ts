@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { RawItem } from "./freshrss";
+import { getSettings } from "./settings";
 
 export type ProcessedArticle = {
   headline: string;
@@ -34,9 +35,9 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * so the app still runs end-to-end without an AI provider connected.
  */
 export async function processArticles(items: RawItem[]): Promise<ProcessedArticle[]> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const { anthropicApiKey: apiKey, anthropicModel } = await getSettings();
   if (!apiKey) {
-    console.warn("[ai] ANTHROPIC_API_KEY not set — using fallback heuristic processing.");
+    console.warn("[ai] Anthropic API key not set (env or /admin/settings) — using fallback heuristic processing.");
     return items.map(fallbackProcess);
   }
 
@@ -46,7 +47,7 @@ export async function processArticles(items: RawItem[]): Promise<ProcessedArticl
 
   for (const batch of batches) {
     try {
-      const processed = await processBatch(client, batch);
+      const processed = await processBatch(client, batch, anthropicModel);
       results.push(...processed);
     } catch (err) {
       console.error("[ai] Batch processing failed, falling back for this batch:", err);
@@ -57,11 +58,15 @@ export async function processArticles(items: RawItem[]): Promise<ProcessedArticl
   return results;
 }
 
-async function processBatch(client: Anthropic, batch: RawItem[]): Promise<ProcessedArticle[]> {
+async function processBatch(
+  client: Anthropic,
+  batch: RawItem[],
+  model: string
+): Promise<ProcessedArticle[]> {
   const prompt = buildPrompt(batch);
 
   const response = await client.messages.create({
-    model: (process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5") as any,
+    model: model as any,
     max_tokens: 4096,
     messages: [{ role: "user", content: prompt }]
   });

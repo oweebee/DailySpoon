@@ -67,7 +67,9 @@ export default function AdminCategoriesPage() {
         </a>
         <div className="double-rule mt-3" />
         <div className="flex items-center justify-between py-1.5 text-[0.65rem] uppercase tracking-[0.3em] text-sepia">
-          <span>Salle de rédaction</span>
+          <a href="/admin/settings" className="hover:underline">
+            Réglages →
+          </a>
           <button onClick={logout} className="uppercase tracking-[0.3em] hover:underline">
             Se déconnecter
           </button>
@@ -102,8 +104,12 @@ export default function AdminCategoriesPage() {
         <div className="space-y-2 text-sm text-journal">
           <p>{error}</p>
           <p className="text-neutral-700">
-            Vérifie FRESHRSS_BASE_URL, FRESHRSS_USERNAME et FRESHRSS_API_PASSWORD dans les
-            variables d’environnement.
+            Vérifie l’URL, l’identifiant et le mot de passe API FreshRSS dans{" "}
+            <a href="/admin/settings" className="underline">
+              /admin/settings
+            </a>{" "}
+            (ou les variables d’environnement FRESHRSS_BASE_URL / FRESHRSS_USERNAME /
+            FRESHRSS_API_PASSWORD).
           </p>
         </div>
       ) : (

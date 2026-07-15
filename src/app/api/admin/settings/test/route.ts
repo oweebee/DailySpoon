@@ -1,0 +1,81 @@
+import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
+import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
+
+async function assertAuthed(req: NextRequest) {
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  return isValidSessionToken(token);
+}
+
+type TestResult = { ok: boolean; message: string };
+
+// Tests the values currently typed in the admin form — NOT what's saved in
+// the DB/env — so the user can check before hitting "Enregistrer".
+export async function POST(req: NextRequest) {
+  if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const {
+    freshrssBaseUrl,
+    freshrssUsername,
+    freshrssApiPassword,
+    anthropicApiKey,
+    anthropicModel
+  } = body ?? {};
+
+  const results: { freshrss?: TestResult; anthropic?: TestResult } = {};
+
+  if (freshrssBaseUrl && freshrssUsername && freshrssApiPassword) {
+    results.freshrss = await testFreshRss(freshrssBaseUrl, freshrssUsername, freshrssApiPassword);
+  } else {
+    results.freshrss = { ok: false, message: "URL, identifiant et mot de passe requis pour tester." };
+  }
+
+  if (anthropicApiKey) {
+    results.anthropic = await testAnthropic(anthropicApiKey, anthropicModel);
+  }
+
+  return NextResponse.json(results);
+}
+
+async function testFreshRss(baseUrlRaw: string, username: string, password: string): Promise<TestResult> {
+  const baseUrl = baseUrlRaw.replace(/\/+$/, "");
+  try {
+    const res = await fetch(`${baseUrl}/api/greader.php/accounts/ClientLogin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ Email: username, Passwd: password }).toString()
+    });
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: `Échec (${res.status} ${res.statusText}) — vérifie l'URL et les identifiants.`
+      };
+    }
+
+    const text = await res.text();
+    const hasAuth = text.split("\n").some((line) => line.startsWith("Auth="));
+    if (!hasAuth) {
+      return { ok: false, message: "FreshRSS a répondu mais sans jeton d'authentification — identifiants incorrects." };
+    }
+
+    return { ok: true, message: "Connexion FreshRSS réussie." };
+  } catch (err: any) {
+    return { ok: false, message: `Impossible de joindre ${baseUrl} : ${err?.message || "erreur réseau"}` };
+  }
+}
+
+async function testAnthropic(apiKey: string, model?: string): Promise<TestResult> {
+  try {
+    const client = new Anthropic({ apiKey });
+    await client.messages.create({
+      model: (model || "claude-sonnet-4-5") as any,
+      max_tokens: 1,
+      messages: [{ role: "user", content: "ping" }]
+    });
+    return { ok: true, message: "Clé Anthropic valide." };
+  } catch (err: any) {
+    return { ok: false, message: `Clé Anthropic invalide ou erreur : ${err?.message || "erreur inconnue"}` };
+  }
+}

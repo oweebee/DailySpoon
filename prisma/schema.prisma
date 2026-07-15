@@ -50,3 +50,20 @@ model Edition {
   generatedAt DateTime  @default(now())
   articles    Article[]
 }
+
+// Runtime-configurable settings, editable from /admin/settings instead of
+// redeploying with new environment variables. Single row (id = "singleton").
+// Any field left null falls back to the matching environment variable —
+// see src/lib/settings.ts.
+model Settings {
+  id                  String   @id @default("singleton")
+  freshrssBaseUrl     String?
+  freshrssUsername    String?
+  freshrssApiPassword String?
+  anthropicApiKey     String?
+  anthropicModel      String?
+  editionHour         Int?
+  editionMinute       Int?
+  editionTz           String?
+  updatedAt           DateTime @default(now()) @updatedAt
+}
