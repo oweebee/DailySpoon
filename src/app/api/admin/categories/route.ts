@@ -59,6 +59,12 @@ export async function POST(req: NextRequest) {
     });
   } else {
     await prisma.selectedCategory.deleteMany({ where: { freshrssId } });
+    // "décoché" doit vider la catégorie partout, pas juste bloquer les
+    // futures récupérations — on purge aussi les articles déjà stockés.
+    const { count } = await prisma.article.deleteMany({ where: { categoryLabel: label } });
+    if (count > 0) {
+      console.log(`[admin/categories] Removed ${count} existing article(s) for deselected category "${label}".`);
+    }
   }
 
   return NextResponse.json({ ok: true });

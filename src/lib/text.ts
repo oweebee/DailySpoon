@@ -32,3 +32,19 @@ export function looksLikeHtml(text: string | null | undefined): boolean {
   if (!text) return false;
   return /<\s*[a-z][a-z0-9]*[\s>/]/i.test(text) || /&lt;\s*[a-z]/i.test(text);
 }
+
+/**
+ * Best-effort first <img> src found in raw (possibly entity-encoded) HTML —
+ * decodes entities first for the same reason stripHtml does.
+ */
+export function extractFirstImageSrc(html: string | null | undefined): string | null {
+  if (!html) return null;
+  const decoded = html
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;/gi, "'")
+    .replace(/&amp;/gi, "&");
+  const match = decoded.match(/<img[^>]+src=["']([^"']+)["']/i);
+  return match ? match[1] : null;
+}

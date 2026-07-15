@@ -18,14 +18,26 @@ model SelectedCategory {
   createdAt  DateTime @default(now())
 }
 
+// A single FreshRSS feed (subscription) the user has explicitly excluded,
+// regardless of its category — its articles are skipped when fetching, and
+// any already-stored articles from it are purged everywhere in the app.
+model ExcludedFeed {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique // FreshRSS feed stream id (subscription "id"/origin.streamId)
+  label      String
+  createdAt  DateTime @default(now())
+}
+
 model Article {
   id             String    @id @default(cuid())
   freshrssItemId String    @unique // FreshRSS item id, used for dedupe
+  feedId         String? // FreshRSS feed stream id (item.origin.streamId), for precise exclusion
   feedTitle      String // origin feed name as reported by FreshRSS
   categoryLabel  String? // FreshRSS category/tag this item came from
   sourceUrl      String
   sourceTitle    String
   sourceExcerpt  String?   @db.Text
+  imageUrl       String? // illustration extracted from the feed's content/enclosure, if any
   publishedAt    DateTime?
   fetchedAt      DateTime  @default(now())
 

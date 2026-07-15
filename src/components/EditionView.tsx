@@ -1,4 +1,5 @@
 import { CategoryColumn } from "./CategoryColumn";
+import { ArticleImage } from "./ArticleImage";
 
 export type ArticleLike = {
   id: string;
@@ -9,6 +10,7 @@ export type ArticleLike = {
   sourceUrl: string;
   sourceTitle: string;
   feedTitle: string;
+  imageUrl: string | null;
   publishedAt: Date | string | null;
 };
 
@@ -57,11 +59,19 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
         <h1 className="mx-auto mb-5 max-w-3xl font-display text-3xl font-black leading-tight md:text-5xl">
           {hero.headline}
         </h1>
+        {hero.imageUrl && (
+          <ArticleImage
+            src={hero.imageUrl}
+            alt={hero.headline || hero.sourceTitle}
+            dateLabel={formatStamp(hero.publishedAt)}
+            className="mx-auto mb-5 aspect-[16/9] w-full max-w-2xl"
+          />
+        )}
         <p className="drop-cap newsprint mx-auto max-w-2xl text-base leading-snug text-neutral-800 md:columns-2 md:gap-8 md:text-left">
           {hero.summary}
         </p>
         <div className="mt-4">
-          <SourceLine article={hero} />
+          <SourceLine article={hero} showDate={!hero.imageUrl} />
         </div>
       </article>
 
@@ -78,15 +88,43 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
   );
 }
 
-export function SourceLine({ article }: { article: ArticleLike }) {
+export function formatPublished(d: Date | string | null): string | null {
+  if (!d) return null;
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+/** Short caps format for the on-photo "stamp", e.g. "15 JUIL 2026 14:32". */
+export function formatStamp(d: Date | string | null): string | null {
+  if (!d) return null;
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")} ${get("month").replace(".", "")} ${get("year")} ${get("hour")}:${get("minute")}`.toUpperCase();
+}
+
+export function SourceLine({ article, showDate = true }: { article: ArticleLike; showDate?: boolean }) {
+  const formatted = showDate ? formatPublished(article.publishedAt) : null;
   return (
-    <a
-      href={article.sourceUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-1 inline-block text-xs italic text-sepia hover:underline"
-    >
-      — Source : {article.feedTitle || article.sourceTitle}
-    </a>
+    <p className="mt-1 text-xs italic text-sepia">
+      {formatted && <span>{formatted} · </span>}
+      <a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+        Source : {article.feedTitle || article.sourceTitle}
+      </a>
+    </p>
   );
 }

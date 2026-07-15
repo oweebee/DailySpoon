@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories } from "./freshrss";
 import { processArticles } from "./ai";
-import { stripHtml, looksLikeHtml } from "./text";
+import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
 
 function todayDateOnly(): Date {
   const now = new Date();
@@ -23,6 +23,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     create: { date, status: "draft" }
   });
 
+  await removeExistingRedditArticles();
   await cleanExistingHtmlArtifacts(edition.id);
 
   const rawItems = await fetchNewItemsFromSelectedCategories();
@@ -44,11 +45,13 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
       update: {},
       create: {
         freshrssItemId: raw.freshrssItemId,
+        feedId: raw.feedId,
         feedTitle: raw.feedTitle,
         categoryLabel: raw.categoryLabel,
         sourceUrl: raw.sourceUrl,
         sourceTitle: raw.sourceTitle,
         sourceExcerpt: raw.sourceExcerpt,
+        imageUrl: raw.imageUrl,
         publishedAt: raw.publishedAt,
         processed: true,
         headline: ai.headline,
@@ -89,7 +92,14 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 async function cleanExistingHtmlArtifacts(editionId: string): Promise<void> {
   const candidates = await prisma.article.findMany({
     where: { editionId },
-    select: { id: true, sourceTitle: true, sourceExcerpt: true, headline: true, summary: true }
+    select: {
+      id: true,
+      sourceTitle: true,
+      sourceExcerpt: true,
+      headline: true,
+      summary: true,
+      imageUrl: true
+    }
   });
 
   for (const article of candidates) {
@@ -98,7 +108,13 @@ async function cleanExistingHtmlArtifacts(editionId: string): Promise<void> {
       looksLikeHtml(article.sourceExcerpt) ||
       looksLikeHtml(article.headline) ||
       looksLikeHtml(article.summary);
-    if (!dirty) continue;
+
+    // Backfill the illustration for articles fetched before imageUrl
+    // existed, extracted from the still-dirty excerpt before it gets
+    // stripped below.
+    const backfilledImage = !article.imageUrl ? extractFirstImageSrc(article.sourceExcerpt) : null;
+
+    if (!dirty && !backfilledImage) continue;
 
     await prisma.article.update({
       where: { id: article.id },
@@ -106,12 +122,28 @@ async function cleanExistingHtmlArtifacts(editionId: string): Promise<void> {
         sourceTitle: article.sourceTitle ? stripHtml(article.sourceTitle) : article.sourceTitle,
         sourceExcerpt: article.sourceExcerpt ? stripHtml(article.sourceExcerpt) : article.sourceExcerpt,
         headline: article.headline ? stripHtml(article.headline) : article.headline,
-        summary: article.summary ? stripHtml(article.summary) : article.summary
+        summary: article.summary ? stripHtml(article.summary) : article.summary,
+        imageUrl: article.imageUrl ?? backfilledImage ?? undefined
       }
     });
   }
 
   if (candidates.length > 0) {
     console.log(`[edition] Checked ${candidates.length} existing article(s) for leftover HTML.`);
+  }
+}
+
+/**
+ * Reddit-sourced feeds are excluded going forward (see isRedditSource in
+ * freshrss.ts), but articles fetched before that filter existed are still
+ * sitting in the DB across every edition. Purge them site-wide, not just
+ * from today's edition.
+ */
+async function removeExistingRedditArticles(): Promise<void> {
+  const { count } = await prisma.article.deleteMany({
+    where: { sourceUrl: { contains: "reddit.com" } }
+  });
+  if (count > 0) {
+    console.log(`[edition] Removed ${count} existing Reddit-sourced article(s).`);
   }
 }

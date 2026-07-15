@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { ArticleLike } from "./EditionView";
-import { SourceLine } from "./EditionView";
+import { SourceLine, formatStamp } from "./EditionView";
+import { ArticleImage } from "./ArticleImage";
 
 const INITIAL_COUNT = 3;
 const STEP = 5;
@@ -21,11 +22,19 @@ export function CategoryColumn({ label, articles }: { label: string; articles: A
       <div className="divide-y divide-ink/20">
         {visible.map((article) => (
           <article key={article.id} className="py-4 first:pt-0">
+            {article.imageUrl && (
+              <ArticleImage
+                src={article.imageUrl}
+                alt={article.headline || article.sourceTitle}
+                dateLabel={formatStamp(article.publishedAt)}
+                className="mb-2 aspect-[16/9] w-full"
+              />
+            )}
             <h3 className="font-display text-base font-bold leading-snug">{article.headline}</h3>
             <p className="newsprint mt-1 text-[0.8rem] leading-snug text-neutral-700">
               {article.summary}
             </p>
-            <SourceLine article={article} />
+            <SourceLine article={article} showDate={!article.imageUrl} />
           </article>
         ))}
       </div>
