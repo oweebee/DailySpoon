@@ -39,7 +39,7 @@ export function ArticleImage({
       />
       {dateLabel && (
         <span
-          className="pointer-events-none absolute bottom-2 right-2 rotate-[-9deg] select-none border-[3px] border-[#c81e1e] px-2.5 py-1 font-mono text-[0.85rem] font-bold uppercase tracking-wider text-[#c81e1e] opacity-95 mix-blend-multiply"
+          className="pointer-events-none absolute bottom-2 right-2 rotate-[-9deg] select-none border-[3px] border-[#c81e1e] px-2.5 py-1 font-mono text-[0.85rem] font-bold uppercase tracking-wider text-[#c81e1e] opacity-90 mix-blend-multiply"
           aria-hidden="true"
         >
           {dateLabel}
