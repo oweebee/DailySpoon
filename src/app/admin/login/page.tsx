@@ -28,7 +28,7 @@ function LoginForm() {
       setError(body.error || "Erreur de connexion");
       return;
     }
-    router.push(params.get("next") || "/admin/categories");
+    router.push(params.get("next") || "/");
     router.refresh();
   }
 
