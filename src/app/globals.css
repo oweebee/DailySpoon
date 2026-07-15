@@ -1,8 +1,41 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=UnifrakturMaguntia&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  background-color: #faf7f0;
+  background-color: #f6f1e3;
   color: #1a1a1a;
+  /* Léger grain "papier jauni" */
+  background-image: radial-gradient(ellipse at center, #faf6ea 0%, #f3ecda 70%, #ece3cb 100%);
+  background-attachment: fixed;
+}
+
+/* Lettrine de une, comme dans les vieux quotidiens */
+.drop-cap::first-letter {
+  float: left;
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 900;
+  font-size: 3.4em;
+  line-height: 0.85;
+  padding-right: 0.08em;
+  padding-top: 0.05em;
+}
+
+/* Double filet horizontal typique des mastheads */
+.double-rule {
+  border-top: 3px solid #1a1a1a;
+  border-bottom: 1px solid #1a1a1a;
+  height: 6px;
+}
+
+.rule-thin {
+  border-top: 1px solid #1a1a1a;
+}
+
+/* Texte justifié avec césure pour l'effet colonne de presse */
+.newsprint {
+  text-align: justify;
+  hyphens: auto;
 }

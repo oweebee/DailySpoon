@@ -59,15 +59,27 @@ export default function AdminCategoriesPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10 font-sans">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">Catégories FreshRSS</h1>
-        <button onClick={logout} className="text-sm underline">
-          Se déconnecter
-        </button>
+    <main className="mx-auto max-w-3xl px-6 py-10">
+      {/* Masthead miniature */}
+      <div className="mb-8 text-center">
+        <a href="/" className="font-masthead text-5xl">
+          DailySpoon
+        </a>
+        <div className="double-rule mt-3" />
+        <div className="flex items-center justify-between py-1.5 text-[0.65rem] uppercase tracking-[0.3em] text-sepia">
+          <span>Salle de rédaction</span>
+          <button onClick={logout} className="uppercase tracking-[0.3em] hover:underline">
+            Se déconnecter
+          </button>
+        </div>
+        <div className="double-rule rotate-180" />
       </div>
 
-      <p className="text-sm text-neutral-600 mb-6">
+      <h1 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-[0.15em]">
+        Catégories FreshRSS
+      </h1>
+
+      <p className="newsprint mb-6 text-sm text-neutral-700">
         La gestion des flux (ajout, suppression, organisation) se fait directement dans FreshRSS.
         Ici, tu choisis simplement quelles catégories FreshRSS DailySpoon doit inclure dans l’édition
         du jour.
@@ -77,39 +89,50 @@ export default function AdminCategoriesPage() {
         <button
           onClick={regenerate}
           disabled={generating}
-          className="bg-ink text-paper rounded px-4 py-2 text-sm disabled:opacity-50"
+          className="border-2 border-ink bg-ink px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
         >
           {generating ? "Génération en cours..." : "Régénérer l’édition maintenant"}
         </button>
-        {genResult && <span className="text-sm text-neutral-600">{genResult}</span>}
+        {genResult && <span className="text-sm italic text-sepia">{genResult}</span>}
       </div>
 
       {loading ? (
-        <p className="text-neutral-500">Chargement depuis FreshRSS...</p>
+        <p className="italic text-sepia">Chargement depuis FreshRSS...</p>
       ) : error ? (
-        <div className="text-red-600 text-sm space-y-2">
+        <div className="space-y-2 text-sm text-journal">
           <p>{error}</p>
-          <p className="text-neutral-600">
+          <p className="text-neutral-700">
             Vérifie FRESHRSS_BASE_URL, FRESHRSS_USERNAME et FRESHRSS_API_PASSWORD dans les
             variables d’environnement.
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-neutral-300">
+        <ul className="border-t-2 border-ink">
           {categories.map((cat) => (
-            <li key={cat.freshrssId} className="py-3 flex items-center justify-between gap-4">
-              <span className="font-medium">{cat.label}</span>
-              <label className="text-xs flex items-center gap-1">
-                <input type="checkbox" checked={cat.selected} onChange={() => toggle(cat)} />
+            <li
+              key={cat.freshrssId}
+              className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
+            >
+              <span className="font-display font-bold">{cat.label}</span>
+              <label className="flex items-center gap-2 text-xs italic text-sepia">
+                <input
+                  type="checkbox"
+                  checked={cat.selected}
+                  onChange={() => toggle(cat)}
+                  className="accent-ink"
+                />
                 inclure dans l’édition
               </label>
             </li>
           ))}
           {categories.length === 0 && (
-            <p className="text-neutral-500 py-6">Aucune catégorie trouvée dans FreshRSS.</p>
+            <p className="py-6 text-center italic text-sepia">
+              Aucune catégorie trouvée dans FreshRSS.
+            </p>
           )}
         </ul>
       )}
+      <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
     </main>
   );
 }

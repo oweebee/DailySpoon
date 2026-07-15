@@ -39,14 +39,14 @@ function LoginForm() {
         placeholder="Mot de passe"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="w-full border border-neutral-400 rounded px-3 py-2"
+        className="w-full border border-ink bg-paper px-3 py-2 text-center font-serif placeholder:italic placeholder:text-sepia focus:outline-none focus:ring-1 focus:ring-ink"
         autoFocus
       />
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-center text-sm italic text-journal">{error}</p>}
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-ink text-paper rounded px-3 py-2 disabled:opacity-50"
+        className="w-full border-2 border-ink bg-ink px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
       >
         {loading ? "Connexion..." : "Se connecter"}
       </button>
@@ -56,11 +56,24 @@ function LoginForm() {
 
 export default function AdminLoginPage() {
   return (
-    <main className="max-w-sm mx-auto px-6 py-24 font-sans">
-      <h1 className="text-2xl font-bold mb-6">Connexion admin</h1>
+    <main className="mx-auto max-w-md px-6 py-24">
+      {/* Masthead miniature */}
+      <div className="mb-8 text-center">
+        <p className="font-masthead text-6xl">DailySpoon</p>
+        <div className="double-rule mt-4" />
+        <p className="py-1.5 text-[0.65rem] uppercase tracking-[0.3em] text-sepia">
+          Édition quotidienne personnelle
+        </p>
+        <div className="double-rule rotate-180" />
+      </div>
+
+      <h1 className="mb-6 text-center font-display text-xl font-bold uppercase tracking-[0.2em]">
+        Connexion DailySpoon
+      </h1>
       <Suspense fallback={null}>
         <LoginForm />
       </Suspense>
+      <p className="mt-10 text-center text-xl tracking-[0.5em] text-sepia">❦</p>
     </main>
   );
 }

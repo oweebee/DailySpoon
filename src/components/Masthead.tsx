@@ -9,18 +9,34 @@ export function Masthead({ date }: { date: Date }) {
   }).format(date);
 
   return (
-    <header className="border-b-4 border-ink pb-4 mb-8">
-      <div className="flex items-baseline justify-between">
-        <Link href="/" className="text-5xl md:text-6xl font-bold tracking-tight">
+    <header className="mb-10">
+      {/* Bandeau supérieur */}
+      <div className="flex items-center justify-between border-b border-ink py-1 text-[0.65rem] uppercase tracking-[0.25em] text-sepia">
+        <span>Édition quotidienne personnelle</span>
+        <span>Prix : un café</span>
+      </div>
+
+      {/* Masthead gothique centré */}
+      <div className="py-6 text-center">
+        <Link href="/" className="font-masthead text-6xl tracking-wide md:text-8xl">
           DailySpoon
         </Link>
-        <nav className="text-sm space-x-4">
-          <Link href="/archive" className="underline hover:no-underline">
+      </div>
+
+      {/* Ligne de date entre deux filets */}
+      <div className="double-rule" />
+      <div className="flex items-center justify-between py-1.5 text-xs uppercase tracking-[0.2em]">
+        <span className="capitalize">{formatted}</span>
+        <nav className="space-x-6">
+          <Link href="/archive" className="hover:underline">
             Archives
+          </Link>
+          <Link href="/admin/categories" className="text-sepia hover:underline">
+            Admin
           </Link>
         </nav>
       </div>
-      <p className="mt-1 italic text-sm capitalize">{formatted}</p>
+      <div className="double-rule rotate-180" />
     </header>
   );
 }

@@ -12,10 +12,12 @@ export default async function ArchivePage() {
   });
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-10">
+    <main className="mx-auto max-w-3xl px-6 py-10">
       <Masthead date={new Date()} />
-      <h1 className="text-2xl font-bold mb-6">Archives</h1>
-      <ul className="divide-y divide-neutral-300">
+      <h1 className="mb-6 text-center font-display text-3xl font-black uppercase tracking-[0.2em]">
+        Archives
+      </h1>
+      <ul className="border-t-2 border-ink">
         {editions.map((edition) => {
           const key = edition.date.toISOString().slice(0, 10);
           const label = new Intl.DateTimeFormat("fr-FR", {
@@ -25,20 +27,29 @@ export default async function ArchivePage() {
             year: "numeric"
           }).format(edition.date);
           return (
-            <li key={edition.id} className="py-3 flex items-baseline justify-between">
-              <Link href={`/archive/${key}`} className="hover:underline capitalize">
+            <li
+              key={edition.id}
+              className="flex items-baseline justify-between border-b border-ink/30 py-3"
+            >
+              <Link
+                href={`/archive/${key}`}
+                className="font-display text-lg capitalize hover:underline"
+              >
                 {label}
               </Link>
-              <span className="text-sm text-neutral-500">
+              <span className="text-sm italic text-sepia">
                 {edition._count.articles} article{edition._count.articles > 1 ? "s" : ""}
               </span>
             </li>
           );
         })}
         {editions.length === 0 && (
-          <p className="text-neutral-500 py-6">Aucune édition archivée pour l’instant.</p>
+          <p className="py-8 text-center italic text-sepia">
+            Aucune édition archivée pour l’instant.
+          </p>
         )}
       </ul>
+      <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
     </main>
   );
 }

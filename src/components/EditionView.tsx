@@ -12,7 +12,7 @@ type ArticleLike = {
 export function EditionView({ articles }: { articles: ArticleLike[] }) {
   if (articles.length === 0) {
     return (
-      <p className="text-center text-neutral-500 py-24">
+      <p className="py-24 text-center italic text-sepia">
         Aucun article dans cette édition pour l’instant.
       </p>
     );
@@ -32,22 +32,38 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
 
   return (
     <div>
-      <article className="border-b-2 border-ink pb-8 mb-8">
-        <p className="uppercase text-xs tracking-widest text-neutral-600 mb-2">À la une</p>
-        <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-3">{hero.headline}</h1>
-        <p className="text-lg leading-relaxed text-neutral-800">{hero.summary}</p>
-        <SourceLine article={hero} />
+      {/* ——— À la une ——— */}
+      <article className="mb-10 border-b-2 border-ink pb-10 text-center">
+        <p className="mb-3 text-xs uppercase tracking-[0.35em] text-journal">
+          ✦ À la une ✦
+        </p>
+        <h1 className="mx-auto mb-5 max-w-4xl font-display text-4xl font-black leading-tight md:text-6xl">
+          {hero.headline}
+        </h1>
+        <p className="drop-cap newsprint mx-auto max-w-2xl text-lg leading-relaxed text-neutral-800 md:columns-2 md:gap-8 md:text-left">
+          {hero.summary}
+        </p>
+        <div className="mt-4">
+          <SourceLine article={hero} />
+        </div>
       </article>
 
-      <div className="grid md:grid-cols-3 gap-x-8 gap-y-10">
+      {/* ——— Rubriques en colonnes avec filets verticaux ——— */}
+      <div className="grid gap-x-0 gap-y-12 md:grid-cols-3 md:divide-x md:divide-ink/30">
         {categories.map((cat) => (
-          <section key={cat}>
-            <h2 className="text-lg font-bold uppercase border-b border-ink mb-3 pb-1">{cat}</h2>
-            <div className="space-y-5">
+          <section key={cat} className="md:px-6 md:first:pl-0 md:last:pr-0">
+            <h2 className="mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
+              {cat}
+            </h2>
+            <div className="divide-y divide-ink/20">
               {byCategory.get(cat)!.map((article) => (
-                <article key={article.id}>
-                  <h3 className="font-bold leading-snug">{article.headline}</h3>
-                  <p className="text-sm text-neutral-700 mt-1 leading-relaxed">{article.summary}</p>
+                <article key={article.id} className="py-4 first:pt-0">
+                  <h3 className="font-display text-lg font-bold leading-snug">
+                    {article.headline}
+                  </h3>
+                  <p className="newsprint mt-1.5 text-sm leading-relaxed text-neutral-700">
+                    {article.summary}
+                  </p>
                   <SourceLine article={article} />
                 </article>
               ))}
@@ -55,6 +71,9 @@ export function EditionView({ articles }: { articles: ArticleLike[] }) {
           </section>
         ))}
       </div>
+
+      {/* Cul-de-lampe de fin d'édition */}
+      <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
     </div>
   );
 }
@@ -65,9 +84,9 @@ function SourceLine({ article }: { article: ArticleLike }) {
       href={article.sourceUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-xs text-neutral-500 hover:underline mt-1 inline-block"
+      className="mt-1 inline-block text-xs italic text-sepia hover:underline"
     >
-      Source : {article.feedTitle || article.sourceTitle}
+      — Source : {article.feedTitle || article.sourceTitle}
     </a>
   );
 }

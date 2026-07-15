@@ -14,12 +14,12 @@ export default async function HomePage() {
   });
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <Masthead date={edition?.date ?? new Date()} />
       {edition ? (
         <EditionView articles={edition.articles} />
       ) : (
-        <p className="text-center text-neutral-500 py-24">
+        <p className="py-24 text-center italic text-sepia">
           Aucune édition générée pour l’instant. Sélectionne des catégories FreshRSS dans l’admin
           puis lance une génération.
         </p>
