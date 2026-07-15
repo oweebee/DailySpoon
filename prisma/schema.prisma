@@ -43,4 +43,10 @@ model Article {
 }
 
 model Edition {
-  id          String    @id @default(c
+  id          String    @id @default(cuid())
+  date        DateTime  @unique @db.Date // one edition per calendar day
+  headline    String? // front-page headline
+  status      String    @default("draft") // draft | published | failed
+  generatedAt DateTime  @default(now())
+  articles    Article[]
+}
