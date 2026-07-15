@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 
 async function assertAuthed(req: NextRequest) {
@@ -67,26 +66,37 @@ async function testFreshRss(baseUrlRaw: string, username: string, password: stri
 }
 
 // Règle du projet : on évite de consommer des tokens quand ce n'est pas
-// nécessaire. `models.list()` est un appel de métadonnées (authentification +
-// liste des modèles disponibles) qui ne génère aucun token de complétion —
-// contrairement à un vrai appel à messages.create(), donc coût nul.
+// nécessaire. On appelle directement l'API REST /v1/models (metadata, pas de
+// génération) au lieu du SDK — la version du SDK installée n'expose pas de
+// ressource `models`, alors que l'endpoint HTTP existe côté API. Coût nul.
 async function testAnthropic(apiKey: string, model?: string): Promise<TestResult> {
   try {
-    const client = new Anthropic({ apiKey });
-    const models = await client.models.list();
-
-    if (model) {
-      const known = models.data.some((m) => m.id === model);
-      if (!known) {
-        return {
-          ok: true,
-          message: `Clé Anthropic valide, mais le modèle "${model}" n'apparaît pas dans la liste des modèles disponibles pour ce compte — vérifie l'orthographe.`
-        };
+    const res = await fetch("https://api.anthropic.com/v1/models", {
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01"
       }
+    });
+
+    if (res.status === 401) {
+      return { ok: false, message: "Clé Anthropic invalide (401 non autorisé)." };
+    }
+    if (!res.ok) {
+      return { ok: false, message: `Échec (${res.status} ${res.statusText}) en vérifiant la clé Anthropic.` };
+    }
+
+    const data = await res.json();
+    const models: string[] = (data.data || []).map((m: any) => m.id);
+
+    if (model && !models.includes(model)) {
+      return {
+        ok: true,
+        message: `Clé Anthropic valide, mais le modèle "${model}" n'apparaît pas dans la liste des modèles disponibles pour ce compte — vérifie l'orthographe.`
+      };
     }
 
     return { ok: true, message: "Clé Anthropic valide (vérifiée sans consommer de tokens)." };
   } catch (err: any) {
-    return { ok: false, message: `Clé Anthropic invalide ou erreur : ${err?.message || "erreur inconnue"}` };
+    return { ok: false, message: `Impossible de joindre l'API Anthropic : ${err?.message || "erreur réseau"}` };
   }
 }
