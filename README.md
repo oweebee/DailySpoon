@@ -10,13 +10,14 @@ une de journal) avec archives consultables par date.
 ## Stack
 
 - Next.js 14 (App Router) + Tailwind — front + API routes
-- Prisma + PostgreSQL — data (articles, éditions, catégories sélectionnées)
+- Prisma + PostgreSQL — data (articles, éditions, catégories sélectionnées). Postgres tourne dans
+  le même docker-compose, avec un volume persistant : pas besoin d'une base externe.
 - FreshRSS (API Google Reader) — source des articles ; la gestion des flux eux-mêmes
   (ajout/suppression/organisation) reste entièrement dans FreshRSS, pas dans DailySpoon
 - Anthropic Claude (optionnel) — réécriture/résumé/classement/priorisation des articles
 - Un petit worker Node (`node-cron`) pour la génération quotidienne — pas besoin de Vercel Cron,
   tout tourne dans tes propres conteneurs Docker
-- Docker + docker-compose — pensé pour un déploiement Coolify sur ton propre serveur (RDS externe)
+- Docker + docker-compose — pensé pour un déploiement Coolify sur ton propre serveur
 
 ## Structure
 
@@ -26,7 +27,7 @@ src/lib/            logique métier (client FreshRSS, IA, génération d'éditio
 worker/             scheduler quotidien (cron) + script one-shot
 prisma/             schéma + migrations
 Dockerfile           image unique (web + worker via CMD)
-docker-compose.yml   services web / worker
+docker-compose.yml   services db / web / worker
 ```
 
 ## 1. Activer l'API sur ton FreshRSS
@@ -36,9 +37,10 @@ de passe API — pas forcément le même que ton mot de passe de connexion norma
 
 ## 2. Configurer les variables d'environnement
 
-Copie `.env.example` vers `.env` et remplis :
+Copie `.env.example` vers `.env` (en local) ou renseigne-les directement dans Coolify :
 
-- `DATABASE_URL` — connexion vers ton Postgres (ta RDS)
+- `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` — optionnel, valeurs par défaut fournies ;
+  change au moins `POSTGRES_PASSWORD`. Pas besoin de base externe, Postgres tourne dans le stack.
 - `FRESHRSS_BASE_URL` — URL de ton instance FreshRSS (ex: `https://freshrss.mondomaine.fr`)
 - `FRESHRSS_USERNAME` / `FRESHRSS_API_PASSWORD` — identifiants API FreshRSS (étape 1)
 - `ANTHROPIC_API_KEY` — clé API Claude (laisse vide pour tourner en mode dégradé sans réécriture IA)
@@ -50,16 +52,13 @@ Copie `.env.example` vers `.env` et remplis :
 
 ## 3. Pousser le code sur GitHub
 
-Ce projet a été généré dans un environnement sandbox sans accès réseau vers GitHub — c'est donc à
-toi de faire le push initial, depuis ton propre terminal :
-
 ```bash
 cd chemin/vers/dailyspoon
 git init
 git add .
 git commit -m "Initial commit — DailySpoon"
 git branch -M main
-git remote add origin git@github.com:oweebee/DailySpoon.git
+git remote add origin https://github.com/oweebee/DailySpoon.git
 git push -u origin main
 ```
 
@@ -67,22 +66,25 @@ git push -u origin main
 
 Dans Coolify :
 
-1. Crée une nouvelle ressource **Docker Compose** (ou deux ressources **Dockerfile** séparées si tu
-   préfères), pointée sur ton repo GitHub `DailySpoon`.
-2. Renseigne les variables d'environnement listées ci-dessus dans Coolify (elles remplacent le
-   `.env`, ne commit jamais `.env` — il est dans `.gitignore`).
-3. `docker-compose.yml` définit deux services :
+1. Crée une nouvelle ressource **Docker Compose**, pointée sur ton repo GitHub `DailySpoon`,
+   branche `main`, fichier `/docker-compose.yml`.
+2. Renseigne les variables d'environnement listées ci-dessus dans l'onglet **Environment
+   Variables** de la ressource (elles remplacent le `.env`, ne commit jamais `.env` — il est dans
+   `.gitignore`).
+3. `docker-compose.yml` définit trois services :
+   - `db` : Postgres, avec un volume nommé (`dailyspoon_db_data`) qui persiste entre les
+     redéploiements
    - `web` : sert le site + l'admin (écoute en interne sur le port 3000, pas de port publié sur
      l'hôte — le fichier utilise `expose` et non `ports`)
-   - `worker` : tourne en continu et déclenche `generateDailyEdition()` une fois par jour à l'heure
-     configurée (`EDITION_HOUR`/`EDITION_MINUTE`/`EDITION_TZ`)
-4. Au démarrage, chaque service exécute automatiquement `prisma migrate deploy` avant de se
-   lancer (voir `docker-entrypoint.sh`) — donc les migrations sur ta RDS se font toutes seules.
+   - `worker` : tourne en continu et déclenche `generateDailyEdition()` une fois par jour à
+     l'heure configurée (`EDITION_HOUR`/`EDITION_MINUTE`/`EDITION_TZ`)
+4. Au démarrage, `web` et `worker` attendent que `db` soit prête (healthcheck), puis exécutent
+   automatiquement `prisma migrate deploy` avant de se lancer (voir `docker-entrypoint.sh`).
 5. Pas de port à ouvrir toi-même : dans la configuration du service `web` sur Coolify, renseigne
-   le champ **Domains** (ex: `https://dailyspoon.ton-domaine.com`) et vérifie que le port exposé
+   le champ **Domains** (ex: `https://dailyspoon.obsidianspoon.com`) et vérifie que le port exposé
    détecté est bien `3000`. Coolify configure Traefik automatiquement (certificat HTTPS compris) et
-   route ce domaine directement vers le conteneur via son réseau interne, sans passer par un port
-   ouvert sur l'hôte. Assure-toi juste que le sous-domaine pointe (DNS) vers ton serveur Coolify.
+   route ce domaine directement vers le conteneur via son réseau interne. Assure-toi juste que le
+   sous-domaine pointe (DNS) vers ton serveur Coolify.
 
 Si tu préfères tester en local avant de pousser sur ton serveur :
 
@@ -95,5 +97,32 @@ docker compose up --build
 Une fois déployé :
 
 1. Va sur `https://ton-domaine/admin/login`, connecte-toi avec `ADMIN_PASSWORD`.
-2. Dans `/admin/categories`, coche les catégories FreshRSS que DailySpoon doit inclure dans l'édition du
-   jour (la liste est chargée e
+2. Dans `/admin/categories`, coche les catégories FreshRSS que DailySpoon doit inclure dans
+   l'édition du jour (la liste est chargée en direct depuis FreshRSS).
+3. Clique sur **Régénérer l'édition maintenant** pour générer une première édition sans attendre
+   le lendemain matin.
+4. Le worker prendra ensuite le relais tout seul, une fois par jour.
+
+## Développement local (sans Docker)
+
+Nécessite un Postgres local (ou lance juste `docker compose up db` pour n'avoir que la base).
+
+```bash
+npm install
+npx prisma migrate deploy   # ou `npx prisma db push` en dev rapide
+npm run dev                 # site sur http://localhost:3000
+npm run generate:edition    # génère une édition manuellement, dans un autre terminal
+```
+
+## Notes
+
+- Sans `ANTHROPIC_API_KEY`, les articles sont quand même récupérés et publiés, mais sans
+  réécriture/résumé/priorisation par IA (mode dégradé, texte brut de FreshRSS).
+- Une édition = un jour. Relancer la génération le même jour complète l'édition existante au lieu
+  d'en créer une nouvelle.
+- DailySpoon ne modifie jamais l'état lu/non-lu de tes articles dans FreshRSS — il se contente de
+  lire.
+- L'admin n'a pas de compte utilisateur : un seul mot de passe (`ADMIN_PASSWORD`) protège `/admin`.
+- Les données Postgres vivent dans le volume Docker `dailyspoon_db_data` : elles survivent aux
+  redéploiements, mais si tu supprimes le volume (ou la ressource entière dans Coolify), elles sont
+  perdues — pense à un backup si le contenu devient précieux.
