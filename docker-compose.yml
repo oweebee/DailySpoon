@@ -36,4 +36,17 @@ services:
 
 # DATABASE_URL is expected to point at your own Postgres (e.g. your RDS
 # instance). If you'd rather run Postgres in Docker too, uncomment below
-# and set DATABASE_URL to postgresql://dailyspoon:os
+# and set DATABASE_URL to postgresql://dailyspoon:dailyspoon@db:5432/dailyspoon
+#
+#  db:
+#    image: postgres:16-alpine
+#    restart: unless-stopped
+#    environment:
+#      POSTGRES_USER: dailyspoon
+#      POSTGRES_PASSWORD: dailyspoon
+#      POSTGRES_DB: dailyspoon
+#    volumes:
+#      - dailyspoon_db_data:/var/lib/postgresql/data
+#
+# volumes:
+#   dailyspoon_db_data:
