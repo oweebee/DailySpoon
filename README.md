@@ -72,12 +72,17 @@ Dans Coolify :
 2. Renseigne les variables d'environnement listées ci-dessus dans Coolify (elles remplacent le
    `.env`, ne commit jamais `.env` — il est dans `.gitignore`).
 3. `docker-compose.yml` définit deux services :
-   - `web` : sert le site + l'admin (port 3000)
+   - `web` : sert le site + l'admin (écoute en interne sur le port 3000, pas de port publié sur
+     l'hôte — le fichier utilise `expose` et non `ports`)
    - `worker` : tourne en continu et déclenche `generateDailyEdition()` une fois par jour à l'heure
      configurée (`EDITION_HOUR`/`EDITION_MINUTE`/`EDITION_TZ`)
 4. Au démarrage, chaque service exécute automatiquement `prisma migrate deploy` avant de se
    lancer (voir `docker-entrypoint.sh`) — donc les migrations sur ta RDS se font toutes seules.
-5. Configure un domaine sur le service `web` dans Coolify comme d'habitude.
+5. Pas de port à ouvrir toi-même : dans la configuration du service `web` sur Coolify, renseigne
+   le champ **Domains** (ex: `https://dailyspoon.ton-domaine.com`) et vérifie que le port exposé
+   détecté est bien `3000`. Coolify configure Traefik automatiquement (certificat HTTPS compris) et
+   route ce domaine directement vers le conteneur via son réseau interne, sans passer par un port
+   ouvert sur l'hôte. Assure-toi juste que le sous-domaine pointe (DNS) vers ton serveur Coolify.
 
 Si tu préfères tester en local avant de pousser sur ton serveur :
 

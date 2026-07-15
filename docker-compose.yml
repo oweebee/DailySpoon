@@ -3,8 +3,8 @@ services:
     build: .
     command: ["web"]
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       FRESHRSS_BASE_URL: ${FRESHRSS_BASE_URL}
