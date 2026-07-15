@@ -23,6 +23,12 @@ const DEFAULT_CATEGORIES = [
 
 const BATCH_SIZE = 12;
 
+// Longueur de base de l'aperçu de texte affiché sous chaque article. Si
+// l'article source est long (extrait brut au-delà de ce seuil), l'aperçu
+// est doublé plutôt que coupé à la même longueur qu'un article court.
+const BASE_SUMMARY_LEN = 800;
+const LONG_SOURCE_THRESHOLD = BASE_SUMMARY_LEN * 2;
+
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -107,13 +113,16 @@ function buildPrompt(batch: RawItem[]): string {
     source: item.feedTitle,
     title: item.sourceTitle,
     excerpt: (item.sourceExcerpt || "").slice(0, 3000),
-    categoryHint: item.categoryLabel
+    categoryHint: item.categoryLabel,
+    // Signal explicite plutôt que de faire deviner la longueur voulue à
+    // partir de la taille de l'extrait fourni.
+    long: (item.sourceExcerpt || "").length > LONG_SOURCE_THRESHOLD
   }));
 
   return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". \
 Voici une liste d'articles bruts issus de FreshRSS. Pour CHAQUE article, dans l'ordre, produis :
 - "headline": un titre court et accrocheur, réécrit dans un style journalistique clair (en français), pas juste copié.
-- "summary": un résumé fidèle et concis en 2-4 phrases, réécrit dans tes propres mots (ne pas copier le texte source mot pour mot).
+- "summary": un résumé fidèle, réécrit dans tes propres mots (ne pas copier le texte source mot pour mot). Longueur adaptée à l'article : 2-4 phrases si "long" est false, mais si "long" est true (article source substantiel), rédige un résumé deux fois plus développé qu'à l'habitude (environ 6-8 phrases) pour refléter le contenu réel de l'article.
 - "category": une rubrique parmi ${JSON.stringify(DEFAULT_CATEGORIES)} (choisis la plus pertinente ; utilise "Une" seulement pour l'article vraiment le plus important du lot).
 - "priorityScore": un entier de 1 à 100 indiquant l'importance de la nouvelle pour l'édition du jour (100 = à la une, 1 = anecdotique).
 
@@ -136,9 +145,12 @@ function clamp(n: number, min: number, max: number): number {
 }
 
 function fallbackProcess(item: RawItem): ProcessedArticle {
+  const fullText = item.sourceExcerpt || "";
+  // Aperçu doublé pour les articles longs plutôt qu'une coupe fixe pour tous.
+  const previewLen = fullText.length > LONG_SOURCE_THRESHOLD ? BASE_SUMMARY_LEN * 2 : BASE_SUMMARY_LEN;
   return {
     headline: item.sourceTitle,
-    summary: (item.sourceExcerpt || "").slice(0, 800),
+    summary: fullText.slice(0, previewLen),
     category: item.categoryLabel || "Autre",
     priorityScore: 40
   };

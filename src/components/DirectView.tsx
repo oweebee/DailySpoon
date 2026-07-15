@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { EditionView, type ArticleLike } from "./EditionView";
+import { EditionView, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 
 export function DirectView({
   initialArticles,
   categoryOrder = []
 }: {
   initialArticles: ArticleLike[];
-  categoryOrder?: string[];
+  categoryOrder?: CategoryOrderEntry[];
 }) {
   const [pulling, setPulling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

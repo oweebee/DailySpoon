@@ -125,17 +125,88 @@ export async function listAllFeeds(): Promise<FreshRssFeed[]> {
 }
 
 /**
- * Best-effort illustration for an article: a media enclosure if the feed
- * declares one (podcasts/some feeds), otherwise the first <img> found in the
- * raw (pre-stripHtml) content/summary HTML — most feeds lead with a
- * thumbnail image before any text.
+ * Best-effort illustration for an article, dans l'ordre : un media enclosure
+ * si le flux en déclare un (podcasts/certains flux), sinon le premier <img>
+ * trouvé dans le résumé OU le contenu complet brut (avant stripHtml) — on
+ * regarde les deux champs séparément, certains flux ne mettent l'image que
+ * dans l'un des deux.
  */
-function extractImageUrl(item: any, rawHtml: string | null): string | null {
+function extractImageUrl(item: any): string | null {
   const enclosures: any[] = item.enclosure || [];
-  const imageEnclosure = enclosures.find((e) => typeof e?.type === "string" && e.type.startsWith("image/"));
+  const imageEnclosure = enclosures.find((e) => {
+    if (typeof e?.type === "string" && e.type.startsWith("image/")) return true;
+    // Certains flux ne renseignent pas le type MIME de l'enclosure — on
+    // se rabat sur l'extension du fichier pointé.
+    return typeof e?.href === "string" && /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(e.href);
+  });
   if (imageEnclosure?.href) return imageEnclosure.href;
 
-  return extractFirstImageSrc(rawHtml);
+  const fromSummary = extractFirstImageSrc(item.summary?.content || null);
+  if (fromSummary) return fromSummary;
+
+  const fromContent = extractFirstImageSrc(item.content?.content || null);
+  if (fromContent) return fromContent;
+
+  return null;
+}
+
+/**
+ * Filet de sécurité quand le flux RSS ne fournit vraiment aucune image :
+ * on va chercher la balise og:image (ou à défaut twitter:image) directement
+ * sur la page source de l'article, comme le fait un aperçu de lien classique.
+ * On ne télécharge qu'un extrait du HTML (la balise est presque toujours
+ * dans le <head>) et on abandonne proprement si le site ne répond pas vite
+ * ou refuse la requête — une image manquante reste acceptable, un import
+ * bloqué ne l'est pas.
+ */
+async function fetchOgImage(url: string): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; DailySpoonBot/1.0; +https://dailyspoon)" }
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!res.ok) return null;
+
+    const reader = res.body?.getReader();
+    let html = "";
+    if (reader) {
+      const decoder = new TextDecoder();
+      const MAX_BYTES = 200_000;
+      let bytesRead = 0;
+      while (bytesRead < MAX_BYTES) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        html += decoder.decode(value, { stream: true });
+        bytesRead += value.length;
+        if (/<\/head>/i.test(html)) break;
+      }
+      reader.cancel().catch(() => {});
+    } else {
+      html = await res.text();
+    }
+
+    const match =
+      html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i) ||
+      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+
+    if (!match) return null;
+    let imageUrl = match[1].trim();
+    if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
+    return imageUrl || null;
+  } catch (err) {
+    console.warn(`[freshrss] og:image indisponible pour ${url}:`, (err as Error)?.message);
+    return null;
+  }
 }
 
 /**
@@ -182,7 +253,14 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
 
     const rawExcerpt: string | null = item.summary?.content || item.content?.content || null;
     const excerpt = rawExcerpt ? stripHtml(rawExcerpt) : null;
-    const imageUrl = extractImageUrl(item, rawExcerpt);
+
+    let imageUrl = extractImageUrl(item);
+    if (!imageUrl && canonicalUrl) {
+      // Rien dans le flux — dernier recours, on va chercher l'og:image sur
+      // la page source (uniquement pour les nouveaux articles, jamais
+      // re-tenté pour ceux déjà en base).
+      imageUrl = await fetchOgImage(canonicalUrl);
+    }
 
     items.push({
       freshrssItemId: item.id,

@@ -8,7 +8,26 @@ import { ArticleImage } from "./ArticleImage";
 const INITIAL_COUNT = 5;
 const STEP = 5;
 
-export function CategoryColumn({ label, articles }: { label: string; articles: ArticleLike[] }) {
+export function CategoryColumn({
+  label,
+  articles,
+  draggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
+  onDropHere
+}: {
+  label: string;
+  articles: ArticleLike[];
+  /** Autorise le glisser-déposer du titre pour réorganiser les colonnes.
+   *  Désactivé si cette catégorie n'a pas d'équivalent dans les réglages
+   *  admin (ex. rubrique éditoriale choisie par l'IA) — rien à persister. */
+  draggable?: boolean;
+  isDragging?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onDropHere?: () => void;
+}) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
 
   const visible = articles.slice(0, visibleCount);
@@ -25,9 +44,25 @@ export function CategoryColumn({ label, articles }: { label: string; articles: A
     // filet sur les positions 3/7/11 (retiré à tort par la règle "impair"
     // du md) et on restaure le padding droit sur les positions 2/6/10.
     <section
-      className="md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6"
+      onDragOver={draggable ? (e) => e.preventDefault() : undefined}
+      onDrop={
+        draggable
+          ? (e) => {
+              e.preventDefault();
+              onDropHere?.();
+            }
+          : undefined
+      }
+      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""}`}
     >
-      <h2 className="mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
+      <h2
+        draggable={draggable}
+        onDragStart={draggable ? onDragStart : undefined}
+        onDragEnd={draggable ? onDragEnd : undefined}
+        className={`mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] ${
+          draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
+        }`}
+      >
         {label}
       </h2>
       <div className="divide-y divide-ink/20">

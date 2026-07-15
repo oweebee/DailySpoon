@@ -20,7 +20,7 @@ export default async function HomePage() {
     }),
     prisma.selectedCategory.findMany({ orderBy: { order: "asc" } })
   ]);
-  const categoryOrder = selectedCategories.map((c) => c.label);
+  const categoryOrder = selectedCategories.map((c) => ({ freshrssId: c.freshrssId, label: c.label }));
 
   return (
     <main className="mx-auto w-full lg:w-3/4 rounded-sm bg-paper/70 px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">

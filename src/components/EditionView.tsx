@@ -1,4 +1,4 @@
-import { CategoryColumn } from "./CategoryColumn";
+import { CategoryGrid } from "./CategoryGrid";
 import { ArticleImage } from "./ArticleImage";
 
 export type ArticleLike = {
@@ -14,16 +14,20 @@ export type ArticleLike = {
   publishedAt: Date | string | null;
 };
 
+export type CategoryOrderEntry = { freshrssId: string; label: string };
+
 export function EditionView({
   articles,
   categoryOrder = []
 }: {
   articles: ArticleLike[];
-  /** Ordre persisté (SelectedCategory.order, réglable dans /admin/categories,
-   *  boutons ▲▼) des libellés de catégorie FreshRSS. Les catégories absentes
-   *  de cette liste (ex. rubriques éditoriales choisies par l'IA quand elle
-   *  est activée) sont affichées après, par ordre alphabétique. */
-  categoryOrder?: string[];
+  /** Ordre persisté (SelectedCategory.order, réglable en glissant le titre
+   *  d'une colonne ici même, ou dans /admin/categories) des catégories
+   *  FreshRSS. Les catégories absentes de cette liste (ex. rubriques
+   *  éditoriales choisies par l'IA quand elle est activée) sont affichées
+   *  après, par ordre alphabétique, et ne sont pas déplaçables (rien à
+   *  persister pour elles). */
+  categoryOrder?: CategoryOrderEntry[];
 }) {
   if (articles.length === 0) {
     return (
@@ -57,7 +61,8 @@ export function EditionView({
     byCategory.set(cat, arts.slice(0, MAX_PER_CATEGORY));
   }
 
-  const orderIndex = new Map(categoryOrder.map((label, i) => [label, i]));
+  const orderIndex = new Map(categoryOrder.map((c, i) => [c.label, i]));
+  const idByLabel = new Map(categoryOrder.map((c) => [c.label, c.freshrssId]));
   const categories = [...byCategory.keys()].sort((a, b) => {
     const ia = orderIndex.has(a) ? orderIndex.get(a)! : Number.MAX_SAFE_INTEGER;
     const ib = orderIndex.has(b) ? orderIndex.get(b)! : Number.MAX_SAFE_INTEGER;
@@ -99,11 +104,13 @@ export function EditionView({
           suivante au lieu de rester à droite. Les filets sont donc posés
           directement dans CategoryColumn, calculés par position réelle
           dans la rangée (nth-child) pour chaque taille d'écran. */}
-      <div className="grid gap-x-0 gap-y-8 md:grid-cols-2 lg:grid-cols-4">
-        {categories.map((cat) => (
-          <CategoryColumn key={cat} label={cat} articles={byCategory.get(cat)!} />
-        ))}
-      </div>
+      <CategoryGrid
+        initialCategories={categories.map((cat) => ({
+          label: cat,
+          freshrssId: idByLabel.get(cat) ?? null,
+          articles: byCategory.get(cat)!
+        }))}
+      />
 
       {/* Cul-de-lampe de fin d'édition */}
       <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
