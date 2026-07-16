@@ -72,21 +72,19 @@ export function ArticleImage({
 
 /**
  * Badge "médaille d'honneur de guerre" : ruban épinglé (rivet + reflet) qui
- * porte un médaillon doré (dégradé + relief) frappé d'une étoile. Dessiné en
- * SVG (dégradés + ombre portée) plutôt qu'en CSS plat pour une vraie
- * texture métallique à cette petite taille.
+ * porte un médaillon doré (dégradé + relief) frappé d'une couronne à joyaux
+ * rouges. Dessiné en SVG (dégradés + ombre portée) plutôt qu'en CSS plat
+ * pour une vraie texture métallique à cette petite taille.
  */
 function WarMedal() {
   return (
     <svg viewBox="0 0 60 84" width="42" height="59">
       <defs>
-        {/* Thème gris : seul le ruban reste rouge, le médaillon est
-            désormais en métal argenté plutôt que doré. */}
-        <radialGradient id="medalSilver" cx="35%" cy="30%" r="75%">
-          <stop offset="0%" stopColor="#f5f5f5" />
-          <stop offset="35%" stopColor="#d4d4d4" />
-          <stop offset="70%" stopColor="#9a9a9a" />
-          <stop offset="100%" stopColor="#6b6b6b" />
+        <radialGradient id="medalGold" cx="35%" cy="30%" r="75%">
+          <stop offset="0%" stopColor="#fff3c4" />
+          <stop offset="35%" stopColor="#e8c250" />
+          <stop offset="70%" stopColor="#b8860b" />
+          <stop offset="100%" stopColor="#7a5a0a" />
         </radialGradient>
         <linearGradient id="ribbonRed" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#a81f1f" />
@@ -101,23 +99,27 @@ function WarMedal() {
       <g filter="url(#medalShadow)">
         {/* Ruban, épinglé en haut à gauche */}
         <path d="M14,4 L30,4 L30,40 L22,32 L14,40 Z" fill="url(#ribbonRed)" stroke="#3d0505" strokeWidth="0.75" />
-        <path d="M14,4 L30,4 L30,9 L14,9 Z" fill="#c94a4a" opacity="0.85" />
+        <path d="M14,4 L30,4 L30,9 L14,9 Z" fill="#c9a227" opacity="0.85" />
         <circle cx="22" cy="6" r="3.2" fill="#d9d9d9" stroke="#4a4a4a" strokeWidth="0.6" />
         <circle cx="21" cy="5" r="1" fill="#fff" opacity="0.8" />
 
         {/* Médaillon */}
-        <circle cx="30" cy="56" r="21" fill="url(#medalSilver)" stroke="#5a5a5a" strokeWidth="2" />
-        <circle cx="30" cy="56" r="16.5" fill="none" stroke="#5a5a5a" strokeWidth="1" opacity="0.7" />
-        <circle cx="30" cy="56" r="16.5" fill="none" stroke="#f5f5f5" strokeWidth="0.6" opacity="0.5" />
+        <circle cx="30" cy="56" r="21" fill="url(#medalGold)" stroke="#6b4e0a" strokeWidth="2" />
+        <circle cx="30" cy="56" r="16.5" fill="none" stroke="#6b4e0a" strokeWidth="1" opacity="0.7" />
+        <circle cx="30" cy="56" r="16.5" fill="none" stroke="#fff3c4" strokeWidth="0.6" opacity="0.5" />
 
-        {/* Étoile centrale, en léger relief */}
+        {/* Couronne centrale, en léger relief, joyaux rouges assortis au ruban */}
         <path
-          d="M30,45 L33.2,53.4 L42,53.6 L34.9,59 L37.4,67.5 L30,62.6 L22.6,67.5 L25.1,59 L18,53.6 L26.8,53.4 Z"
-          fill="#6e6e6e"
-          stroke="#454545"
+          d="M16,60 L44,60 L44,52 L37,57 L30,44 L23,57 L16,52 Z"
+          fill="#7a5a0a"
+          stroke="#4d3a06"
           strokeWidth="0.5"
         />
-        <path d="M30,45 L33.2,53.4 L42,53.6 L34.9,59 L37.4,67.5 L30,62.6" fill="#9a9a9a" opacity="0.55" />
+        <rect x="16" y="60" width="28" height="5" rx="0.8" fill="#7a5a0a" stroke="#4d3a06" strokeWidth="0.5" />
+        <path d="M16,60 L44,60 L44,52 L37,57 L30,44" fill="none" stroke="#e8c250" strokeWidth="0.6" opacity="0.6" />
+        <circle cx="16" cy="52" r="1.8" fill="#8a0303" stroke="#4d3a06" strokeWidth="0.4" />
+        <circle cx="30" cy="44" r="2.1" fill="#8a0303" stroke="#4d3a06" strokeWidth="0.4" />
+        <circle cx="44" cy="52" r="1.8" fill="#8a0303" stroke="#4d3a06" strokeWidth="0.4" />
       </g>
     </svg>
   );

@@ -115,13 +115,25 @@ function renderPage(opts: {
   siteName?: string | null;
   bodyHtml: string;
   originalUrl: string;
+  /** Affiche le lien de bascule traduction — seulement sur les pages qui
+   *  ont un vrai contenu d'article (pas les pages de repli/erreur). */
+  showTranslateLink?: boolean;
+  /** Page actuellement affichée en français traduit (vs langue d'origine). */
+  translated?: boolean;
 }): string {
-  const { title, byline, siteName, bodyHtml, originalUrl } = opts;
+  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated } = opts;
   const metaBits = [siteName, byline]
     .filter((v): v is string => Boolean(v))
     .map(escapeHtml)
     .join(" · ");
   const kicker = siteName ? escapeHtml(siteName) : new URL(originalUrl).hostname.replace(/^www\./, "");
+  // Traduction à la demande seulement (pas par défaut) : un lien dans le
+  // bandeau du haut bascule vers /api/article-proxy?...&translate=1 (ou
+  // l'enlève pour revenir à la langue d'origine), qui refait un rendu
+  // serveur complet avec le contenu traduit via l'endpoint public Google
+  // Translate (best-effort, non officiel — cf. translateViaGoogle plus bas).
+  const translateHref = `/api/article-proxy?url=${encodeURIComponent(originalUrl)}${translated ? "" : "&translate=1"}`;
+  const translateLabel = translated ? "Texte original ↺" : "Traduire en français ⇄";
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -237,6 +249,7 @@ function renderPage(opts: {
   <div class="page">
     <p class="meta-top">
       <a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Voir l'original ↗</a>
+      ${showTranslateLink ? `<a href="${escapeHtml(translateHref)}">${translateLabel}</a>` : ""}
       <span>${escapeHtml(kicker)}</span>
     </p>
     <div class="double-rule"></div>
@@ -252,6 +265,68 @@ function renderPage(opts: {
 
 function htmlResponse(html: string): NextResponse {
   return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
+// Traduction à la demande uniquement (lien "Traduire en français" dans la
+// page, jamais automatique) via le point d'accès public non officiel que
+// translate.google.com utilise lui-même en coulisses — gratuit, sans clé
+// API, mais non documenté/non garanti par Google (peut cesser de
+// fonctionner sans préavis). Best-effort : en cas d'échec, on garde le
+// texte d'origine plutôt que de casser la page.
+async function translateViaGoogle(text: string, targetLang = "fr"): Promise<string> {
+  if (!text || !text.trim()) return text;
+  const params = new URLSearchParams({ client: "gtx", sl: "auto", tl: targetLang, dt: "t", q: text });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${params.toString()}`, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      }
+    });
+    if (!res.ok) return text;
+    const data: any = await res.json();
+    const segments = data?.[0];
+    if (!Array.isArray(segments)) return text;
+    const translated = segments.map((seg: any) => seg?.[0] ?? "").join("");
+    return translated || text;
+  } catch {
+    return text;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Limite le nombre de blocs traduits par article : l'endpoint est gratuit
+// mais non officiel, et chaque bloc = une requête réseau séquentielle — on
+// évite qu'un article démesurément long ne prenne des dizaines de secondes
+// à s'ouvrir ou ne se fasse limiter par Google.
+const MAX_BLOCKS_TO_TRANSLATE = 60;
+
+async function translateContentHtml(html: string): Promise<string> {
+  const dom = new JSDOM(`<div id="root">${html}</div>`);
+  const root = dom.window.document.getElementById("root");
+  if (!root) return html;
+  const blocks = Array.from(root.querySelectorAll("p, li, blockquote, h1, h2, h3, h4, figcaption")).slice(
+    0,
+    MAX_BLOCKS_TO_TRANSLATE
+  );
+  for (const el of blocks) {
+    const original = el.innerHTML.trim();
+    if (!original) continue;
+    el.innerHTML = await translateViaGoogle(original);
+  }
+  return root.innerHTML;
+}
+
+async function translateArticle(title: string, bodyHtml: string): Promise<{ title: string; bodyHtml: string }> {
+  const [translatedTitle, translatedBody] = await Promise.all([
+    translateViaGoogle(title),
+    translateContentHtml(bodyHtml)
+  ]);
+  return { title: translatedTitle, bodyHtml: translatedBody };
 }
 
 // Reddit (y compris old.reddit.com) bloque désormais la plupart des
@@ -381,6 +456,7 @@ export async function GET(req: NextRequest) {
   }
   const originalUrl = parsed.toString();
   const fetchUrl = originalUrl;
+  const wantsTranslation = req.nextUrl.searchParams.get("translate") === "1";
 
   if (isRedditPostUrl(parsed)) {
     // 1) Miroir Redlib (best-effort, voir REDLIB_INSTANCES) : rendu HTML
@@ -407,13 +483,23 @@ export async function GET(req: NextRequest) {
         const rootEl = contentDom.window.document.getElementById("root");
         if (rootEl) trimTrailingJunk(rootEl);
 
+        let finalTitle = redlibArticle.title || "Post Reddit";
+        let finalBody = rootEl?.innerHTML || "";
+        if (wantsTranslation) {
+          const t = await translateArticle(finalTitle, finalBody);
+          finalTitle = t.title;
+          finalBody = t.bodyHtml;
+        }
+
         return htmlResponse(
           renderPage({
-            title: redlibArticle.title || "Post Reddit",
+            title: finalTitle,
             byline: redlibArticle.byline,
             siteName: "reddit.com",
-            bodyHtml: rootEl?.innerHTML || "",
-            originalUrl
+            bodyHtml: finalBody,
+            originalUrl,
+            showTranslateLink: true,
+            translated: wantsTranslation
           })
         );
       }
@@ -437,15 +523,23 @@ export async function GET(req: NextRequest) {
         }
         el.removeAttribute("srcset");
       });
-      const cleanedContent = contentDom.window.document.getElementById("root")?.innerHTML || "";
+      let finalTitle = redditPost.title;
+      let finalBody = contentDom.window.document.getElementById("root")?.innerHTML || "";
+      if (wantsTranslation) {
+        const t = await translateArticle(finalTitle, finalBody);
+        finalTitle = t.title;
+        finalBody = t.bodyHtml;
+      }
 
       return htmlResponse(
         renderPage({
-          title: redditPost.title,
+          title: finalTitle,
           byline: `Posté par u/${redditPost.author}`,
           siteName: redditPost.subreddit,
-          bodyHtml: cleanedContent,
-          originalUrl
+          bodyHtml: finalBody,
+          originalUrl,
+          showTranslateLink: true,
+          translated: wantsTranslation
         })
       );
     }
@@ -530,15 +624,23 @@ export async function GET(req: NextRequest) {
     const rootEl = contentDom.window.document.getElementById("root");
     if (rootEl) trimTrailingJunk(rootEl);
 
-    const cleanedContent = rootEl?.innerHTML || "";
+    let finalTitle = article.title || "Article";
+    let finalBody = rootEl?.innerHTML || "";
+    if (wantsTranslation) {
+      const t = await translateArticle(finalTitle, finalBody);
+      finalTitle = t.title;
+      finalBody = t.bodyHtml;
+    }
 
     return htmlResponse(
       renderPage({
-        title: article.title || "Article",
+        title: finalTitle,
         byline: article.byline,
         siteName: article.siteName,
-        bodyHtml: cleanedContent,
-        originalUrl
+        bodyHtml: finalBody,
+        originalUrl,
+        showTranslateLink: true,
+        translated: wantsTranslation
       })
     );
   } catch (err: any) {
