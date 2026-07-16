@@ -3,11 +3,13 @@ import { type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { SpoonDivider } from "./SpoonDivider";
 
 /**
- * Vraie "une" de journal, figée : ce qu'affiche cette page est exactement le
- * contenu de la dernière impression (Article.editionId = dernière Edition),
- * pas un flux qui bouge tout seul — voir la requête dans app/page.tsx. Elle
- * ne change qu'à la prochaine impression (bouton manuel ou horaire réglé
- * dans /admin/settings), jamais au simple rechargement de la page.
+ * Vraie "une" de journal, figée : ce qu'affiche cette page est exactement la
+ * photo figée (EditionArticle) de la dernière impression, pas un flux qui
+ * bouge tout seul et pas non plus la table Article "vivante" (dont
+ * editionId ne pointe que vers la DERNIÈRE édition à avoir touché chaque
+ * article) — voir la requête dans app/page.tsx et app/archive/[id]/page.tsx.
+ * Elle ne change qu'à la prochaine impression (bouton manuel ou horaire
+ * réglé dans /admin/settings), jamais au simple rechargement de la page.
  *
  * Page statique façon vrai journal imprimé : ni lien externe, ni source, ni
  * favori, ni médaille, ni tampon-date sur les photos — juste les articles,

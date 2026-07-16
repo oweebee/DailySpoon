@@ -59,16 +59,18 @@ function capPerCategory(items: RawItem[], max: number): { aiItems: RawItem[]; ov
 /**
  * Full daily pipeline: pull new items from the FreshRSS categories the user
  * selected, process them with AI (rewrite + categorize + prioritize), and
- * assemble today's edition. Safe to re-run the same day: new articles get
- * appended to the existing edition and the hero headline is recomputed.
+ * assemble today's edition. Safe to re-run the same day: chaque appel crée
+ * désormais sa PROPRE édition (plus d'upsert par date) — voir
+ * EditionArticle dans schema.prisma pour le pourquoi : Article.editionId
+ * n'est qu'un pointeur vers la DERNIÈRE édition, réattribué à chaque
+ * régénération, donc insuffisant pour garder un historique fidèle de
+ * chaque impression du jour.
  */
 export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}) {
   const date = todayDateOnly();
 
-  const edition = await prisma.edition.upsert({
-    where: { date },
-    update: {},
-    create: { date, status: "draft" }
+  const edition = await prisma.edition.create({
+    data: { date, status: "draft" }
   });
 
   await cleanExistingHtmlArtifacts();
@@ -157,7 +159,54 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     }
   });
 
-  console.log(`[edition] Edition ${date.toISOString().slice(0, 10)} ready with ${articleCount} articles.`);
+  // Photo figée (EditionArticle) de la une IA telle qu'elle est À CET
+  // INSTANT précis — mêmes critères de qualification que la page d'accueil
+  // et /archive (included + aiRewritten + catégorie toujours activée pour
+  // "Impression IA"). Copiée une fois pour toutes ici : contrairement à
+  // Article, ces lignes ne seront plus jamais modifiées ni réattribuées à
+  // une autre édition, donc cette génération reste consultable telle quelle
+  // dans les archives même après d'autres régénérations le même jour.
+  const disabledCategories = await prisma.selectedCategory.findMany({
+    where: { frontPageEnabled: false },
+    select: { label: true }
+  });
+  const disabledLabels = disabledCategories.map((c) => c.label);
+
+  const qualifyingArticles = await prisma.article.findMany({
+    where: {
+      editionId: edition.id,
+      processed: true,
+      included: true,
+      aiRewritten: true,
+      ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
+    }
+  });
+
+  if (qualifyingArticles.length > 0) {
+    await prisma.editionArticle.createMany({
+      data: qualifyingArticles.map((a) => ({
+        editionId: edition.id,
+        articleId: a.id,
+        headline: a.headline,
+        summary: a.summary,
+        frontPageSummary: a.frontPageSummary,
+        category: a.category,
+        priorityScore: a.priorityScore,
+        imageUrl: a.imageUrl,
+        sourceUrl: a.sourceUrl,
+        sourceTitle: a.sourceTitle,
+        feedTitle: a.feedTitle,
+        categoryLabel: a.categoryLabel,
+        publishedAt: a.publishedAt,
+        medal: a.medal
+      }))
+    });
+  }
+
+  console.log(
+    `[edition] Edition ${date.toISOString().slice(0, 10)} ready with ${articleCount} articles ` +
+      `(${qualifyingArticles.length} figés dans les archives).`
+  );
 
   return { editionId: edition.id, articleCount };
 }

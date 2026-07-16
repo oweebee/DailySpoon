@@ -20,30 +20,34 @@ export default async function HomePage() {
   ]);
   const categoryOrder = selectedCategories.map((c) => ({ freshrssId: c.freshrssId, label: c.label }));
 
-  // Carte "Impression IA" de /admin/categories : les catégories décochées là
-  // (frontPageEnabled = false) restent visibles ailleurs (En direct,
-  // recherche) mais n'apparaissent jamais sur la une générée par IA.
-  const frontPageDisabledLabels = selectedCategories.filter((c) => !c.frontPageEnabled).map((c) => c.label);
-
-  const articles = latestEdition
-    ? await prisma.article.findMany({
-        where: {
-          editionId: latestEdition.id,
-          processed: true,
-          included: true,
-          // La une doit être une vraie "impression IA" : un article tombé en
-          // fallback (plafond par catégorie, pas de clé IA configurée...)
-          // n'est jamais affiché ici, même s'il reste visible ailleurs (En
-          // direct, recherche) — sinon on se retrouve avec du texte brut non
-          // retravaillé (racolage compris) au lieu du résumé concis attendu.
-          aiRewritten: true,
-          ...(frontPageDisabledLabels.length > 0
-            ? { NOT: { categoryLabel: { in: frontPageDisabledLabels } } }
-            : {})
-        },
+  // La une lit désormais la photo figée (EditionArticle) de cette édition,
+  // pas la table Article "vivante" : Article.editionId pointe seulement vers
+  // la DERNIÈRE édition ayant touché cet article, et serait donc réattribué
+  // (voire vidé) dès la génération suivante si on continuait à s'en servir
+  // ici. EditionArticle ne change plus jamais après coup — voir
+  // schema.prisma et generateEdition.ts.
+  const snapshot = latestEdition
+    ? await prisma.editionArticle.findMany({
+        where: { editionId: latestEdition.id },
         orderBy: { publishedAt: "desc" }
       })
     : [];
+
+  const articles = snapshot.map((a) => ({
+    id: a.id,
+    headline: a.headline,
+    summary: a.summary,
+    frontPageSummary: a.frontPageSummary,
+    category: a.category,
+    priorityScore: a.priorityScore,
+    sourceUrl: a.sourceUrl,
+    sourceTitle: a.sourceTitle,
+    feedTitle: a.feedTitle,
+    imageUrl: a.imageUrl,
+    publishedAt: a.publishedAt,
+    favorite: false,
+    medal: a.medal
+  }));
 
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">

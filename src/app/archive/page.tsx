@@ -22,12 +22,13 @@ const MONTH_LABELS = [
 ];
 
 /**
- * Liste des jours archivés = exactement les jours où une impression IA a
- * laissé au moins un article qualifiant (included + aiRewritten + catégorie
- * toujours activée pour "Impression IA") — pas tous les jours où une édition
- * existe. Naturellement bornée par la rétention configurée : un jour dont
- * tous les articles ont été purgés (favoris exclus) disparaît de lui-même de
- * cette liste, sans logique de rétention séparée à maintenir ici.
+ * Liste des éditions archivées = exactement les générations qui ont laissé
+ * au moins un article figé dans EditionArticle (voir generateEdition.ts —
+ * déjà filtré à l'écriture sur included + aiRewritten + catégorie toujours
+ * activée pour "Impression IA", donc un simple count suffit ici). Plusieurs
+ * générations peuvent désormais partager le même jour calendaire (chaque
+ * régénération est conservée, pas seulement la dernière) — chacune apparaît
+ * comme sa propre entrée dans la liste, pas regroupée par jour.
  *
  * Navigation par année/mois (années et mois cliquables en haut, défaut =
  * mois/année en cours), pas de vue "En direct" ici — pour retrouver un
@@ -39,38 +40,26 @@ export default async function ArchivePage({
 }: {
   searchParams: { year?: string; month?: string };
 }) {
-  const disabledCategories = await prisma.selectedCategory.findMany({
-    where: { frontPageEnabled: false },
-    select: { label: true }
-  });
-  const disabledLabels = disabledCategories.map((c) => c.label);
-
-  const grouped = await prisma.article.groupBy({
+  const grouped = await prisma.editionArticle.groupBy({
     by: ["editionId"],
-    where: {
-      processed: true,
-      included: true,
-      aiRewritten: true,
-      editionId: { not: null },
-      ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
-    },
     _count: { _all: true }
   });
 
-  const countByEditionId = new Map(grouped.map((g) => [g.editionId as string, g._count._all]));
+  const countByEditionId = new Map(grouped.map((g) => [g.editionId, g._count._all]));
   const qualifyingIds = [...countByEditionId.keys()];
 
   const editions =
     qualifyingIds.length > 0
       ? await prisma.edition.findMany({
           where: { id: { in: qualifyingIds }, status: "published" },
-          orderBy: { date: "desc" }
+          orderBy: [{ date: "desc" }, { generatedAt: "desc" }]
         })
       : [];
 
   const entries = editions.map((e) => ({
-    key: e.date.toISOString().slice(0, 10),
+    key: e.id,
     date: e.date,
+    generatedAt: e.generatedAt,
     year: e.date.getUTCFullYear(),
     month: e.date.getUTCMonth(), // 0-indexé
     count: countByEditionId.get(e.id) ?? 0
@@ -98,7 +87,7 @@ export default async function ArchivePage({
 
   const editionsInMonth = entries
     .filter((e) => e.year === selectedYear && e.month === selectedMonth)
-    .sort((a, b) => (a.key < b.key ? 1 : -1));
+    .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime());
 
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
@@ -145,16 +134,24 @@ export default async function ArchivePage({
 
           <ul className="border-t-2 border-ink">
             {editionsInMonth.map((entry) => {
-              const label = new Intl.DateTimeFormat("fr-FR", {
+              const dayLabel = new Intl.DateTimeFormat("fr-FR", {
                 weekday: "long",
                 day: "numeric",
                 month: "long",
                 year: "numeric"
               }).format(entry.date);
+              // Heure de génération — plusieurs éditions peuvent partager le
+              // même jour désormais, c'est ce qui les distingue à l'affichage.
+              const timeLabel = new Intl.DateTimeFormat("fr-FR", {
+                timeZone: "Europe/Paris",
+                hour: "2-digit",
+                minute: "2-digit",
+                hourCycle: "h23"
+              }).format(entry.generatedAt);
               return (
                 <li key={entry.key} className="flex items-baseline justify-between border-b border-ink/30 py-3">
                   <Link href={`/archive/${entry.key}`} className="font-display text-lg capitalize hover:underline">
-                    {label}
+                    {dayLabel} <span className="text-sm normal-case text-sepia">— {timeLabel}</span>
                   </Link>
                   <span className="text-sm italic text-sepia">
                     {entry.count} article{entry.count > 1 ? "s" : ""}

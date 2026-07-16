@@ -114,11 +114,47 @@ model Article {
 
 model Edition {
   id          String    @id @default(cuid())
-  date        DateTime  @unique @db.Date // one edition per calendar day
+  // Jour calendaire — plus @unique : chaque régénération crée désormais sa
+  // propre édition, conservée telle quelle (voir EditionArticle plus bas),
+  // au lieu d'écraser la précédente du même jour.
+  date        DateTime  @db.Date
   headline    String? // front-page headline
   status      String    @default("draft") // draft | published | failed
   generatedAt DateTime  @default(now())
   articles    Article[]
+  snapshot    EditionArticle[]
+}
+
+// Photo figée du contenu de la une IA tel qu'il était EXACTEMENT au moment de
+// cette génération précise. Nécessaire car Article (la table "vivante",
+// utilisée par /direct, la recherche et les favoris) ne garde qu'une seule
+// valeur d'"editionId" par article — à la génération suivante, un article
+// déjà vu est réattribué à la NOUVELLE édition, ce qui viderait
+// silencieusement les éditions précédentes de leurs articles si on ne
+// gardait qu'Article comme source pour les archives. Ici, une ligne n'est
+// jamais modifiée ni réattribuée après coup : elle reste fidèle à
+// l'impression du jour où elle a été créée, même si l'article vivant
+// correspondant change ensuite de contenu ou change d'édition.
+model EditionArticle {
+  id        String   @id @default(cuid())
+  edition   Edition  @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  editionId String
+  articleId String // référence informative vers l'Article vivant d'origine (pas de contrainte stricte : il peut depuis avoir été purgé)
+
+  headline         String?
+  summary          String?   @db.Text
+  frontPageSummary String?   @db.Text
+  category         String?
+  priorityScore    Int?
+  imageUrl         String?
+  sourceUrl        String
+  sourceTitle      String
+  feedTitle        String
+  categoryLabel    String?
+  publishedAt      DateTime?
+  medal            Boolean   @default(false)
+
+  @@index([editionId])
 }
 
 // Runtime-configurable settings, editable from /admin/settings instead of

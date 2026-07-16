@@ -9,14 +9,20 @@ type SearchArticle = {
   edition?: { date: string | Date } | null;
 };
 
-type DayResult = { key: string; label: string; headlines: string[] };
+type DayResult = { key: string; label: string; headlines: string[]; year: number; month: number };
 
 /**
  * Même champ de recherche que "En direct" (réutilise /api/articles/search,
  * déjà accéléré par les index trigram pg_trgm), mais regroupé par JOUR
  * d'édition plutôt que par article : dans les archives, on cherche à savoir
- * QUEL JOUR consulter (la une figée de ce jour), pas à lire l'article
- * directement ici — pour ça, on passe par /direct + la date, comme demandé.
+ * QUEL JOUR consulter, pas à lire l'article directement ici — pour ça, on
+ * passe par /direct + la date, comme demandé.
+ *
+ * Renvoie vers la liste /archive filtrée sur le mois (pas directement vers
+ * une édition précise) : plusieurs éditions peuvent désormais partager le
+ * même jour (chaque régénération est conservée séparément), et le champ
+ * "edition" d'un article ne pointe de toute façon que vers la DERNIÈRE
+ * édition l'ayant touché — pas de cible unique fiable pour un lien direct.
  */
 export function ArchiveSearch() {
   const [query, setQuery] = useState("");
@@ -79,7 +85,10 @@ export function ArchiveSearch() {
             <ul className="divide-y divide-ink/20">
               {days.map((day) => (
                 <li key={day.key} className="flex items-baseline justify-between gap-4 py-3">
-                  <Link href={`/archive/${day.key}`} className="font-display text-base capitalize hover:underline">
+                  <Link
+                    href={`/archive?year=${day.year}&month=${day.month + 1}`}
+                    className="font-display text-base capitalize hover:underline"
+                  >
                     {day.label}
                   </Link>
                   <span className="max-w-[60%] truncate text-right text-xs italic text-sepia">
@@ -104,7 +113,7 @@ function groupByDay(results: SearchArticle[] | null): DayResult[] {
     const key = d.toISOString().slice(0, 10);
     if (!byKey.has(key)) {
       const label = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(d);
-      byKey.set(key, { key, label, headlines: [] });
+      byKey.set(key, { key, label, headlines: [], year: d.getUTCFullYear(), month: d.getUTCMonth() });
     }
     const entry = byKey.get(key)!;
     if (entry.headlines.length < 3 && a.headline) entry.headlines.push(a.headline);
