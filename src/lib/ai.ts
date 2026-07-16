@@ -27,6 +27,15 @@ const DEFAULT_CATEGORIES = [
 
 const BATCH_SIZE = 12;
 
+// Filet de sécurité partagé : certains flux (ex. Korben) fournissent parfois
+// un extrait totalement vide (balisage/image sans texte réel des deux côtés
+// summary/content) — sans repli, l'IA elle-même reçoit une chaîne vide et
+// renvoie souvent un résumé vide en retour, et l'article se retrouve sans
+// aucun texte affiché nulle part (y compris "à la une"). Utilisé partout où
+// un résumé pourrait finir vide : fallbackProcess, processBatch(Gemini), et
+// en dernier recours dans curateFrontPage.
+const NO_EXCERPT_PLACEHOLDER = "Aucun aperçu fourni par le flux — consulte la source pour lire l'article complet.";
+
 // Longueur de base de l'aperçu de texte affiché sous chaque article. Si
 // l'article source est long (extrait brut au-delà de ce seuil), l'aperçu
 // est doublé plutôt que coupé à la même longueur qu'un article court.
@@ -122,7 +131,7 @@ async function processBatch(
 
   return parsed.map((p, i) => ({
     headline: p.headline?.trim() || batch[i].sourceTitle,
-    summary: p.summary?.trim() || batch[i].sourceExcerpt || "",
+    summary: p.summary?.trim() || batch[i].sourceExcerpt?.trim() || NO_EXCERPT_PLACEHOLDER,
     category: p.category?.trim() || "Autre",
     priorityScore: clamp(Number(p.priorityScore) || 50, 1, 100),
     aiRewritten: true
@@ -167,7 +176,7 @@ async function processBatchGemini(batch: RawItem[], apiKey: string, model: strin
 
   return parsed.map((p, i) => ({
     headline: p.headline?.trim() || batch[i].sourceTitle,
-    summary: p.summary?.trim() || batch[i].sourceExcerpt || "",
+    summary: p.summary?.trim() || batch[i].sourceExcerpt?.trim() || NO_EXCERPT_PLACEHOLDER,
     category: p.category?.trim() || "Autre",
     priorityScore: clamp(Number(p.priorityScore) || 50, 1, 100),
     aiRewritten: true
@@ -220,7 +229,7 @@ export function fallbackProcess(item: RawItem): ProcessedArticle {
   const fullText = (item.sourceExcerpt || "").trim();
   return {
     headline: item.sourceTitle,
-    summary: fullText || "Aucun aperçu fourni par le flux — consulte la source pour lire l'article complet.",
+    summary: fullText || NO_EXCERPT_PLACEHOLDER,
     category: item.categoryLabel || "Autre",
     priorityScore: 40,
     aiRewritten: false
@@ -279,7 +288,7 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
       const original = items.find((it) => it.id === p.id);
       map.set(p.id, {
         priorityScore: clamp(Number(p.priorityScore) || 40, 1, 100),
-        frontPageSummary: p.frontPageSummary?.trim() || original?.summary || ""
+        frontPageSummary: p.frontPageSummary?.trim() || original?.summary?.trim() || NO_EXCERPT_PLACEHOLDER
       });
     }
     return map;

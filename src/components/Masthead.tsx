@@ -13,7 +13,7 @@ export function Masthead({ date }: { date: Date }) {
       {/* Bandeau supérieur */}
       <div className="flex items-center justify-between border-b border-ink py-1 text-[0.65rem] uppercase tracking-[0.25em] text-sepia">
         <span>Édition quotidienne personnelle</span>
-        <span>Prix : un café</span>
+        <span>Prix : ≈ 10 ¢</span>
       </div>
 
       {/* Masthead gothique centré */}
