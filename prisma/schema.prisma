@@ -49,10 +49,13 @@ model Article {
   category       String? // final rubrique assigned by AI for the edition
   priorityScore  Int? // higher = more important, used to pick hero + ordering
 
+  favorite       Boolean   @default(false) // marqué favori depuis l'étoile shérif, page /favoris
+
   edition        Edition?  @relation(fields: [editionId], references: [id])
   editionId      String?
 
   @@index([editionId])
+  @@index([favorite])
 }
 
 model Edition {

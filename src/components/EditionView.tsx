@@ -1,5 +1,6 @@
 import { CategoryGrid } from "./CategoryGrid";
 import { ArticleLink } from "./ArticleLink";
+import { FavoriteStar } from "./FavoriteStar";
 
 export type ArticleLike = {
   id: string;
@@ -12,6 +13,7 @@ export type ArticleLike = {
   feedTitle: string;
   imageUrl: string | null;
   publishedAt: Date | string | null;
+  favorite: boolean;
 };
 
 export type CategoryOrderEntry = { freshrssId: string; label: string };
@@ -188,11 +190,12 @@ export function formatStamp(d: Date | string | null): string | null {
 export function SourceLine({ article, showDate = true }: { article: ArticleLike; showDate?: boolean }) {
   const formatted = showDate ? formatPublished(article.publishedAt) : null;
   return (
-    <p className="mt-1 text-xs italic text-sepia">
+    <p className="mt-1 flex items-center gap-1.5 text-xs italic text-sepia">
       {formatted && <span>{formatted} · </span>}
       <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
         Source : {article.feedTitle || article.sourceTitle}
       </ArticleLink>
+      <FavoriteStar articleId={article.id} initialFavorite={article.favorite} />
     </p>
   );
 }

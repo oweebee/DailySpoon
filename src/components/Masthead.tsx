@@ -34,6 +34,9 @@ export function Masthead({ date }: { date: Date }) {
           <Link href="/archive" className="hover:underline">
             Archives
           </Link>
+          <Link href="/favoris" className="hover:underline">
+            Favoris
+          </Link>
           <Link href="/admin/categories" className="text-sepia hover:underline">
             Admin
           </Link>
