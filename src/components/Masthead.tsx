@@ -56,7 +56,10 @@ export function Masthead({ date }: { date: Date }) {
           href="/direct"
           className="stamp-button stamp-live absolute -right-3 top-1/2 border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-journal sm:-right-5 sm:px-5 sm:py-2 sm:text-sm"
         >
-          En direct
+          {/* Liseret blanc autour des lettres rouges — stroke posé DERRIÈRE
+              le remplissage (paintOrder) pour ne pas manger le rouge à
+              l'intérieur des lettres, juste un fin contour à l'extérieur. */}
+          <span style={{ WebkitTextStroke: "1.2px #ffffff", paintOrder: "stroke fill" }}>En direct</span>
         </Link>
       </div>
 

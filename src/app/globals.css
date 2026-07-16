@@ -16,14 +16,18 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  /* Texture papier froissé fournie par l'utilisateur (déjà rétrécie/pensée
-     pour se répéter sans raccord visible) — image seule, telle quelle : pas
-     de dégradé/vignette superposé, pas de redimensionnement (taille
-     naturelle), répétition en pavé par défaut (background-repeat non
-     précisé = "repeat"). Pas de "background-attachment: fixed" : la valeur
-     par défaut ("scroll") fait défiler la texture AVEC le texte, comme si
-     le texte était imprimé dessus, au lieu de rester immobile pendant que
-     la page défile par-dessus. */
+  /* Pas de texture ici : uniquement sur le bloc de contenu lui-même
+     (.paper-panel, utilisé par tous les <main>) — les marges de part et
+     d'autre restent unies, comme avant. */
+}
+
+/* Texture papier froissé fournie par l'utilisateur (déjà rétrécie/pensée
+   pour se répéter sans raccord visible) — appliquée uniquement sur le bloc
+   de contenu principal (<main>), pas sur les marges du site. Couleur
+   d'origine de l'image, sans opacité/filtre qui l'éclaircirait (d'où
+   "bg-paper/70" remplacé par cette classe plutôt que gardé en plus). */
+.paper-panel {
+  background-color: #f0f0f0;
   background-image: url("/textures/journal.png");
 }
 

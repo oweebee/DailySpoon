@@ -57,7 +57,7 @@ function LoginForm() {
 
 export default function AdminLoginPage() {
   return (
-    <main className="mx-auto w-full max-w-md rounded-sm bg-paper/70 px-8 py-16 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10">
+    <main className="paper-panel mx-auto w-full max-w-md rounded-sm px-8 py-16 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10">
       {/* Masthead miniature */}
       <div className="mb-8 text-center">
         <p className="font-masthead text-5xl font-black uppercase tracking-tight">DailySpoon</p>
