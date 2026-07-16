@@ -17,6 +17,14 @@ model SelectedCategory {
   label      String // human-readable category name, e.g. "Tech"
   order      Int      @default(0) // display order of the column in EditionView, set from /admin/categories
   createdAt  DateTime @default(now())
+  // Carte "Impression IA" dans /admin/categories : quand false, cette
+  // catégorie (pourtant sélectionnée/incluse pour la récupération normale,
+  // "En direct", recherche...) est totalement ignorée par la génération IA de
+  // la première page (ni affichée sur la une, ni envoyée à la passe de
+  // curation curateFrontPage) — ses articles du jour restent uniquement
+  // consultables ailleurs dans l'app. Défaut true : rien ne change tant que
+  // l'utilisateur ne décoche pas explicitement une catégorie.
+  frontPageEnabled Boolean @default(true)
 }
 
 // A single FreshRSS feed (subscription) the user has explicitly excluded,

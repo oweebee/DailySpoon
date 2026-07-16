@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback } from "./freshrss";
+import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
 import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
 import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
 import { getSettings } from "./settings";
@@ -11,9 +11,49 @@ import { getSettings } from "./settings";
 // alors progressivement, sur plusieurs générations successives.
 const MAX_OG_BACKFILL_PER_RUN = 25;
 
+// Coût IA : au plus ce nombre d'articles inclus PAR CATÉGORIE FreshRSS (celles
+// choisies dans /admin/categories, connues avant même de lancer l'IA) passent
+// réellement par l'IA à chaque génération. Les articles inclus au-delà de ce
+// plafond restent affichés (traitement brut fallbackProcess, catégorie
+// FreshRSS d'origine, sans coût IA) plutôt que d'être exclus purement et
+// simplement — ils ne disparaissent pas, ils ne sont juste pas réécrits/notés
+// par l'IA ce jour-là.
+const MAX_AI_ITEMS_PER_CATEGORY = 5;
+
 function todayDateOnly(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+/**
+ * Répartit les items inclus par catégorie FreshRSS (categoryLabel — connue
+ * avant tout appel IA, indépendante de la rubrique que l'IA attribuera
+ * ensuite) et ne garde que les `max` plus récents de chaque catégorie pour le
+ * traitement IA ; le reste part dans overflowItems (traitement brut, sans
+ * coût). Les items sans categoryLabel forment leur propre groupe ("Autre").
+ */
+function capPerCategory(items: RawItem[], max: number): { aiItems: RawItem[]; overflowItems: RawItem[] } {
+  const byCategory = new Map<string, RawItem[]>();
+  for (const item of items) {
+    const key = item.categoryLabel || "Autre";
+    if (!byCategory.has(key)) byCategory.set(key, []);
+    byCategory.get(key)!.push(item);
+  }
+
+  const aiItems: RawItem[] = [];
+  const overflowItems: RawItem[] = [];
+
+  for (const group of byCategory.values()) {
+    const sorted = [...group].sort((a, b) => {
+      const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return tb - ta;
+    });
+    aiItems.push(...sorted.slice(0, max));
+    overflowItems.push(...sorted.slice(max));
+  }
+
+  return { aiItems, overflowItems };
 }
 
 /**
@@ -50,10 +90,17 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   const includedItems = rawItems.filter((r) => r.included);
   const hiddenItems = rawItems.filter((r) => !r.included);
 
-  const processedIncluded = includedItems.length > 0 ? await processArticles(includedItems, options) : [];
+  // Plafond de coût par catégorie : seuls les MAX_AI_ITEMS_PER_CATEGORY items
+  // les plus récents de chaque catégorie FreshRSS partent réellement à l'IA ;
+  // le reste (overflowItems) est quand même stocké et affiché, juste sans
+  // réécriture IA (fallbackProcess), comme les articles non "included".
+  const { aiItems, overflowItems } = capPerCategory(includedItems, MAX_AI_ITEMS_PER_CATEGORY);
+
+  const processedAi = aiItems.length > 0 ? await processArticles(aiItems, options) : [];
 
   const resultByItemId = new Map<string, ProcessedArticle>();
-  includedItems.forEach((raw, i) => resultByItemId.set(raw.freshrssItemId, processedIncluded[i]));
+  aiItems.forEach((raw, i) => resultByItemId.set(raw.freshrssItemId, processedAi[i]));
+  overflowItems.forEach((raw) => resultByItemId.set(raw.freshrssItemId, fallbackProcess(raw)));
   hiddenItems.forEach((raw) => resultByItemId.set(raw.freshrssItemId, fallbackProcess(raw)));
 
   for (const raw of rawItems) {
@@ -177,8 +224,22 @@ async function syncMedalFlags(): Promise<void> {
  * renvoie alors une Map vide) — les scores existants restent tels quels.
  */
 async function curateFrontPageScores(editionId: string): Promise<void> {
+  // Carte "Impression IA" de /admin/categories : les catégories décochées là
+  // ne doivent même pas être soumises à cette passe (ni affichées sur la une,
+  // ni comparées aux autres) — inutile de dépenser des tokens dessus.
+  const disabledCategories = await prisma.selectedCategory.findMany({
+    where: { frontPageEnabled: false },
+    select: { label: true }
+  });
+  const disabledLabels = disabledCategories.map((c) => c.label);
+
   const todaysArticles = await prisma.article.findMany({
-    where: { editionId, included: true, processed: true },
+    where: {
+      editionId,
+      included: true,
+      processed: true,
+      ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
+    },
     select: { id: true, headline: true, summary: true, category: true }
   });
   if (todaysArticles.length === 0) return;

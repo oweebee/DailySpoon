@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     ]);
     const selectedIds = new Set(selected.map((s) => s.freshrssId));
     const orderById = new Map(selected.map((s) => [s.freshrssId, s.order]));
+    const frontPageEnabledById = new Map(selected.map((s) => [s.freshrssId, s.frontPageEnabled]));
 
     // Catégories sélectionnées d'abord, dans l'ordre choisi dans
     // /admin/categories (persisté en base) ; le reste ensuite, par ordre
@@ -29,7 +30,8 @@ export async function GET(req: NextRequest) {
         freshrssId: c.freshrssId,
         label: c.label,
         selected: selectedIds.has(c.freshrssId),
-        order: orderById.get(c.freshrssId) ?? null
+        order: orderById.get(c.freshrssId) ?? null,
+        frontPageEnabled: frontPageEnabledById.get(c.freshrssId) ?? true
       }))
       .sort((a, b) => {
         if (a.order !== null && b.order !== null) return a.order - b.order;
@@ -53,14 +55,31 @@ export async function POST(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { freshrssId, label, selected } = body as {
+  const { freshrssId, label, selected, frontPageEnabled } = body as {
     freshrssId?: string;
     label?: string;
     selected?: boolean;
+    frontPageEnabled?: boolean;
   };
 
-  if (!freshrssId || !label || typeof selected !== "boolean") {
-    return NextResponse.json({ error: "freshrssId, label et selected sont requis" }, { status: 400 });
+  if (!freshrssId || !label) {
+    return NextResponse.json({ error: "freshrssId et label sont requis" }, { status: 400 });
+  }
+
+  // Bascule dédiée à la carte "Impression IA" : ne touche ni à la sélection
+  // ni à l'ordre, juste au flag frontPageEnabled de la ligne déjà existante
+  // (une catégorie doit déjà être sélectionnée pour apparaître dans cette
+  // carte, donc la ligne existe forcément à ce stade).
+  if (typeof frontPageEnabled === "boolean" && typeof selected !== "boolean") {
+    await prisma.selectedCategory.update({
+      where: { freshrssId },
+      data: { frontPageEnabled }
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (typeof selected !== "boolean") {
+    return NextResponse.json({ error: "selected (booléen) requis" }, { status: 400 });
   }
 
   if (selected) {

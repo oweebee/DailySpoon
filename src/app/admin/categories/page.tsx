@@ -8,6 +8,7 @@ type Category = {
   label: string;
   selected: boolean;
   order: number | null;
+  frontPageEnabled: boolean;
 };
 
 type Feed = {
@@ -83,6 +84,24 @@ export default function AdminCategoriesPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ freshrssId: cat.freshrssId, label: cat.label, selected: !cat.selected })
+    });
+  }
+
+  // Carte "Impression IA" : bascule indépendante de "selected", ne touche
+  // qu'au flag qui détermine si cette catégorie participe à la génération
+  // (et à l'affichage) de la une IA de la page d'accueil.
+  async function toggleFrontPage(cat: Category) {
+    setCategories((prev) =>
+      prev.map((c) => (c.freshrssId === cat.freshrssId ? { ...c, frontPageEnabled: !c.frontPageEnabled } : c))
+    );
+    await fetch("/api/admin/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        freshrssId: cat.freshrssId,
+        label: cat.label,
+        frontPageEnabled: !cat.frontPageEnabled
+      })
     });
   }
 
@@ -361,6 +380,40 @@ export default function AdminCategoriesPage() {
                 </div>
               );
             })()}
+        </>
+      )}
+
+      {!loading && !error && categories.some((c) => c.selected) && (
+        <>
+          <h2 className="mb-3 mt-10 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
+            Impression IA
+          </h2>
+          <p className="newsprint mb-4 text-sm text-neutral-700">
+            La une générée par l’IA (page d’accueil, uniquement les news du jour) ne prend en compte
+            que les catégories cochées ci-dessous. Décocher une catégorie ici ne la retire pas d’« En
+            direct » ni de la recherche — elle disparaît seulement de la première page.
+          </p>
+          <ul className="border-t-2 border-ink">
+            {categories
+              .filter((c) => c.selected)
+              .map((cat) => (
+                <li
+                  key={cat.freshrssId}
+                  className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
+                >
+                  <span className="font-display font-bold">{cat.label}</span>
+                  <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
+                    <input
+                      type="checkbox"
+                      checked={cat.frontPageEnabled}
+                      onChange={() => toggleFrontPage(cat)}
+                      className="accent-ink"
+                    />
+                    inclure dans l’impression IA
+                  </label>
+                </li>
+              ))}
+          </ul>
         </>
       )}
 
