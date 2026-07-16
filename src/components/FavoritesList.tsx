@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArticleLink } from "./ArticleLink";
 import { FavoriteStar } from "./FavoriteStar";
+import { formatPublished } from "./EditionView";
 
 export type FavoriteArticle = {
   id: string;
@@ -10,6 +11,7 @@ export type FavoriteArticle = {
   sourceTitle: string;
   sourceUrl: string;
   feedTitle: string;
+  favoritedAt: Date | string | null;
 };
 
 /**
@@ -32,13 +34,20 @@ export function FavoritesList({ articles }: { articles: FavoriteArticle[] }) {
     <ul className="border-t-2 border-ink">
       {items.map((article) => (
         <li key={article.id} className="flex items-center justify-between gap-4 border-b border-ink/30 py-3">
-          <ArticleLink
-            href={article.sourceUrl}
-            title={article.headline || article.sourceTitle}
-            className="font-display font-bold hover:underline"
-          >
-            {article.headline || article.sourceTitle}
-          </ArticleLink>
+          <div>
+            <ArticleLink
+              href={article.sourceUrl}
+              title={article.headline || article.sourceTitle}
+              className="font-display font-bold hover:underline"
+            >
+              {article.headline || article.sourceTitle}
+            </ArticleLink>
+            {formatPublished(article.favoritedAt) && (
+              <p className="mt-0.5 text-xs italic text-sepia">
+                Ajouté aux favoris le {formatPublished(article.favoritedAt)}
+              </p>
+            )}
+          </div>
           <FavoriteStar
             articleId={article.id}
             initialFavorite={true}

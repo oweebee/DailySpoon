@@ -20,7 +20,8 @@ export type CategoryOrderEntry = { freshrssId: string; label: string };
 
 export function EditionView({
   articles,
-  categoryOrder = []
+  categoryOrder = [],
+  clampSummary = false
 }: {
   articles: ArticleLike[];
   /** Ordre persisté (SelectedCategory.order, réglable en glissant le titre
@@ -30,6 +31,9 @@ export function EditionView({
    *  après, par ordre alphabétique, et ne sont pas déplaçables (rien à
    *  persister pour elles). */
   categoryOrder?: CategoryOrderEntry[];
+  /** Limite l'aperçu de texte à 10 lignes (page "En direct") — pour lire la
+   *  suite, on ouvre l'article via la photo ou le lien source. */
+  clampSummary?: boolean;
 }) {
   if (articles.length === 0) {
     return (
@@ -107,7 +111,11 @@ export function EditionView({
               {/* Choix de style : pas de photo sur "à la une", même quand
                   l'article en a une — uniquement du texte pour les 3
                   articles vedettes. */}
-              <p className="newsprint mx-auto max-w-md text-left text-sm leading-snug text-neutral-800">
+              <p
+                className={`newsprint mx-auto max-w-md text-left text-sm leading-snug text-neutral-800 ${
+                  clampSummary ? "line-clamp-[10]" : ""
+                }`}
+              >
                 {hero.summary}
               </p>
               <div className="mt-3">
@@ -132,6 +140,7 @@ export function EditionView({
           freshrssId: idByLabel.get(cat) ?? null,
           articles: byCategory.get(cat)!
         }))}
+        clampSummary={clampSummary}
       />
 
       {/* Cul-de-lampe de fin d'édition */}

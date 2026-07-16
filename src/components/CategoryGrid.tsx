@@ -22,7 +22,15 @@ export type CategoryEntry = {
  * toutes les pages et conservé après redémarrage/redéploiement, comme dans
  * /admin/categories.
  */
-export function CategoryGrid({ initialCategories }: { initialCategories: CategoryEntry[] }) {
+export function CategoryGrid({
+  initialCategories,
+  clampSummary = false
+}: {
+  initialCategories: CategoryEntry[];
+  /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
+   *  on ouvre l'article via la photo ou le lien source. */
+  clampSummary?: boolean;
+}) {
   const [categories, setCategories] = useState(initialCategories);
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null);
 
@@ -64,6 +72,7 @@ export function CategoryGrid({ initialCategories }: { initialCategories: Categor
           onDragStart={() => setDraggedLabel(cat.label)}
           onDragEnd={() => setDraggedLabel(null)}
           onDropHere={() => handleDrop(cat.label)}
+          clampSummary={clampSummary}
         />
       ))}
     </div>

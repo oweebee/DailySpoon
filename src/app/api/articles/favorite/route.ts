@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   await prisma.article.update({
     where: { id: articleId },
-    data: { favorite }
+    data: { favorite, favoritedAt: favorite ? new Date() : null }
   });
 
   return NextResponse.json({ ok: true });

@@ -59,10 +59,7 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
             className="page-turn flex h-full w-full max-w-4xl flex-col border-2 border-ink bg-paper shadow-[0_20px_80px_-20px_rgba(0,0,0,0.6)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-4 border-b-2 border-ink px-4 py-2.5">
-              <p className="truncate text-xs uppercase tracking-[0.2em] text-sepia">
-                {state.title || state.url}
-              </p>
+            <div className="flex items-center justify-end gap-4 border-b-2 border-ink px-4 py-2.5">
               <div className="flex shrink-0 items-center gap-4 text-xs uppercase tracking-[0.2em]">
                 <a
                   href={state.url}

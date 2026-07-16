@@ -57,7 +57,7 @@ export function DirectView({
           articles.
         </p>
       ) : (
-        <EditionView articles={initialArticles} categoryOrder={categoryOrder} />
+        <EditionView articles={initialArticles} categoryOrder={categoryOrder} clampSummary />
       )}
     </div>
   );

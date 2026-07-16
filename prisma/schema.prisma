@@ -50,6 +50,7 @@ model Article {
   priorityScore  Int? // higher = more important, used to pick hero + ordering
 
   favorite       Boolean   @default(false) // marqué favori depuis l'étoile shérif, page /favoris
+  favoritedAt    DateTime? // date de mise en favori, affichée sur /favoris
 
   edition        Edition?  @relation(fields: [editionId], references: [id])
   editionId      String?

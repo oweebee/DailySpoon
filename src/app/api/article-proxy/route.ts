@@ -21,6 +21,33 @@ function proxyImageUrl(absoluteUrl: string): string {
   return `/api/image-proxy?url=${encodeURIComponent(absoluteUrl)}`;
 }
 
+// `Response.text()` du fetch natif décode toujours en UTF-8, quel que soit
+// l'encodage réel de la page — ce qui bousille les accents (é -> �) sur tout
+// site qui sert du HTML en ISO-8859-1/Windows-1252 (encore fréquent). On lit
+// donc les octets bruts et on détecte nous-mêmes le bon charset : d'abord
+// via l'en-tête HTTP Content-Type, sinon via la balise <meta charset> de la
+// page (repérable en la lisant provisoirement en latin1, qui est sans perte
+// pour les octets ASCII où vit cette balise).
+function detectCharset(buffer: ArrayBuffer, contentTypeHeader: string | null): string {
+  if (contentTypeHeader) {
+    const m = /charset=([^;]+)/i.exec(contentTypeHeader);
+    if (m) return m[1].trim().toLowerCase().replace(/["']/g, "");
+  }
+  const head = Buffer.from(buffer.slice(0, 2048)).toString("latin1");
+  const metaCharset = /<meta[^>]+charset=["']?\s*([a-z0-9_-]+)/i.exec(head);
+  if (metaCharset) return metaCharset[1].toLowerCase();
+  return "utf-8";
+}
+
+function decodeHtml(buffer: ArrayBuffer, contentTypeHeader: string | null): string {
+  const charset = detectCharset(buffer, contentTypeHeader);
+  try {
+    return new TextDecoder(charset).decode(buffer);
+  } catch {
+    return new TextDecoder("utf-8").decode(buffer);
+  }
+}
+
 function renderPage(opts: {
   title: string;
   byline?: string | null;
@@ -33,43 +60,128 @@ function renderPage(opts: {
     .filter((v): v is string => Boolean(v))
     .map(escapeHtml)
     .join(" · ");
+  const kicker = siteName ? escapeHtml(siteName) : new URL(originalUrl).hostname.replace(/^www\./, "");
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet" />
 <style>
+  * { box-sizing: border-box; }
+  html { background: #e9dfc4; }
   body {
     margin: 0;
-    padding: 28px 24px 60px;
-    max-width: 700px;
-    margin-left: auto;
-    margin-right: auto;
+    padding: 40px 28px 70px;
     font-family: Georgia, "Times New Roman", serif;
-    background: #f6f1e3;
     color: #1a1a1a;
-    line-height: 1.65;
-    font-size: 17px;
+    line-height: 1.7;
+    font-size: 17.5px;
+    /* Papier jauni : même grain de bruit + vignette que le reste du site,
+       pour que la page proxifiée fasse illusion de vieux papier journal. */
+    background-color: #f6f1e3;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E"),
+      radial-gradient(ellipse at center, #faf6ea 0%, #f3ecda 70%, #e9dfc4 100%);
+    background-attachment: fixed;
   }
-  h1 { font-family: Georgia, serif; font-weight: 900; font-size: 1.9rem; line-height: 1.2; margin: 0.4em 0 0.3em; }
-  .meta { font-size: 0.8rem; color: #6b5b3e; margin-bottom: 1.6em; font-style: italic; }
-  .meta a { color: #8b1a1a; }
-  img { max-width: 100%; height: auto; display: block; margin: 1em auto; filter: grayscale(1) sepia(0.25) contrast(1.1); border: 1px solid #1a1a1a; }
-  figure { margin: 1.2em 0; }
-  figcaption { font-size: 0.75rem; color: #6b5b3e; font-style: italic; text-align: center; }
-  a { color: #8b1a1a; }
-  blockquote { border-left: 3px solid #1a1a1a; margin: 1em 0; padding-left: 1em; color: #444; }
-  p { margin: 1em 0; }
+  .page {
+    max-width: 660px;
+    margin: 0 auto;
+  }
+  .meta-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #6b5b3e;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(26, 26, 26, 0.6);
+    margin-bottom: 4px;
+  }
+  .meta-top a { color: #8b1a1a; text-decoration: none; }
+  .meta-top a:hover { text-decoration: underline; }
+  .double-rule { border-top: 3px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; height: 6px; margin: 2px 0 22px; }
+  .kicker {
+    text-align: center;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    color: #8b1a1a;
+    margin: 22px 0 6px;
+  }
+  h1 {
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 900;
+    font-size: 2.15rem;
+    line-height: 1.15;
+    text-align: center;
+    margin: 0 0 8px;
+  }
+  .byline {
+    text-align: center;
+    font-size: 0.78rem;
+    font-style: italic;
+    color: #6b5b3e;
+    margin-bottom: 28px;
+  }
+  .article-body { text-align: justify; hyphens: auto; }
+  .article-body > p:first-of-type::first-letter {
+    float: left;
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 900;
+    font-size: 3.6em;
+    line-height: 0.82;
+    padding-right: 0.09em;
+    padding-top: 0.04em;
+    color: #1a1a1a;
+  }
+  .article-body p { margin: 1.05em 0; }
+  .article-body img, .article-body picture {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1.4em auto;
+    filter: grayscale(1) sepia(0.25) contrast(1.1);
+    border: 1px solid #1a1a1a;
+    box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.15);
+  }
+  .article-body figure { margin: 1.4em 0; }
+  .article-body figcaption { font-size: 0.75rem; color: #6b5b3e; font-style: italic; text-align: center; margin-top: 0.4em; }
+  .article-body a { color: #8b1a1a; }
+  .article-body blockquote {
+    border-left: 3px solid #1a1a1a;
+    margin: 1.2em 0;
+    padding: 0.2em 0 0.2em 1.1em;
+    color: #3a3a3a;
+    font-style: italic;
+  }
+  .article-body h2, .article-body h3 {
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 800;
+    margin: 1.4em 0 0.5em;
+  }
+  .colophon { text-align: center; font-size: 1.3rem; letter-spacing: 0.5em; color: #6b5b3e; margin-top: 3.2em; }
 </style>
 </head>
 <body>
-  <p class="meta">
-    <a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Voir l'original ↗</a>
-    ${metaBits ? " · " + metaBits : ""}
-  </p>
-  <h1>${escapeHtml(title)}</h1>
-  ${bodyHtml}
+  <div class="page">
+    <p class="meta-top">
+      <a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Voir l'original ↗</a>
+      <span>${escapeHtml(kicker)}</span>
+    </p>
+    <div class="double-rule"></div>
+    <p class="kicker">✦ ${escapeHtml(kicker)} ✦</p>
+    <h1>${escapeHtml(title)}</h1>
+    ${metaBits ? `<p class="byline">${metaBits}</p>` : ""}
+    <div class="article-body">${bodyHtml}</div>
+    <p class="colophon">❦ ❦ ❦</p>
+  </div>
 </body>
 </html>`;
 }
@@ -118,7 +230,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const rawHtml = await res.text();
+    const rawBuffer = await res.arrayBuffer();
+    const rawHtml = decodeHtml(rawBuffer, res.headers.get("content-type"));
     const dom = new JSDOM(rawHtml, { url: originalUrl });
     // Cast : le type Document de jsdom et celui de lib.dom (attendu par
     // Readability) ne s'unifient pas toujours parfaitement en TS, alors

@@ -7,13 +7,14 @@ export const dynamic = "force-dynamic";
 export default async function FavoritesPage() {
   const articles = await prisma.article.findMany({
     where: { favorite: true },
-    orderBy: { publishedAt: "desc" },
+    orderBy: { favoritedAt: "desc" },
     select: {
       id: true,
       headline: true,
       sourceTitle: true,
       sourceUrl: true,
-      feedTitle: true
+      feedTitle: true,
+      favoritedAt: true
     }
   });
 

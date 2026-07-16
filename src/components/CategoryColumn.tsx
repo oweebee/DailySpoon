@@ -16,7 +16,8 @@ export function CategoryColumn({
   isDragging = false,
   onDragStart,
   onDragEnd,
-  onDropHere
+  onDropHere,
+  clampSummary = false
 }: {
   label: string;
   articles: ArticleLike[];
@@ -28,6 +29,9 @@ export function CategoryColumn({
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onDropHere?: () => void;
+  /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
+   *  on ouvre l'article via la photo ou le lien source. */
+  clampSummary?: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
 
@@ -84,7 +88,11 @@ export function CategoryColumn({
               </ArticleLink>
             )}
             <h3 className="font-display text-base font-bold leading-snug">{article.headline}</h3>
-            <p className="newsprint mt-1 text-[0.8rem] leading-snug text-neutral-700">
+            <p
+              className={`newsprint mt-1 text-[0.8rem] leading-snug text-neutral-700 ${
+                clampSummary ? "line-clamp-[10]" : ""
+              }`}
+            >
               {article.summary}
             </p>
             <SourceLine article={article} showDate={!article.imageUrl} />
