@@ -2,6 +2,7 @@
 
 import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { SpoonDivider } from "@/components/SpoonDivider";
 
 // useSearchParams() must live inside a <Suspense> boundary, otherwise
 // `next build` fails while prerendering /admin/login
@@ -73,7 +74,7 @@ export default function AdminLoginPage() {
       <Suspense fallback={null}>
         <LoginForm />
       </Suspense>
-      <p className="mt-10 text-center text-xl tracking-[0.5em] text-sepia">❦</p>
+      <SpoonDivider className="mt-10 text-center text-sepia" />
     </main>
   );
 }
