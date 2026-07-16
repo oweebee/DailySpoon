@@ -11,6 +11,12 @@ export type ArticleLike = {
   // partout ailleurs (En direct, favoris, archive gardent `summary`).
   frontPageSummary?: string | null;
   category: string | null;
+  // Catégorie FreshRSS d'origine (celle choisie dans /admin/categories) —
+  // distincte de "category" ci-dessus qui est la rubrique éditoriale
+  // attribuée par l'IA (peut ne correspondre à aucune catégorie réellement
+  // sélectionnée). Utilisée pour grouper "En direct" par les vraies
+  // catégories FreshRSS plutôt que par la classification IA.
+  categoryLabel?: string | null;
   priorityScore: number | null;
   sourceUrl: string;
   sourceTitle: string;
@@ -67,9 +73,17 @@ export function EditionView({
   const heroIds = new Set(heroes.map((h) => h.id));
   const rest = articles.filter((a) => !heroIds.has(a.id));
 
+  // Regroupement par vraie catégorie FreshRSS (categoryLabel), pas par la
+  // rubrique éditoriale attribuée par l'IA (category) : "En direct" est censé
+  // refléter tel quel les catégories choisies dans /admin/categories, or un
+  // article déjà passé par l'IA lors d'une génération précédente (même si
+  // "En direct" ne consomme jamais l'IA lui-même) garde la rubrique que l'IA
+  // lui a assignée à l'époque — ce qui faisait apparaître ici des colonnes
+  // ("Culture", "Autre"...) ne correspondant à aucune catégorie réellement
+  // sélectionnée par l'utilisateur.
   const byCategory = new Map<string, ArticleLike[]>();
   for (const article of rest) {
-    const cat = article.category || "Autre";
+    const cat = article.categoryLabel || article.category || "Autre";
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(article);
   }
