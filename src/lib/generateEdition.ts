@@ -240,7 +240,7 @@ async function curateFrontPageScores(editionId: string): Promise<void> {
       processed: true,
       ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
     },
-    select: { id: true, headline: true, summary: true, category: true }
+    select: { id: true, headline: true, summary: true, category: true, feedTitle: true }
   });
   if (todaysArticles.length === 0) return;
 
@@ -249,7 +249,8 @@ async function curateFrontPageScores(editionId: string): Promise<void> {
       id: a.id,
       headline: a.headline || "",
       summary: a.summary || "",
-      category: a.category || "Autre"
+      category: a.category || "Autre",
+      source: a.feedTitle || ""
     }))
   );
   if (scores.size === 0) return;

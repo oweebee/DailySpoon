@@ -217,7 +217,7 @@ export function fallbackProcess(item: RawItem): ProcessedArticle {
   };
 }
 
-export type CurationItem = { id: string; headline: string; summary: string; category: string };
+export type CurationItem = { id: string; headline: string; summary: string; category: string; source: string };
 export type CurationResult = { priorityScore: number; frontPageSummary: string };
 
 // Passe de curation de la "une" : contrairement à processArticles (qui note
@@ -229,9 +229,11 @@ export type CurationResult = { priorityScore: number; frontPageSummary: string }
 // hiérarchie cohérente sur l'ensemble de la journée — c'est ce score qui
 // détermine ensuite les 3 articles "à la une" de FrontPageView.
 //
-// Produit aussi, dans le même appel, un "frontPageSummary" bien plus concis
-// que `summary` : la une doit aller à l'essentiel (contrairement à En
-// direct/favoris/archive, qui gardent le résumé complet).
+// Produit aussi, dans le même appel, un "frontPageSummary" qui va à
+// l'essentiel (2-3 phrases pour la plupart des sujets, jusqu'à 10 pour les
+// sujets substantiels — pas de troncature arbitraire) et cite la source en
+// passant dans le texte (jamais de lien), contrairement à `summary` utilisé
+// tel quel sur En direct/favoris/archive.
 //
 // Un seul appel IA par génération (pas un par lot), sur des textes déjà
 // réécrits et courts (titre + résumé, pas le texte source brut) : coût
@@ -282,14 +284,15 @@ function buildCurationPrompt(items: CurationItem[]): string {
     id: it.id,
     headline: it.headline,
     summary: (it.summary || "").slice(0, 400),
-    category: it.category
+    category: it.category,
+    source: it.source
   }));
 
   return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". Voici TOUS les articles retenus pour l'édition d'aujourd'hui, déjà réécrits.
 
 Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne :
 - "priorityScore" : un score d'importance de 1 à 100 (100 = doit faire la une du jour, 1 = anecdotique). Les scores doivent réellement discriminer : seuls 1 à 3 articles au grand maximum doivent approcher 100, le reste doit s'étaler selon l'importance réelle.
-- "frontPageSummary" : une réécriture TRÈS concise du résumé fourni, 1 à 2 phrases maximum, qui va droit à l'essentiel (l'info principale, pas le contexte ou les détails secondaires) — c'est ce texte qui sera affiché sur la une du journal, pas le résumé complet.
+- "frontPageSummary" : une réécriture du résumé fourni qui va droit à l'essentiel (l'info principale d'abord). Adapte la longueur au sujet : la plupart des articles n'ont besoin que de 2-3 phrases, mais si le sujet est substantiel/complexe, tu peux aller jusqu'à 10 phrases maximum pour rester fidèle et complet — jamais plus. Intègre aussi une citation journalistique de la source fournie ("source") directement dans le texte (ex : "selon Presse-citron", "rapporte Le Monde", "d'après Reuters"), SANS jamais insérer de lien ni d'URL — juste le nom du média mentionné en passant, comme dans un vrai article de journal.
 
 Articles :
 ${JSON.stringify(list, null, 2)}
