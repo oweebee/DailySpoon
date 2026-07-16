@@ -1,5 +1,4 @@
 import { CategoryGrid } from "./CategoryGrid";
-import { ArticleImage } from "./ArticleImage";
 
 export type ArticleLike = {
   id: string;
@@ -92,19 +91,14 @@ export function EditionView({
               <h1 className="mx-auto mb-5 max-w-2xl font-display text-2xl font-black leading-tight md:text-4xl">
                 {hero.headline}
               </h1>
-              {hero.imageUrl && (
-                <ArticleImage
-                  src={hero.imageUrl}
-                  alt={hero.headline || hero.sourceTitle}
-                  dateLabel={formatStamp(hero.publishedAt)}
-                  className="mx-auto mb-5 aspect-[16/9] w-full max-w-xl"
-                />
-              )}
+              {/* Choix de style : pas de photo sur "à la une", même quand
+                  l'article en a une — uniquement du texte pour les 2
+                  articles vedettes. */}
               <p className="newsprint mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">
                 {hero.summary}
               </p>
               <div className="mt-4">
-                <SourceLine article={hero} showDate={!hero.imageUrl} />
+                <SourceLine article={hero} />
               </div>
             </article>
           ))}
