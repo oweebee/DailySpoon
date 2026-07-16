@@ -278,6 +278,49 @@ function decodeRedditHtml(encoded: string): string {
   return dom.window.document.getElementById("tmp")?.textContent || "";
 }
 
+// Instances publiques Redlib (front-end alternatif à Reddit, scrape sa
+// propre infrastructure) — essai best-effort avant l'API JSON officielle.
+// Non garanti dans la durée : une instance publique peut tomber, changer de
+// politique anti-bot, etc. Celles listées ici ont été vérifiées comme ne
+// posant pas de challenge JS (Anubis/Cloudflare) au moment de l'écriture ;
+// si toutes échouent, on retombe sur l'API JSON puis sur la page de repli.
+const REDLIB_INSTANCES = [
+  "https://redlib.catsarch.com",
+  "https://redlib.privacyredirect.com",
+  "https://redlib.orangenet.cc",
+  "https://redlib.privadency.com"
+];
+
+async function fetchViaRedlib(parsed: URL): Promise<{ html: string; baseUrl: string } | null> {
+  const path = parsed.pathname + parsed.search;
+  for (const instance of REDLIB_INSTANCES) {
+    const target = `${instance}${path}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch(target, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      // Écarte les pages de challenge anti-bot (Anubis, Cloudflare...) ou
+      // les réponses trop courtes pour être une vraie page de post.
+      if (html.length < 500 || /anubis|checking your browser|cf-browser-verification/i.test(html)) continue;
+      return { html, baseUrl: target };
+    } catch {
+      continue;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  return null;
+}
+
 type RedditPost = { title: string; author: string; subreddit: string; bodyHtml: string };
 
 async function fetchRedditPost(parsed: URL): Promise<RedditPost | null> {
@@ -340,6 +383,44 @@ export async function GET(req: NextRequest) {
   const fetchUrl = originalUrl;
 
   if (isRedditPostUrl(parsed)) {
+    // 1) Miroir Redlib (best-effort, voir REDLIB_INSTANCES) : rendu HTML
+    //    complet côté serveur, passé par le même pipeline Readability que
+    //    n'importe quel autre site.
+    const redlib = await fetchViaRedlib(parsed);
+    if (redlib) {
+      const redlibDom = new JSDOM(redlib.html, { url: redlib.baseUrl });
+      const redlibArticle = new Readability(redlibDom.window.document as unknown as Document).parse();
+      if (redlibArticle && redlibArticle.content) {
+        const contentDom = new JSDOM(`<div id="root">${redlibArticle.content}</div>`);
+        contentDom.window.document.querySelectorAll("img, source").forEach((el) => {
+          const src = el.getAttribute("src");
+          if (src) {
+            try {
+              el.setAttribute("src", proxyImageUrl(new URL(src, redlib.baseUrl).toString()));
+            } catch {
+              // ignore
+            }
+          }
+          el.removeAttribute("srcset");
+        });
+        contentDom.window.document.querySelectorAll("script, style, iframe").forEach((el) => el.remove());
+        const rootEl = contentDom.window.document.getElementById("root");
+        if (rootEl) trimTrailingJunk(rootEl);
+
+        return htmlResponse(
+          renderPage({
+            title: redlibArticle.title || "Post Reddit",
+            byline: redlibArticle.byline,
+            siteName: "reddit.com",
+            bodyHtml: rootEl?.innerHTML || "",
+            originalUrl
+          })
+        );
+      }
+    }
+
+    // 2) Repli sur l'API JSON officielle de Reddit (marche parfois même
+    //    quand le HTML est bloqué).
     const redditPost = await fetchRedditPost(parsed);
     if (redditPost) {
       // Même traitement des images que le chemin générique : passage par
@@ -368,9 +449,9 @@ export async function GET(req: NextRequest) {
         })
       );
     }
-    // L'API JSON a échoué (post supprimé, subreddit privé...) — on retombe
-    // sur le chemin générique ci-dessous (qui échouera probablement aussi
-    // sur reddit.com, mais affichera au moins la page de repli propre).
+    // 3) Ni Redlib ni l'API JSON n'ont marché — on retombe sur le chemin
+    // générique ci-dessous (fetch direct de reddit.com), qui échouera
+    // probablement aussi mais affichera au moins la page de repli propre.
   }
 
   try {
