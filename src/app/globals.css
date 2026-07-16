@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Anton&family=Rye&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -18,7 +18,7 @@ body {
 /* Lettrine de une, comme dans les vieux quotidiens */
 .drop-cap::first-letter {
   float: left;
-  font-family: "Anton", Georgia, serif;
+  font-family: "Playfair Display", Georgia, serif;
   font-weight: 900;
   font-size: 3.4em;
   line-height: 0.85;

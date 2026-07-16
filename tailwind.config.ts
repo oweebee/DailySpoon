@@ -6,13 +6,12 @@ const config: Config = {
     extend: {
       fontFamily: {
         serif: ["Georgia", "Cambria", "Times New Roman", "Times", "serif"],
-        // "Swell Type" et "Newshound" (mockups fournis) sont des polices
-        // payantes non disponibles ici — Rye et Anton sont les équivalents
-        // gratuits (Google Fonts) les plus proches dans le même esprit :
-        // Rye pour le masthead (gothique/western, très typé), Anton pour
-        // le reste des titres (gros titre de tabloïd condensé et massif).
-        display: ["Anton", "Georgia", "serif"],
-        masthead: ['"Rye"', "Georgia", "serif"],
+        // Rye et Anton (essayés d'après des mockups) étaient jugés trop
+        // massifs/gras à l'usage — retour à Playfair Display, un Didone
+        // élégant à empattements fins-épais plutôt qu'une police "noire"
+        // pleine, pour le masthead comme pour les titres.
+        display: ['"Playfair Display"', "Georgia", "serif"],
+        masthead: ['"Playfair Display"', "Georgia", "serif"],
         sans: ["-apple-system", "Segoe UI", "Helvetica", "Arial", "sans-serif"]
       },
       colors: {
