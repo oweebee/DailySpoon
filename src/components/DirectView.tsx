@@ -77,13 +77,9 @@ export function DirectView({
 
   return (
     <div>
-      <div className="mb-10 border-b-2 border-ink pb-5">
-        <div className="flex flex-col items-center gap-3 pb-5 text-center">
+      <div className="mb-8 border-b-2 border-ink pb-4">
+        <div className="flex flex-col items-center gap-2 pb-4 text-center">
           <p className="text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
-          <p className="max-w-md text-sm italic text-sepia">
-            Va chercher les derniers articles de tes catégories FreshRSS et reconstruit l’édition,
-            sans attendre demain matin.
-          </p>
           <button
             onClick={pull}
             disabled={pulling}
