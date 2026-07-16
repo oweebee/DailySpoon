@@ -45,18 +45,16 @@ export function Masthead({ date }: { date: Date }) {
 
         {/* Timbre "EN DIRECT" — même mécanique que les autres timbres du
             site (.stamp-button dans globals.css : contour pointillé décalé
-            façon perforations de timbre-poste, ombre portée). Fond noir +
-            texte clair comme les autres timbres (bordure rouge en accent).
-            Poussé bien à droite, quasiment hors du bloc titre, pour ne
-            jamais toucher le mot — et inclinaison prononcée (transform en
-            style inline : la classe .stamp-button gère aussi une rotation,
-            mais Tailwind top-1/2/-translate-y-1/2 se battait avec elle sur
-            la même propriété "transform", d'où le chevauchement précédent ;
-            tout est donc regroupé ici dans un seul transform explicite). */}
+            façon perforations de timbre-poste, ombre portée), avec
+            ".stamp-live" en plus pour figer la rotation via !important (le
+            transform inline précédent n'apparaissait toujours pas inclinée
+            en prod — plus d'ambiguïté possible avec cette règle dédiée).
+            Fond noir, bordure NOIRE (pas rouge), texte "En direct" en rouge
+            (seul l'accent couleur du site) — poussé bien à droite, quasiment
+            hors du bloc titre, pour ne jamais toucher le mot. */}
         <Link
           href="/direct"
-          style={{ transform: "translateY(-50%) rotate(-9deg)" }}
-          className="stamp-button absolute -right-3 top-1/2 border-2 border-journal bg-ink px-3 py-1 font-display text-[0.6rem] font-bold uppercase tracking-[0.25em] text-paper sm:-right-5 sm:px-4 sm:py-1.5 sm:text-xs"
+          className="stamp-button stamp-live absolute -right-3 top-1/2 border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-journal sm:-right-5 sm:px-5 sm:py-2 sm:text-sm"
         >
           En direct
         </Link>

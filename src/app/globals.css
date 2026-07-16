@@ -16,11 +16,12 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  /* Papier en niveaux de gris : vignette + grain de papier journal (bruit
-     SVG), sans teinte sépia/beige — tout est gris neutre. */
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E"),
-    radial-gradient(ellipse at center, #f5f5f5 0%, #ececec 70%, #dcdcdc 100%);
+  /* Texture papier froissé fournie par l'utilisateur (déjà rétrécie/pensée
+     pour se répéter sans raccord visible) — image seule, telle quelle : pas
+     de dégradé/vignette superposé, pas de redimensionnement (taille
+     naturelle), répétition en pavé par défaut (background-repeat non
+     précisé = "repeat"). */
+  background-image: url("/textures/journal.png");
   background-attachment: fixed;
 }
 
@@ -72,6 +73,15 @@ body {
 .stamp-button:active {
   transform: rotate(0deg) scale(0.97);
   box-shadow: 1px 2px 4px rgba(26, 26, 26, 0.28);
+}
+
+/* Timbre "EN DIRECT" du masthead : variante figée (jamais redressée au
+   survol/actif, contrairement à .stamp-button) — "!important" pour lever
+   toute ambiguïté avec les règles ci-dessus qui visent aussi "transform". */
+.stamp-live,
+.stamp-live:hover,
+.stamp-live:active {
+  transform: translateY(-50%) rotate(-9deg) !important;
 }
 
 /* Ouverture du lecteur d'article interne : la page pivote depuis sa
