@@ -217,4 +217,105 @@ export function fallbackProcess(item: RawItem): ProcessedArticle {
   };
 }
 
+export type CurationItem = { id: string; headline: string; summary: string; category: string };
+
+// Passe de curation de la "une" : contrairement à processArticles (qui note
+// chaque article par lots indépendants de 12 — un article isolé dans un lot
+// faible peut ressortir avec un score élevé par comparaison, même s'il est
+// moins important qu'un article noté plus bas dans un lot très concurrentiel
+// ailleurs), cette passe reçoit TOUS les articles retenus du jour EN UNE FOIS
+// et les compare vraiment entre eux, pour que priorityScore reflète une
+// hiérarchie cohérente sur l'ensemble de la journée — c'est ce score qui
+// détermine ensuite les 3 articles "à la une" de FrontPageView.
+//
+// Un seul appel IA par génération (pas un par lot), sur des textes déjà
+// réécrits et courts (titre + résumé, pas le texte source brut) : coût
+// marginal, même avec une centaine d'articles dans la journée.
+export async function curateFrontPage(items: CurationItem[]): Promise<Map<string, number>> {
+  if (items.length === 0) return new Map();
+
+  const settings = await getSettings();
+  const provider = settings.aiProvider === "gemini" ? "gemini" : "anthropic";
+
+  try {
+    const text =
+      provider === "gemini"
+        ? settings.geminiApiKey
+          ? await callGeminiRaw(buildCurationPrompt(items), settings.geminiApiKey, settings.geminiModel)
+          : null
+        : settings.anthropicApiKey
+          ? await callAnthropicRaw(buildCurationPrompt(items), settings.anthropicApiKey, settings.anthropicModel)
+          : null;
+
+    if (!text) return new Map(); // pas de clé configurée pour ce fournisseur
+
+    const parsed = JSON.parse(extractJson(text)) as { id: string; priorityScore: number }[];
+    if (!Array.isArray(parsed)) throw new Error("réponse IA non conforme (pas un tableau)");
+
+    const map = new Map<string, number>();
+    for (const p of parsed) {
+      if (p?.id) map.set(p.id, clamp(Number(p.priorityScore) || 40, 1, 100));
+    }
+    return map;
+  } catch (err) {
+    console.error("[ai] Curation de la une échouée, scores existants conservés :", err);
+    return new Map();
+  }
+}
+
+function buildCurationPrompt(items: CurationItem[]): string {
+  const list = items.map((it) => ({
+    id: it.id,
+    headline: it.headline,
+    summary: (it.summary || "").slice(0, 400),
+    category: it.category
+  }));
+
+  return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". Voici TOUS les articles retenus pour l'édition d'aujourd'hui, déjà réécrits.
+
+Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne un score d'importance de 1 à 100 (100 = doit faire la une du jour, 1 = anecdotique). Les scores doivent réellement discriminer : seuls 1 à 3 articles au grand maximum doivent approcher 100, le reste doit s'étaler selon l'importance réelle.
+
+Articles :
+${JSON.stringify(list, null, 2)}
+
+Réponds UNIQUEMENT avec un tableau JSON de ${items.length} objets, dans le même ordre, sans texte avant ou après, format :
+[{"id": "...", "priorityScore": 0}, ...]`;
+}
+
+async function callAnthropicRaw(prompt: string, apiKey: string, model: string): Promise<string> {
+  const client = new Anthropic({ apiKey });
+  const response = await client.messages.create({
+    model: model as any,
+    max_tokens: 8192,
+    messages: [{ role: "user", content: prompt }]
+  });
+  return response.content
+    .filter((block: any) => block.type === "text")
+    .map((block: any) => block.text as string)
+    .join("");
+}
+
+async function callGeminiRaw(prompt: string, apiKey: string, model: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 8192 }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Gemini API ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data: any = await res.json();
+  return (data?.candidates?.[0]?.content?.parts || []).map((p: any) => p?.text || "").join("");
+}
+
 export { DEFAULT_CATEGORIES };

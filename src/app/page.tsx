@@ -7,19 +7,20 @@ import { getSettings } from "@/lib/settings";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  // Le journal ne doit pas se limiter aux articles de l'édition du jour :
-  // chaque jour calendaire crée une nouvelle Edition, donc si on filtrait par
-  // une seule édition, tout ce qui a été aspiré la veille (ou avant)
-  // disparaissait de la page dès minuit. On agrège plutôt les articles les
-  // plus récents toutes éditions confondues ; EditionView se charge déjà de
-  // plafonner à 20 par catégorie.
-  const [latestEdition, articles, selectedCategories, settings] = await Promise.all([
-    prisma.edition.findFirst({ orderBy: { date: "desc" } }),
-    prisma.article.findMany({
-      where: { processed: true, included: true },
-      orderBy: { publishedAt: "desc" },
-      take: 1000
-    }),
+  // La une ne montre QUE les articles de la dernière impression (l'édition
+  // la plus récente) — pas un flot glissant toutes éditions confondues comme
+  // avant. Elle reste donc figée telle quelle jusqu'à la prochaine
+  // impression, plutôt que de bouger toute seule au fil des aspirations en
+  // arrière-plan.
+  const latestEdition = await prisma.edition.findFirst({ orderBy: { date: "desc" } });
+
+  const [articles, selectedCategories, settings] = await Promise.all([
+    latestEdition
+      ? prisma.article.findMany({
+          where: { editionId: latestEdition.id, processed: true, included: true },
+          orderBy: { publishedAt: "desc" }
+        })
+      : Promise.resolve([]),
     prisma.selectedCategory.findMany({ orderBy: { order: "asc" } }),
     getSettings()
   ]);

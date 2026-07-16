@@ -441,16 +441,33 @@ function Field({
   type?: string;
   placeholder?: string;
 }) {
+  // Les champs "password" (clés API, mot de passe FreshRSS) sont masqués par
+  // défaut mais peuvent se révéler en clair — pratique pour relire une clé
+  // déjà collée sans avoir à la retaper à l'aveugle.
+  const [revealed, setRevealed] = useState(false);
+  const isSecret = type === "password";
+
   return (
     <label className="block">
       <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">{label}</span>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm placeholder:italic placeholder:text-sepia/70 focus:outline-none focus:ring-1 focus:ring-ink"
-      />
+      <div className="flex gap-2">
+        <input
+          type={isSecret && revealed ? "text" : type}
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm placeholder:italic placeholder:text-sepia/70 focus:outline-none focus:ring-1 focus:ring-ink"
+        />
+        {isSecret && (
+          <button
+            type="button"
+            onClick={() => setRevealed((r) => !r)}
+            className="shrink-0 border border-ink/40 px-3 py-2 text-xs uppercase tracking-[0.1em] text-ink transition-colors hover:bg-ink hover:text-paper"
+          >
+            {revealed ? "Masquer" : "Afficher"}
+          </button>
+        )}
+      </div>
     </label>
   );
 }

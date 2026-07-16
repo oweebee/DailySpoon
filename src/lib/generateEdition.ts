@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback } from "./freshrss";
-import { processArticles, fallbackProcess, type ProcessedArticle } from "./ai";
+import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
 import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
 import { getSettings } from "./settings";
 
@@ -85,6 +85,15 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 
   await syncMedalFlags();
 
+  // Une passe IA dédiée, une seule fois par génération (jamais en mode
+  // "Aspirer les news" sans IA) : recalcule priorityScore sur TOUS les
+  // articles inclus de l'édition en les comparant vraiment entre eux,
+  // plutôt que par lots isolés de 12 comme processArticles — c'est ce score
+  // qui détermine ensuite les articles "à la une" sur la page d'accueil.
+  if (!options.forceNoAi) {
+    await curateFrontPageScores(edition.id);
+  }
+
   const heroArticle = await prisma.article.findFirst({
     where: { editionId: edition.id },
     orderBy: { priorityScore: "desc" }
@@ -157,6 +166,39 @@ async function syncMedalFlags(): Promise<void> {
     where: { medal: true, NOT: matchCondition },
     data: { medal: false }
   });
+}
+
+/**
+ * Demande à l'IA de définir les news marquantes de la journée : relit tous
+ * les articles inclus de l'édition (déjà réécrits) EN UNE FOIS et leur
+ * attribue un score d'importance cohérent sur l'ensemble du jour, plutôt que
+ * le score par lot de 12 posé par processArticles. Silencieux et sans effet
+ * si aucune clé IA n'est configurée pour le fournisseur choisi (curateFrontPage
+ * renvoie alors une Map vide) — les scores existants restent tels quels.
+ */
+async function curateFrontPageScores(editionId: string): Promise<void> {
+  const todaysArticles = await prisma.article.findMany({
+    where: { editionId, included: true, processed: true },
+    select: { id: true, headline: true, summary: true, category: true }
+  });
+  if (todaysArticles.length === 0) return;
+
+  const scores = await curateFrontPage(
+    todaysArticles.map((a) => ({
+      id: a.id,
+      headline: a.headline || "",
+      summary: a.summary || "",
+      category: a.category || "Autre"
+    }))
+  );
+  if (scores.size === 0) return;
+
+  await prisma.$transaction(
+    [...scores.entries()].map(([id, priorityScore]) =>
+      prisma.article.update({ where: { id }, data: { priorityScore } })
+    )
+  );
+  console.log(`[edition] Une du jour recalculée par l'IA pour ${scores.size} article(s).`);
 }
 
 /**

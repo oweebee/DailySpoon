@@ -1,22 +1,35 @@
-import { ArticleLink } from "./ArticleLink";
 import { ArticleImage } from "./ArticleImage";
-import { SourceLine, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
-import { CategoryGrid } from "./CategoryGrid";
+import { type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { SpoonDivider } from "./SpoonDivider";
 
 /**
- * Vraie mise en page de "une" de journal : gros article vedette au centre
- * avec ses deux secondaires flanqués par un simple filet vertical (même
- * langage visuel que le bandeau "à la une" de EditionView — pas de boîtes
- * encadrées partout, qui alourdissaient trop la page), puis les rubriques en
- * colonnes classiques (CategoryGrid, réutilisé tel quel pour rester cohérent
- * avec /direct) en bas de page. /direct garde EditionView inchangé.
+ * Vraie "une" de journal, figée : ce qu'affiche cette page est exactement le
+ * contenu de la dernière impression (Article.editionId = dernière Edition),
+ * pas un flux qui bouge tout seul — voir la requête dans app/page.tsx. Elle
+ * ne change qu'à la prochaine impression (bouton manuel ou horaire réglé
+ * dans /admin/settings), jamais au simple rechargement de la page.
  *
- * "Adapté au mieux" par l'IA sans appel supplémentaire : aucune requête IA
- * dédiée à la mise en page — le nombre de héros affichés s'adapte simplement
- * aux signaux déjà produits par le traitement IA existant (priorityScore,
- * médaille), qui varient naturellement à chaque impression.
+ * Page statique façon vrai journal imprimé : ni lien externe, ni source, ni
+ * favori, ni médaille, ni tampon-date sur les photos — juste les articles,
+ * réécrits par l'IA, à lire sur place. Pas de "lire la suite" non plus (donc
+ * pas de troncature de texte) puisqu'il n'y a plus de clic possible pour
+ * ouvrir l'article ailleurs. Composant dédié, distinct de EditionView/
+ * CategoryGrid (toujours utilisés tels quels sur /direct, où le clic vers la
+ * source reste le point central).
+ *
+ * Sélection des articles "à la une" : purement algorithmique (médaille puis
+ * priorityScore), mais ce priorityScore est désormais recalculé par une
+ * passe IA dédiée (curateFrontPage, dans generateEdition.ts) qui compare
+ * tous les articles du jour entre eux plutôt que par lots isolés — c'est
+ * elle qui "définit les news marquantes du jour", pas un algorithme local.
  */
+export function FrontPageView({
+  articles,
+  categoryOrder = []
+}: {
+  articles: ArticleLike[];
+  categoryOrder?: CategoryOrderEntry[];
+}) {
 export function FrontPageView({
   articles,
   categoryOrder = []
@@ -73,7 +86,6 @@ export function FrontPageView({
   }
 
   const orderIndex = new Map(categoryOrder.map((c, i) => [c.label, i]));
-  const idByLabel = new Map(categoryOrder.map((c) => [c.label, c.freshrssId]));
   const categories = [...byCategory.keys()].sort((a, b) => {
     const ia = orderIndex.has(a) ? orderIndex.get(a)! : Number.MAX_SAFE_INTEGER;
     const ib = orderIndex.has(b) ? orderIndex.get(b)! : Number.MAX_SAFE_INTEGER;
@@ -109,21 +121,16 @@ export function FrontPageView({
         </div>
       )}
 
-      {/* ——— Rubriques en colonnes classiques (même composant que /direct),
-          sans médaille/tampon-date/favoris : notions qui n'ont pas leur
-          place sur une page toujours à la date du jour. */}
+      {/* ——— Rubriques, en colonnes statiques : juste le texte, pas de
+          composant partagé avec /direct (qui a besoin des liens/sources). */}
       {categories.length > 0 && (
-        <CategoryGrid
-          initialCategories={categories.map((cat) => ({
-            label: cat,
-            freshrssId: idByLabel.get(cat) ?? null,
-            articles: byCategory.get(cat)!
-          }))}
-          clampSummary
-          showMedal={false}
-          showDateStamp={false}
-          showFavorite={false}
-        />
+        <div className="grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+          {categories.map((cat) => {
+            const arts = byCategory.get(cat)!;
+            const big = arts.length >= 4;
+            return <StaticCategorySection key={cat} label={cat} articles={arts} big={big} />;
+          })}
+        </div>
       )}
 
       <SpoonDivider />
@@ -138,24 +145,17 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
         {article.headline}
       </h1>
       {article.imageUrl && (
-        <ArticleLink
-          href={article.sourceUrl}
-          title={article.headline || article.sourceTitle}
-          className="mb-4 block aspect-[16/9] w-full"
-        >
+        <div className="mb-4 aspect-[16/9] w-full">
           <ArticleImage
             src={article.imageUrl}
             alt={article.headline || article.sourceTitle}
             className="h-full w-full"
           />
-        </ArticleLink>
+        </div>
       )}
-      <p className="newsprint mx-auto max-w-xl line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
+      <p className="newsprint mx-auto max-w-xl text-left text-sm leading-snug text-neutral-800">
         {article.summary}
       </p>
-      <div className="mt-3">
-        <SourceLine article={article} center showFavorite={false} />
-      </div>
     </article>
   );
 }
@@ -165,22 +165,34 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
     <article className={className}>
       <h2 className="mb-2 font-display text-base font-bold leading-snug">{article.headline}</h2>
       {article.imageUrl && (
-        <ArticleLink
-          href={article.sourceUrl}
-          title={article.headline || article.sourceTitle}
-          className="mb-2 block aspect-[4/3] w-full"
-        >
+        <div className="mb-2 aspect-[4/3] w-full">
           <ArticleImage
             src={article.imageUrl}
             alt={article.headline || article.sourceTitle}
             className="h-full w-full"
           />
-        </ArticleLink>
+        </div>
       )}
-      <p className="newsprint line-clamp-[8] text-xs leading-snug text-neutral-700">{article.summary}</p>
-      <div className="mt-2">
-        <SourceLine article={article} showFavorite={false} />
-      </div>
+      <p className="newsprint text-xs leading-snug text-neutral-700">{article.summary}</p>
     </article>
+  );
+}
+
+function StaticCategorySection({ label, articles, big }: { label: string; articles: ArticleLike[]; big: boolean }) {
+  const shown = articles.slice(0, big ? 6 : 3);
+  return (
+    <section className={big ? "sm:col-span-2" : ""}>
+      <h3 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
+        {label}
+      </h3>
+      <div className="divide-y divide-ink/20">
+        {shown.map((a) => (
+          <div key={a.id} className="py-3 first:pt-0 last:pb-0">
+            <h4 className="font-display text-sm font-bold leading-snug">{a.headline}</h4>
+            <p className="newsprint mt-1 text-xs leading-snug text-neutral-700">{a.summary}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

@@ -45,11 +45,27 @@ const TRAILING_JUNK_PHRASES = [
   "sur le même sujet",
   "à lire aussi",
   "cet article vous a plu",
-  "partager cet article"
+  "partager cet article",
+  // Bandeaux "suivez-nous" (réseaux sociaux, Google Actualités, WhatsApp...)
+  // — très fréquents en fin d'article sur les sites français, jamais du
+  // contenu de l'article lui-même.
+  "suivez-nous",
+  "pour ne manquer aucune actualité",
+  "rejoignez-nous sur",
+  "retrouvez-nous sur",
+  "google actualités",
+  "google news",
+  "notre chaîne whatsapp",
+  "sur whatsapp"
 ];
 
+// Un "vrai" paragraphe peut être un <p> classique ou un <blockquote> (souvent
+// utilisé par les CMS pour encadrer un bandeau "suivez-nous" plutôt qu'une
+// vraie citation) — les deux sont évalués pareil ; tout autre type d'élément
+// (image, figure, liste de liens...) n'est de toute façon jamais considéré
+// comme du texte d'article.
 function isSubstantiveParagraph(el: Element): boolean {
-  if (el.tagName !== "P") return false;
+  if (el.tagName !== "P" && el.tagName !== "BLOCKQUOTE") return false;
   const text = (el.textContent || "").trim();
   if (text.length < 40) return false;
 
