@@ -277,7 +277,13 @@ function StaticCategorySection({
     >
       <h3 className="mb-4 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">{label}</h3>
 
-      <article className={`mb-3 pb-3 border-b border-ink/20 ${lead.imageUrl ? "flex gap-4" : ""}`}>
+      {/* Photo à gauche ou à droite en alternance d'une rubrique à l'autre
+          (tone impair -> à droite), plutôt que toujours du même côté. */}
+      <article
+        className={`mb-3 pb-3 border-b border-ink/20 ${
+          lead.imageUrl ? `flex gap-4 ${tone % 2 === 1 ? "flex-row-reverse" : ""}` : ""
+        }`}
+      >
         {lead.imageUrl && (
           <div className="aspect-square w-24 shrink-0 sm:w-28">
             <ArticleImage src={lead.imageUrl} alt={lead.headline || lead.sourceTitle} className="h-full w-full" />
@@ -291,12 +297,24 @@ function StaticCategorySection({
 
       {briefs.length > 0 && (
         <div className="divide-y divide-ink/20">
-          {briefs.map((a) => (
-            <div key={a.id} className="py-2.5 first:pt-0 last:pb-0">
-              {/* Même taille que le titre vedette sur desktop (sm:) — la
-                  différenciation (plus petit) ne reste que sur mobile. */}
-              <h4 className="font-display text-xs font-bold leading-snug sm:text-base">{a.headline}</h4>
-              <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(a)}</p>
+          {briefs.map((a, i) => (
+            <div
+              key={a.id}
+              className={`py-2.5 first:pt-0 last:pb-0 ${
+                a.imageUrl ? `flex items-start gap-3 ${i % 2 === 1 ? "flex-row-reverse" : ""}` : ""
+              }`}
+            >
+              {a.imageUrl && (
+                <div className="aspect-square w-16 shrink-0 sm:w-20">
+                  <ArticleImage src={a.imageUrl} alt={a.headline || a.sourceTitle} className="h-full w-full" />
+                </div>
+              )}
+              <div className="min-w-0">
+                {/* Même taille que le titre vedette sur desktop (sm:) — la
+                    différenciation (plus petit) ne reste que sur mobile. */}
+                <h4 className="font-display text-xs font-bold leading-snug sm:text-base">{a.headline}</h4>
+                <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(a)}</p>
+              </div>
             </div>
           ))}
         </div>
