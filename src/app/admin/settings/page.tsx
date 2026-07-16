@@ -239,8 +239,8 @@ export default function AdminSettingsPage() {
             </label>
             {!form.editionScheduleEnabled && (
               <p className="text-xs italic text-sepia">
-                Planning désactivé — un bouton « Lancer l'impression du journal » apparaît sur la
-                page d'accueil pour déclencher la génération à la main.
+                Planning désactivé — un bouton « Lancer l’impression du journal » apparaît sur la
+                page d’accueil pour déclencher la génération à la main.
               </p>
             )}
           </fieldset>
