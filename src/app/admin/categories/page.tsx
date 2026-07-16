@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SpoonDivider } from "@/components/SpoonDivider";
 
 type Category = {
   freshrssId: string;
@@ -363,7 +364,7 @@ export default function AdminCategoriesPage() {
         </>
       )}
 
-      <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
+      <SpoonDivider />
     </main>
   );
 }

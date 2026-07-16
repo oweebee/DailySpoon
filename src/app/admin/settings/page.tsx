@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SpoonDivider } from "@/components/SpoonDivider";
 
 type SettingsForm = {
   freshrssBaseUrl: string;
@@ -12,6 +13,7 @@ type SettingsForm = {
   editionMinute: string;
   editionTz: string;
   retentionDays: string;
+  editionScheduleEnabled: boolean;
 };
 
 const EMPTY: SettingsForm = {
@@ -23,7 +25,8 @@ const EMPTY: SettingsForm = {
   editionHour: "",
   editionMinute: "",
   editionTz: "",
-  retentionDays: "730"
+  retentionDays: "730",
+  editionScheduleEnabled: true
 };
 
 // 6 mois à 5 ans, puis illimité (0 = jamais purgé). Les favoris échappent
@@ -64,13 +67,14 @@ export default function AdminSettingsPage() {
           editionHour: s.editionHour?.toString() ?? "",
           editionMinute: s.editionMinute?.toString() ?? "",
           editionTz: s.editionTz || "",
-          retentionDays: s.retentionDays !== undefined && s.retentionDays !== null ? s.retentionDays.toString() : "730"
+          retentionDays: s.retentionDays !== undefined && s.retentionDays !== null ? s.retentionDays.toString() : "730",
+          editionScheduleEnabled: s.editionScheduleEnabled ?? true
         });
       })
       .finally(() => setLoading(false));
   }, []);
 
-  function set<K extends keyof SettingsForm>(key: K, value: string) {
+  function set<K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -84,7 +88,8 @@ export default function AdminSettingsPage() {
       editionHour: form.editionHour === "" ? null : Number(form.editionHour),
       editionMinute: form.editionMinute === "" ? null : Number(form.editionMinute),
       editionTz: form.editionTz,
-      retentionDays: form.retentionDays === "" ? null : Number(form.retentionDays)
+      retentionDays: form.retentionDays === "" ? null : Number(form.retentionDays),
+      editionScheduleEnabled: form.editionScheduleEnabled
     };
   }
 
@@ -223,6 +228,21 @@ export default function AdminSettingsPage() {
               onChange={(v) => set("editionTz", v)}
               placeholder="Europe/Paris"
             />
+            <label className="flex items-center gap-2 text-xs italic text-sepia">
+              <input
+                type="checkbox"
+                checked={form.editionScheduleEnabled}
+                onChange={(e) => set("editionScheduleEnabled", e.target.checked)}
+                className="accent-journal"
+              />
+              Génération automatique activée
+            </label>
+            {!form.editionScheduleEnabled && (
+              <p className="text-xs italic text-sepia">
+                Planning désactivé — un bouton « Lancer l'impression du journal » apparaît sur la
+                page d'accueil pour déclencher la génération à la main.
+              </p>
+            )}
           </fieldset>
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">
@@ -251,7 +271,7 @@ export default function AdminSettingsPage() {
             </p>
           </fieldset>
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-4 pt-2">
             <button
               onClick={save}
               disabled={saving}
@@ -270,7 +290,7 @@ export default function AdminSettingsPage() {
           </div>
         </div>
       )}
-      <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
+      <SpoonDivider />
     </main>
   );
 }

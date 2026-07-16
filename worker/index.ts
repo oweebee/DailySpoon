@@ -55,6 +55,8 @@ async function runOnce() {
 
 async function tick() {
   const settings = await getSettings();
+  if (!settings.editionScheduleEnabled) return; // désactivé depuis /admin/settings
+
   const { hour, minute, dateKey } = currentHourMinuteInTz(settings.editionTz);
 
   if (hour === settings.editionHour && minute === settings.editionMinute && lastRunDate !== dateKey) {

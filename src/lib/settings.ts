@@ -13,6 +13,9 @@ export type AppSettings = {
   editionTz: string;
   /** Rétention de l'historique en jours. 0 = illimité (jamais purgé). */
   retentionDays: number;
+  /** false = génération auto quotidienne (worker) désactivée — dans ce cas
+   *  la page d'accueil affiche un bouton pour lancer l'impression à la main. */
+  editionScheduleEnabled: boolean;
 };
 
 /**
@@ -33,7 +36,9 @@ export async function getSettings(): Promise<AppSettings> {
     editionHour: row?.editionHour ?? Number(process.env.EDITION_HOUR ?? 6),
     editionMinute: row?.editionMinute ?? Number(process.env.EDITION_MINUTE ?? 0),
     editionTz: row?.editionTz || process.env.EDITION_TZ || "Europe/Paris",
-    retentionDays: row?.retentionDays ?? Number(process.env.RETENTION_DAYS ?? 730)
+    retentionDays: row?.retentionDays ?? Number(process.env.RETENTION_DAYS ?? 730),
+    editionScheduleEnabled:
+      row?.editionScheduleEnabled ?? process.env.EDITION_SCHEDULE_ENABLED !== "false"
   };
 }
 
@@ -56,6 +61,7 @@ export type SettingsInput = Partial<{
   editionMinute: number | null;
   editionTz: string | null;
   retentionDays: number | null;
+  editionScheduleEnabled: boolean | null;
 }>;
 
 /**
@@ -86,6 +92,11 @@ export async function updateSettings(input: SettingsInput): Promise<void> {
     // null/undefined (pas réglé -> retombe sur la valeur par défaut).
     const v = input.retentionDays;
     data.retentionDays = v === null || v === undefined || Number.isNaN(v) ? null : v;
+  }
+  if ("editionScheduleEnabled" in input) {
+    // false est une valeur volontaire (désactivé) — à bien distinguer de
+    // null/undefined (pas réglé -> retombe sur activé par défaut).
+    data.editionScheduleEnabled = input.editionScheduleEnabled === false ? false : input.editionScheduleEnabled;
   }
 
   await prisma.settings.upsert({

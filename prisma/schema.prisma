@@ -79,6 +79,12 @@ model Article {
   @@index([favorite])
   @@index([medal])
   @@index([included])
+  // headline/summary/sourceTitle/feedTitle/category ont chacun un index GIN
+  // trigram (pg_trgm), créé en SQL brut dans la migration
+  // 20260716100000_article_search_trgm — non représentable ici sans le
+  // preview feature postgresqlExtensions, volontairement omis pour ne pas
+  // complexifier `prisma generate`. Accélère /api/articles/search (recherche
+  // "contient" sur ces colonnes) à mesure que la table grossit.
 }
 
 model Edition {
@@ -104,6 +110,11 @@ model Settings {
   editionHour         Int?
   editionMinute       Int?
   editionTz           String?
+  // false = génération automatique quotidienne (worker) désactivée ; dans ce
+  // cas la page d'accueil affiche un bouton "Lancer l'impression du
+  // journal" pour déclencher la génération à la main. null/true = planning
+  // actif comme d'habitude, pas de bouton sur l'accueil.
+  editionScheduleEnabled Boolean?
   retentionDays       Int? // rétention de l'historique en jours ; 0 = illimité ; null = défaut (730 = 2 ans)
   updatedAt           DateTime @default(now()) @updatedAt
 }

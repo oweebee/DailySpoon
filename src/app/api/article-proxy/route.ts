@@ -127,9 +127,12 @@ function favoriteStarHtml(): string {
 // Trois cuillères (clin d'œil au nom "DailySpoon") en guise de fleuron de fin
 // d'article, à la place du symbole "❦ ❦ ❦" d'origine — en SVG plutôt qu'un
 // emoji pour rester en niveaux de gris (un emoji cuillère s'afficherait en
-// couleur, hors thème).
-const SPOON_SVG =
-  '<svg viewBox="0 0 24 24" width="16" height="16"><ellipse cx="12" cy="6.2" rx="5.1" ry="6.2"/><rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4"/></svg>';
+// couleur, hors thème). Inclinées façon couverts posés en éventail (pas
+// debout au garde-à-vous) — mêmes angles et même silhouette que
+// SpoonDivider.tsx côté app React, pour une cohérence visuelle totale.
+function spoonSvg(rotateDeg: number): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" style="transform: rotate(${rotateDeg}deg)"><ellipse cx="12" cy="6.2" rx="5.1" ry="6.2"/><rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4"/></svg>`;
+}
 
 function renderPage(opts: {
   title: string;
@@ -322,7 +325,7 @@ function renderPage(opts: {
     <p class="byline">${metaBits}${starHtml}</p>
     <div class="article-body">${bodyHtml}</div>
     <p class="source-bottom">Source : ${kicker}${starHtml}</p>
-    <p class="colophon">${SPOON_SVG}${SPOON_SVG}${SPOON_SVG}</p>
+    <p class="colophon">${spoonSvg(-18)}${spoonSvg(14)}${spoonSvg(-18)}</p>
   </div>
   ${
     showStar

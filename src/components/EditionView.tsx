@@ -1,6 +1,7 @@
 import { CategoryGrid } from "./CategoryGrid";
 import { ArticleLink } from "./ArticleLink";
 import { FavoriteStar } from "./FavoriteStar";
+import { SpoonDivider } from "./SpoonDivider";
 
 export type ArticleLike = {
   id: string;
@@ -155,7 +156,7 @@ export function EditionView({
       />
 
       {/* Cul-de-lampe de fin d'édition */}
-      <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
+      <SpoonDivider />
     </div>
   );
 }

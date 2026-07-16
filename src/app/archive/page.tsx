@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
+import { SpoonDivider } from "@/components/SpoonDivider";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export default async function ArchivePage() {
           </p>
         )}
       </ul>
-      <p className="mt-14 text-center text-xl tracking-[0.5em] text-sepia">❦ ❦ ❦</p>
+      <SpoonDivider />
     </main>
   );
 }
