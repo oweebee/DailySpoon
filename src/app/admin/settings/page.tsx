@@ -17,6 +17,7 @@ type SettingsForm = {
   editionTz: string;
   retentionDays: string;
   editionScheduleEnabled: boolean;
+  writingStyle: string;
 };
 
 const EMPTY: SettingsForm = {
@@ -32,8 +33,17 @@ const EMPTY: SettingsForm = {
   editionMinute: "",
   editionTz: "",
   retentionDays: "730",
-  editionScheduleEnabled: true
+  editionScheduleEnabled: true,
+  writingStyle: "normal"
 };
+
+// Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
+// journalistique neutre, comportement historique) ou "ackboo" (sarcastique/
+// passif-agressif façon Ackboo, Canard PC). Sans effet sur /direct.
+const WRITING_STYLE_OPTIONS = [
+  { value: "normal", label: "Normal" },
+  { value: "ackboo", label: "Ackboo" }
+];
 
 // 6 mois à 5 ans, puis illimité (0 = jamais purgé). Les favoris échappent
 // de toute façon à la purge, quelle que soit cette valeur.
@@ -83,7 +93,8 @@ export default function AdminSettingsPage() {
           editionMinute: s.editionMinute?.toString() ?? "",
           editionTz: s.editionTz || "",
           retentionDays: s.retentionDays !== undefined && s.retentionDays !== null ? s.retentionDays.toString() : "730",
-          editionScheduleEnabled: s.editionScheduleEnabled ?? true
+          editionScheduleEnabled: s.editionScheduleEnabled ?? true,
+          writingStyle: s.writingStyle || "normal"
         });
         // Clé déjà enregistrée : charge tout de suite la liste des moteurs
         // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
@@ -144,7 +155,8 @@ export default function AdminSettingsPage() {
       editionMinute: form.editionMinute === "" ? null : Number(form.editionMinute),
       editionTz: form.editionTz,
       retentionDays: form.retentionDays === "" ? null : Number(form.retentionDays),
-      editionScheduleEnabled: form.editionScheduleEnabled
+      editionScheduleEnabled: form.editionScheduleEnabled,
+      writingStyle: form.writingStyle
     };
   }
 
@@ -255,6 +267,28 @@ export default function AdminSettingsPage() {
             <p className="text-xs italic text-sepia">
               Ne change que le moteur utilisé pour l’édition IA — « Aspirer les news » sur /direct
               reste toujours sans IA, quel que soit ce choix.
+            </p>
+
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
+                Style d’écriture
+              </span>
+              <select
+                value={form.writingStyle}
+                onChange={(e) => set("writingStyle", e.target.value)}
+                className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
+              >
+                {WRITING_STYLE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs italic text-sepia">
+              « Ackboo » : ton sarcastique, passif-agressif et cynique façon Canard PC — appliqué aux
+              titres et résumés réécrits par l’IA. « Normal » garde le ton journalistique neutre
+              habituel. Sans effet sur /direct, toujours sans IA.
             </p>
 
             <div className="space-y-3 border-t border-ink/20 pt-3">

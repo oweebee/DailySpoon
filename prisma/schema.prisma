@@ -208,5 +208,10 @@ model Settings {
   // actif comme d'habitude, pas de bouton sur l'accueil.
   editionScheduleEnabled Boolean?
   retentionDays       Int? // rétention de l'historique en jours ; 0 = illimité ; null = défaut (730 = 2 ans)
+  // Style d'écriture de l'IA qui réécrit/résume les articles : "normal"
+  // (défaut, ton journalistique neutre) ou "ackboo" (ton sarcastique,
+  // passif-agressif, cynique et drôle inspiré d'Ackboo/Canard PC). Sans
+  // effet sur /direct, qui reste toujours sans IA.
+  writingStyle        String?
   updatedAt           DateTime @default(now()) @updatedAt
 }

@@ -22,6 +22,11 @@ export type AppSettings = {
   /** false = génération auto quotidienne (worker) désactivée — dans ce cas
    *  la page d'accueil affiche un bouton pour lancer l'impression à la main. */
   editionScheduleEnabled: boolean;
+  /** Style d'écriture appliqué par l'IA lors de la réécriture/résumé des
+   *  articles : "normal" (défaut, ton journalistique neutre) ou "ackboo"
+   *  (ton sarcastique/passif-agressif façon Ackboo, Canard PC). Sans effet
+   *  sur /direct, toujours sans IA quel que soit ce réglage. */
+  writingStyle: string;
 };
 
 /**
@@ -47,7 +52,8 @@ export async function getSettings(): Promise<AppSettings> {
     editionTz: row?.editionTz || process.env.EDITION_TZ || "Europe/Paris",
     retentionDays: row?.retentionDays ?? Number(process.env.RETENTION_DAYS ?? 730),
     editionScheduleEnabled:
-      row?.editionScheduleEnabled ?? process.env.EDITION_SCHEDULE_ENABLED !== "false"
+      row?.editionScheduleEnabled ?? process.env.EDITION_SCHEDULE_ENABLED !== "false",
+    writingStyle: row?.writingStyle || process.env.WRITING_STYLE || "normal"
   };
 }
 
@@ -60,7 +66,8 @@ const STRING_FIELDS = [
   "aiProvider",
   "geminiApiKey",
   "geminiModel",
-  "editionTz"
+  "editionTz",
+  "writingStyle"
 ] as const;
 
 export type SettingsInput = Partial<{
@@ -77,6 +84,7 @@ export type SettingsInput = Partial<{
   editionTz: string | null;
   retentionDays: number | null;
   editionScheduleEnabled: boolean | null;
+  writingStyle: string | null;
 }>;
 
 /**

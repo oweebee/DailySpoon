@@ -1,5 +1,6 @@
 import { CategoryGrid } from "./CategoryGrid";
 import { ArticleLink } from "./ArticleLink";
+import { ArticleImage } from "./ArticleImage";
 import { FavoriteStar } from "./FavoriteStar";
 import { SpoonDivider } from "./SpoonDivider";
 
@@ -114,12 +115,11 @@ export function EditionView({
     return a.localeCompare(b);
   });
 
-  // "À la une" devient elle-même une colonne (même rendu que les rubriques :
-  // titre encadré, liste d'articles avec photo/source, "afficher plus"/
-  // défilement infini), toujours placée en tête plutôt que dans un bloc à
-  // part avec sa propre mise en page spéciale.
+  // "À la une" en colonne swipable : uniquement sur mobile (voir isHero dans
+  // CategoryGrid, qui l'exclut de la grille desktop). Sur desktop, la une
+  // garde son grand encart large ci-dessous, comme avant.
   const columns = [
-    ...(heroes.length > 0 ? [{ label: "À la une", freshrssId: null, articles: heroes }] : []),
+    ...(heroes.length > 0 ? [{ label: "À la une", freshrssId: null, articles: heroes, isHero: true }] : []),
     ...categories.map((cat) => ({
       label: cat,
       freshrssId: idByLabel.get(cat) ?? null,
@@ -127,13 +127,41 @@ export function EditionView({
     }))
   ];
 
+  // Répartition gauche/centre/droite du grand encart desktop — même logique
+  // que FrontPageView (héros principal au centre, 1 ou 2 articles annexes de
+  // part et d'autre selon le nombre de médaillés/priorisés disponibles).
+  const heroMain = heroes[0];
+  const heroSideA = heroes.length === 3 ? heroes[1] : undefined;
+  const heroSideB = heroes.length === 3 ? heroes[2] : heroes.length === 2 ? heroes[1] : undefined;
+  const heroGridClass = `grid grid-cols-1 gap-8 ${
+    heroes.length === 3
+      ? "md:grid-cols-[1fr_1.7fr_1fr] md:divide-x md:divide-ink/30"
+      : heroes.length === 2
+        ? "md:grid-cols-[1.7fr_1fr] md:divide-x md:divide-ink/30"
+        : ""
+  }`;
+
   return (
     <div>
       {/* ——— Mobile : cuillères placées au-dessus des colonnes plutôt qu'en
           bas de page, pour marquer la transition avec l'en-tête. */}
       <SpoonDivider className="mb-6 text-center text-sepia md:hidden" />
 
-      {/* ——— Rubriques (dont "À la une") en colonnes avec filets verticaux
+      {/* ——— Desktop/tablette : grand encart "à la une" fixe au-dessus des
+          rubriques (comme avant) — sur mobile, "À la une" redevient une
+          simple colonne swipable parmi les autres (voir isHero plus bas). */}
+      {heroMain && (
+        <div className="mb-10 hidden border-2 border-ink p-6 md:block md:p-8">
+          <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">✦ À la une ✦</p>
+          <div className={heroGridClass}>
+            {heroSideA && <SideHeroBox article={heroSideA} className="md:pr-8" />}
+            <MainHeroBox article={heroMain} className={heroSideA ? "md:px-8" : heroSideB ? "md:pr-8" : ""} />
+            {heroSideB && <SideHeroBox article={heroSideB} className="md:pl-8" />}
+          </div>
+        </div>
+      )}
+
+      {/* ——— Rubriques (dont "À la une" sur mobile) en colonnes avec filets verticaux
           ——— Note : pas de "divide-x" ici. Cette classe ajoute un filet à
           gauche de chaque colonne sauf la 1ère du DOM, sans tenir compte
           des retours à la ligne de la grille (2 col en md, 4 en lg) — le
@@ -225,5 +253,59 @@ export function SourceLine({
       </ArticleLink>
       {showFavorite && <FavoriteStar articleId={article.id} initialFavorite={article.favorite} />}
     </p>
+  );
+}
+
+/** Grand encart "à la une" (desktop uniquement) — héros central, cliquable
+ *  vers la source comme partout ailleurs sur /direct (contrairement à
+ *  FrontPageView, statique, cet encart garde photo tamponnée/médaille et
+ *  lien source). */
+function MainHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
+  return (
+    <article className={`flex flex-col text-center ${className}`}>
+      <h2 className="mx-auto mb-4 max-w-2xl font-display text-xl font-black leading-tight md:text-2xl">
+        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
+          {article.headline}
+        </ArticleLink>
+      </h2>
+      {article.imageUrl && (
+        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="mb-4 block aspect-[16/9] w-full">
+          <ArticleImage
+            src={article.imageUrl}
+            alt={article.headline || article.sourceTitle}
+            dateLabel={formatStamp(article.publishedAt)}
+            medal={article.medal}
+            className="h-full w-full"
+          />
+        </ArticleLink>
+      )}
+      <p className="newsprint mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">{article.summary}</p>
+      <SourceLine article={article} center />
+    </article>
+  );
+}
+
+function SideHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
+  return (
+    <article className={className}>
+      <h3 className="mb-2 font-display text-sm font-bold leading-snug">
+        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
+          {article.headline}
+        </ArticleLink>
+      </h3>
+      {article.imageUrl && (
+        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="mb-2 block aspect-[4/3] w-full">
+          <ArticleImage
+            src={article.imageUrl}
+            alt={article.headline || article.sourceTitle}
+            dateLabel={formatStamp(article.publishedAt)}
+            medal={article.medal}
+            className="h-full w-full"
+          />
+        </ArticleLink>
+      )}
+      <p className="newsprint text-sm leading-snug text-neutral-700">{article.summary}</p>
+      <SourceLine article={article} />
+    </article>
   );
 }

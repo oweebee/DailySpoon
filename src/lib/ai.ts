@@ -27,6 +27,22 @@ const DEFAULT_CATEGORIES = [
 
 const BATCH_SIZE = 12;
 
+/**
+ * Style d'écriture appliqué par l'IA lors de la réécriture des titres/
+ * résumés (réglable dans /admin/settings, sans effet sur /direct). "normal"
+ * n'ajoute aucune instruction (ton journalistique neutre déjà décrit dans le
+ * prompt de base). "ackboo" injecte une consigne de ton en plus du reste du
+ * prompt, qui continue de s'appliquer par ailleurs (fidélité au contenu,
+ * citation de la source, longueur adaptée...).
+ */
+const WRITING_STYLES: Record<string, string> = {
+  ackboo: `Consigne de TON impérative pour "headline" ET "summary" (et "frontPageSummary" le cas échéant) : adopte le style d'écriture d'Ackboo (rédacteur en chef historique de Canard PC) — sarcastique, passif-agressif, un humour cynique, intelligent et précis, avec une pointe de mauvaise foi assumée et de mépris amusé pour la bêtise ambiante, sans jamais sombrer dans la vulgarité gratuite ni la méchanceté pure. Glisse une pique, une ironie ou un aparté cinglant dans presque chaque résumé, mais SANS jamais déformer les faits ni inventer d'information : le fond reste fidèle et informatif, seul le ton change. Le titre peut être plus mordant/à double sens que d'habitude, tant qu'il reste compréhensible.`
+};
+
+function styleInstruction(writingStyle: string): string {
+  return WRITING_STYLES[writingStyle] || "";
+}
+
 // Filet de sécurité partagé : certains flux (ex. Korben) fournissent parfois
 // un extrait totalement vide (balisage/image sans texte réel des deux côtés
 // summary/content) — sans repli, l'IA elle-même reçoit une chaîne vide et
@@ -73,7 +89,9 @@ export async function processArticles(
       console.warn("[ai] Gemini API key not set (env or /admin/settings) — using fallback heuristic processing.");
       return items.map(fallbackProcess);
     }
-    return processInBatches(items, (batch) => processBatchGemini(batch, settings.geminiApiKey, settings.geminiModel));
+    return processInBatches(items, (batch) =>
+      processBatchGemini(batch, settings.geminiApiKey, settings.geminiModel, settings.writingStyle)
+    );
   }
 
   if (!settings.anthropicApiKey) {
@@ -81,7 +99,7 @@ export async function processArticles(
     return items.map(fallbackProcess);
   }
   const client = new Anthropic({ apiKey: settings.anthropicApiKey });
-  return processInBatches(items, (batch) => processBatch(client, batch, settings.anthropicModel));
+  return processInBatches(items, (batch) => processBatch(client, batch, settings.anthropicModel, settings.writingStyle));
 }
 
 async function processInBatches(
@@ -107,9 +125,10 @@ async function processInBatches(
 async function processBatch(
   client: Anthropic,
   batch: RawItem[],
-  model: string
+  model: string,
+  writingStyle: string
 ): Promise<ProcessedArticle[]> {
-  const prompt = buildPrompt(batch);
+  const prompt = buildPrompt(batch, writingStyle);
 
   const response = await client.messages.create({
     model: model as any,
@@ -142,8 +161,13 @@ async function processBatch(
 // une dépendance du projet, et l'ajouter demanderait de régénérer
 // package-lock.json sans pouvoir vérifier le build ici) — l'API Gemini
 // "generateContent" est un simple POST JSON, pas besoin de SDK pour ça.
-async function processBatchGemini(batch: RawItem[], apiKey: string, model: string): Promise<ProcessedArticle[]> {
-  const prompt = buildPrompt(batch);
+async function processBatchGemini(
+  batch: RawItem[],
+  apiKey: string,
+  model: string,
+  writingStyle: string
+): Promise<ProcessedArticle[]> {
+  const prompt = buildPrompt(batch, writingStyle);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -183,7 +207,7 @@ async function processBatchGemini(batch: RawItem[], apiKey: string, model: strin
   }));
 }
 
-function buildPrompt(batch: RawItem[]): string {
+function buildPrompt(batch: RawItem[], writingStyle: string = "normal"): string {
   const items = batch.map((item, i) => ({
     index: i,
     source: item.feedTitle,
@@ -195,8 +219,10 @@ function buildPrompt(batch: RawItem[]): string {
     long: (item.sourceExcerpt || "").length > LONG_SOURCE_THRESHOLD
   }));
 
+  const style = styleInstruction(writingStyle);
+
   return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". \
-Voici une liste d'articles bruts issus de FreshRSS. Pour CHAQUE article, dans l'ordre, produis :
+${style ? `\n${style}\n\n` : ""}Voici une liste d'articles bruts issus de FreshRSS. Pour CHAQUE article, dans l'ordre, produis :
 - "headline": un titre court et accrocheur, réécrit dans un style journalistique clair (en français), pas juste copié.
 - "summary": un résumé fidèle, réécrit dans tes propres mots (ne pas copier le texte source mot pour mot). Longueur adaptée à l'article : 2-4 phrases si "long" est false, mais si "long" est true (article source substantiel), rédige un résumé deux fois plus développé qu'à l'habitude (environ 6-8 phrases) pour refléter le contenu réel de l'article. Cite intelligemment la provenance de l'info directement dans le texte, sans lien ni URL : selon le sujet, mentionne soit le média fourni dans "source" (ex : "selon Presse-citron", "rapporte Le Monde"), soit une personne ou un porte-parole cité dans l'article si l'info vient clairement de sa bouche (ex : "selon Elon Musk", "d'après le maire de Paris") — choisis ce qui est le plus naturel pour CET article précis, ne force pas la citation si elle alourdit une phrase courte.
 - "category": une rubrique parmi ${JSON.stringify(DEFAULT_CATEGORIES)} (choisis la plus pertinente ; utilise "Une" seulement pour l'article vraiment le plus important du lot).
@@ -264,13 +290,14 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
   const provider = settings.aiProvider === "gemini" ? "gemini" : "anthropic";
 
   try {
+    const curationPrompt = buildCurationPrompt(items, settings.writingStyle);
     const text =
       provider === "gemini"
         ? settings.geminiApiKey
-          ? await callGeminiRaw(buildCurationPrompt(items), settings.geminiApiKey, settings.geminiModel)
+          ? await callGeminiRaw(curationPrompt, settings.geminiApiKey, settings.geminiModel)
           : null
         : settings.anthropicApiKey
-          ? await callAnthropicRaw(buildCurationPrompt(items), settings.anthropicApiKey, settings.anthropicModel)
+          ? await callAnthropicRaw(curationPrompt, settings.anthropicApiKey, settings.anthropicModel)
           : null;
 
     if (!text) return new Map(); // pas de clé configurée pour ce fournisseur
@@ -298,7 +325,7 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
   }
 }
 
-function buildCurationPrompt(items: CurationItem[]): string {
+function buildCurationPrompt(items: CurationItem[], writingStyle: string = "normal"): string {
   const list = items.map((it) => ({
     id: it.id,
     headline: it.headline,
@@ -307,7 +334,9 @@ function buildCurationPrompt(items: CurationItem[]): string {
     source: it.source
   }));
 
-  return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". Voici TOUS les articles retenus pour l'édition d'aujourd'hui, déjà réécrits.
+  const style = styleInstruction(writingStyle);
+
+  return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". ${style ? `\n${style}\n` : ""}Voici TOUS les articles retenus pour l'édition d'aujourd'hui, déjà réécrits.
 
 Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne :
 - "priorityScore" : un score d'importance de 1 à 100 (100 = doit faire la une du jour, 1 = anecdotique). Les scores doivent réellement discriminer : seuls 1 à 3 articles au grand maximum doivent approcher 100, le reste doit s'étaler selon l'importance réelle.

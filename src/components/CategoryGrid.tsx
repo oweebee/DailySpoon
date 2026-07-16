@@ -13,6 +13,11 @@ export type CategoryEntry = {
   // simplement désactivé sur sa colonne.
   freshrssId: string | null;
   articles: ArticleLike[];
+  // "À la une" en colonne swipable : uniquement sur mobile (voir
+  // MobilePagedSection ci-dessous). Sur desktop, la une garde son propre
+  // encart large (rendu à part par EditionView, avant <CategoryGrid>) donc
+  // cette entrée est exclue de la grille desktop pour ne pas la dupliquer.
+  isHero?: boolean;
 };
 
 /**
@@ -104,7 +109,7 @@ export function CategoryGrid({
           d'articles" bascule ici en encart à défilement interne (hauteur
           figée) plutôt que de faire grandir la colonne — scrollExpand. */}
       <div className="hidden gap-x-0 gap-y-8 md:grid md:grid-cols-2 lg:grid-cols-4">
-        {categories.map((cat) => (
+        {categories.filter((cat) => !cat.isHero).map((cat) => (
           <CategoryColumn
             key={cat.label}
             label={cat.label}
