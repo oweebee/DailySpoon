@@ -12,7 +12,11 @@ export default async function DirectPage() {
   // plafonne plus par catégorie (l'encart "Afficher plus d'articles" sur
   // desktop défile en interne dans tout ce qui est chargé ici).
   const [latestEdition, articles, selectedCategories] = await Promise.all([
-    prisma.edition.findFirst({ orderBy: { date: "desc" } }),
+    // "generatedAt" en second critère : plusieurs éditions peuvent désormais
+    // partager la même date (une par régénération), sinon l'ordre entre
+    // elles n'est pas garanti et le masthead pourrait afficher une date
+    // correcte mais issue d'une édition qui n'est pas vraiment la dernière.
+    prisma.edition.findFirst({ orderBy: [{ date: "desc" }, { generatedAt: "desc" }] }),
     prisma.article.findMany({
       where: { processed: true, included: true },
       orderBy: { publishedAt: "desc" },

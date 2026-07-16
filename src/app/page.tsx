@@ -12,7 +12,18 @@ export default async function HomePage() {
   // avant. Elle reste donc figée telle quelle jusqu'à la prochaine
   // impression, plutôt que de bouger toute seule au fil des aspirations en
   // arrière-plan.
-  const latestEdition = await prisma.edition.findFirst({ orderBy: { date: "desc" } });
+  //
+  // Plusieurs éditions peuvent désormais partager la même date (chaque
+  // régénération est conservée séparément) : trier uniquement par "date"
+  // laissait l'ordre entre elles indéfini en cas d'égalité, et pouvait donc
+  // faire remonter une édition vide/plus ancienne du même jour au lieu de la
+  // toute dernière — d'où "generatedAt" en second critère, et le filtre sur
+  // "published" pour ignorer les brouillons vides (rien de neuf à récupérer
+  // ce jour-là, aucun article qualifiant...).
+  const latestEdition = await prisma.edition.findFirst({
+    where: { status: "published" },
+    orderBy: [{ date: "desc" }, { generatedAt: "desc" }]
+  });
 
   const [selectedCategories, settings] = await Promise.all([
     prisma.selectedCategory.findMany({ orderBy: { order: "asc" } }),
