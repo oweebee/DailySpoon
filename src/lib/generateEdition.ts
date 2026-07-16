@@ -125,6 +125,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
         summary: ai.summary,
         category: ai.category,
         priorityScore: ai.priorityScore,
+        aiRewritten: ai.aiRewritten,
         editionId: edition.id
       }
     });
@@ -238,6 +239,10 @@ async function curateFrontPageScores(editionId: string): Promise<void> {
       editionId,
       included: true,
       processed: true,
+      // La une doit être une vraie "impression IA" : les articles tombés en
+      // fallback (plafond par catégorie, pas de clé IA...) ne sont ni notés
+      // ni affichés sur la une, même s'ils restent visibles ailleurs.
+      aiRewritten: true,
       ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
     },
     select: { id: true, headline: true, summary: true, category: true, feedTitle: true }

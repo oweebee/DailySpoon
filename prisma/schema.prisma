@@ -74,6 +74,16 @@ model Article {
   // Null si la curation échoue ou si aucune clé IA n'est configurée : la une
   // retombe alors sur `summary` (voir FrontPageView).
   frontPageSummary String? @db.Text
+  // true seulement si cet article est passé par un vrai appel IA
+  // (processBatch/processBatchGemini) — false pour fallbackProcess, qu'il
+  // s'agisse d'un article non "included", d'un dépassement du plafond
+  // MAX_AI_ITEMS_PER_CATEGORY, de l'absence de clé IA ou de "Aspirer les
+  // news" (forceNoAi). La une de la page d'accueil (page.tsx) et la passe de
+  // curation (curateFrontPageScores) ne retiennent QUE aiRewritten=true : la
+  // une doit être une vraie "impression IA", jamais du texte brut non
+  // retravaillé — ces articles restent normalement visibles ailleurs (En
+  // direct, recherche, archive).
+  aiRewritten    Boolean   @default(false)
 
   favorite       Boolean   @default(false) // marqué favori depuis l'étoile shérif, page /favoris
   favoritedAt    DateTime? // date de mise en favori, affichée sur /favoris

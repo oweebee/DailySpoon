@@ -7,6 +7,10 @@ export type ProcessedArticle = {
   summary: string;
   category: string;
   priorityScore: number; // 1-100, higher = more important
+  // true seulement si un vrai appel IA (processBatch/processBatchGemini) a
+  // produit ce résultat — false pour fallbackProcess (texte brut, jamais
+  // affiché sur la une IA de la page d'accueil, voir Article.aiRewritten).
+  aiRewritten: boolean;
 };
 
 const DEFAULT_CATEGORIES = [
@@ -120,7 +124,8 @@ async function processBatch(
     headline: p.headline?.trim() || batch[i].sourceTitle,
     summary: p.summary?.trim() || batch[i].sourceExcerpt || "",
     category: p.category?.trim() || "Autre",
-    priorityScore: clamp(Number(p.priorityScore) || 50, 1, 100)
+    priorityScore: clamp(Number(p.priorityScore) || 50, 1, 100),
+    aiRewritten: true
   }));
 }
 
@@ -164,7 +169,8 @@ async function processBatchGemini(batch: RawItem[], apiKey: string, model: strin
     headline: p.headline?.trim() || batch[i].sourceTitle,
     summary: p.summary?.trim() || batch[i].sourceExcerpt || "",
     category: p.category?.trim() || "Autre",
-    priorityScore: clamp(Number(p.priorityScore) || 50, 1, 100)
+    priorityScore: clamp(Number(p.priorityScore) || 50, 1, 100),
+    aiRewritten: true
   }));
 }
 
@@ -213,7 +219,8 @@ export function fallbackProcess(item: RawItem): ProcessedArticle {
     headline: item.sourceTitle,
     summary: fullText,
     category: item.categoryLabel || "Autre",
-    priorityScore: 40
+    priorityScore: 40,
+    aiRewritten: false
   };
 }
 

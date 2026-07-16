@@ -31,6 +31,12 @@ export default async function HomePage() {
           editionId: latestEdition.id,
           processed: true,
           included: true,
+          // La une doit être une vraie "impression IA" : un article tombé en
+          // fallback (plafond par catégorie, pas de clé IA configurée...)
+          // n'est jamais affiché ici, même s'il reste visible ailleurs (En
+          // direct, recherche) — sinon on se retrouve avec du texte brut non
+          // retravaillé (racolage compris) au lieu du résumé concis attendu.
+          aiRewritten: true,
           ...(frontPageDisabledLabels.length > 0
             ? { NOT: { categoryLabel: { in: frontPageDisabledLabels } } }
             : {})
