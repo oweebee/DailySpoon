@@ -1,5 +1,23 @@
 import Link from "next/link";
 
+/** Remplace les "o" de "Sp[o][o]n" dans le masthead par la même silhouette
+ *  de cuillère (bol + manche) que le cul-de-lampe SpoonDivider en bas de
+ *  page, plutôt qu'un simple ovale — dimensionnée en unités "em" pour
+ *  suivre la taille de la police du titre (text-5xl / md:text-7xl) et
+ *  rester à la même hauteur que les autres lettres. */
+function SpoonO() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="inline-block h-[0.85em] w-[0.42em] align-[-0.08em]"
+    >
+      <ellipse cx="12" cy="6.2" rx="5.1" ry="6.2" fill="currentColor" />
+      <rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function Masthead({ date }: { date: Date }) {
   const formatted = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
@@ -19,7 +37,9 @@ export function Masthead({ date }: { date: Date }) {
       {/* Masthead gothique centré */}
       <div className="py-6 text-center">
         <Link href="/" className="font-masthead text-5xl font-black uppercase tracking-tight md:text-7xl">
-          DailySpoon
+          DailySp
+          <SpoonO />
+          <SpoonO />n
         </Link>
       </div>
 

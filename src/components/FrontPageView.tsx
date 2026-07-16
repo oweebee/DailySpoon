@@ -301,11 +301,11 @@ function StaticCategorySection({
             <div
               key={a.id}
               className={`py-2.5 first:pt-0 last:pb-0 ${
-                a.imageUrl ? `flex items-start gap-3 ${i % 2 === 1 ? "flex-row-reverse" : ""}` : ""
+                a.imageUrl ? `flex items-start gap-4 ${i % 2 === 0 ? "flex-row-reverse" : ""}` : ""
               }`}
             >
               {a.imageUrl && (
-                <div className="aspect-square w-16 shrink-0 sm:w-20">
+                <div className="aspect-square w-24 shrink-0 sm:w-28">
                   <ArticleImage src={a.imageUrl} alt={a.headline || a.sourceTitle} className="h-full w-full" />
                 </div>
               )}
