@@ -293,7 +293,9 @@ function StaticCategorySection({
         <div className="divide-y divide-ink/20">
           {briefs.map((a) => (
             <div key={a.id} className="py-2.5 first:pt-0 last:pb-0">
-              <h4 className="font-display text-xs font-bold leading-snug">{a.headline}</h4>
+              {/* Même taille que le titre vedette sur desktop (sm:) — la
+                  différenciation (plus petit) ne reste que sur mobile. */}
+              <h4 className="font-display text-xs font-bold leading-snug sm:text-base">{a.headline}</h4>
               <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(a)}</p>
             </div>
           ))}
