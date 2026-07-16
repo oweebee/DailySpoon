@@ -172,7 +172,16 @@ export async function fetchOgImage(url: string): Promise<string | null> {
     try {
       res = await fetch(url, {
         signal: controller.signal,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; DailySpoonBot/1.0; +https://dailyspoon)" }
+        // Certains sites (ex. jeuxvideo.com) renvoient un 403 dès qu'ils
+        // reconnaissent un User-Agent "bot" dans l'en-tête, même pour une
+        // simple requête d'aperçu de lien (og:image, publique dans le
+        // <head> de toute façon) — un User-Agent de navigateur classique,
+        // déjà utilisé ailleurs dans l'appli (article-proxy), passe sans
+        // problème.
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        }
       });
     } finally {
       clearTimeout(timeout);
@@ -281,12 +290,17 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     // Certains flux (ex. Korben) fournissent un "summary.content" qui n'est
     // que balisage (image, encart) sans texte réel — stripHtml renverrait
     // alors une chaîne vide alors que "content.content" contient, lui, du
-    // vrai texte. On tente les deux et on garde le premier qui donne
-    // effectivement du texte, plutôt que de figer le choix sur "summary"
-    // et se retrouver avec un article totalement vide.
+    // vrai texte. D'autres (ex. jeuxvideo.com via un proxy morss qui enrichit
+    // le flux avec l'article complet) ont les DEUX champs remplis, mais
+    // "summary" ne garde que le court chapô d'origine tandis que "content"
+    // contient tout l'article — toujours préférer le champ qui donne le PLUS
+    // de texte, plutôt que de figer le choix sur "summary" dès qu'il n'est
+    // pas vide, ce qui écrasait silencieusement le contenu enrichi par un
+    // simple résumé d'une phrase.
     const summaryText = item.summary?.content ? stripHtml(item.summary.content).trim() : "";
     const contentText = item.content?.content ? stripHtml(item.content.content).trim() : "";
-    const excerpt = summaryText.length > 0 ? summaryText : contentText.length > 0 ? contentText : null;
+    const excerpt =
+      contentText.length > summaryText.length ? contentText : summaryText.length > 0 ? summaryText : null;
 
     let imageUrl = extractImageUrl(item);
     if (!imageUrl && canonicalUrl && included) {
