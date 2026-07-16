@@ -29,7 +29,10 @@ function renderPage(opts: {
   originalUrl: string;
 }): string {
   const { title, byline, siteName, bodyHtml, originalUrl } = opts;
-  const metaBits = [siteName, byline].filter(Boolean).map(escapeHtml).join(" · ");
+  const metaBits = [siteName, byline]
+    .filter((v): v is string => Boolean(v))
+    .map(escapeHtml)
+    .join(" · ");
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
