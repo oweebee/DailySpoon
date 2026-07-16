@@ -43,18 +43,15 @@ export function Masthead({ date }: { date: Date }) {
           <SpoonO />n
         </Link>
 
-        {/* Timbre "EN DIRECT" — même mécanique que les autres timbres du
-            site (.stamp-button dans globals.css : contour pointillé décalé
-            façon perforations de timbre-poste, ombre portée), avec
-            ".stamp-live" en plus pour figer la rotation via !important (le
-            transform inline précédent n'apparaissait toujours pas inclinée
-            en prod — plus d'ambiguïté possible avec cette règle dédiée).
-            Fond noir, bordure NOIRE (pas rouge), texte "En direct" en rouge
-            (seul l'accent couleur du site) — poussé bien à droite, quasiment
-            hors du bloc titre, pour ne jamais toucher le mot. */}
+        {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
+            globals.css), plus ".stamp-button" : les deux se disputaient la
+            propriété "transform" (rotation vs centrage vertical Tailwind),
+            ce qui empêchait la rotation de s'afficher. Centrage vertical ici
+            via inset-y-0/my-auto (Tailwind), sans transform, donc plus de
+            conflit possible avec la rotation de .stamp-live. */}
         <Link
           href="/direct"
-          className="stamp-button stamp-live absolute -right-3 top-1/2 border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-journal sm:-right-5 sm:px-5 sm:py-2 sm:text-sm"
+          className="stamp-live absolute -right-3 inset-y-0 my-auto h-fit border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-journal sm:-right-5 sm:px-5 sm:py-2 sm:text-sm"
         >
           {/* Liseret blanc autour des lettres rouges — stroke posé DERRIÈRE
               le remplissage (paintOrder) pour ne pas manger le rouge à

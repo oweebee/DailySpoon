@@ -28,6 +28,8 @@ body {
    "bg-paper/70" remplacé par cette classe plutôt que gardé en plus). */
 .paper-panel {
   background-color: #f0f0f0;
+  /* Image telle quelle, sans voile ni filtre — l'utilisateur ajuste la
+     couleur/le contraste directement dans le fichier image lui-même. */
   background-image: url("/textures/journal.png");
 }
 
@@ -81,13 +83,20 @@ body {
   box-shadow: 1px 2px 4px rgba(26, 26, 26, 0.28);
 }
 
-/* Timbre "EN DIRECT" du masthead : variante figée (jamais redressée au
-   survol/actif, contrairement à .stamp-button) — "!important" pour lever
-   toute ambiguïté avec les règles ci-dessus qui visent aussi "transform". */
-.stamp-live,
-.stamp-live:hover,
-.stamp-live:active {
-  transform: translateY(-50%) rotate(-9deg) !important;
+/* Timbre "EN DIRECT" du masthead — règle 100% autonome, ne réutilise PAS
+   .stamp-button : le combo des deux classes sur le même élément se
+   disputait la propriété "transform" (rotation de l'une, translateY de
+   centrage vertical Tailwind de l'autre), et la rotation ne s'affichait
+   jamais en pratique malgré "!important". Ici le centrage vertical se fait
+   SANS transform (inset-y-0 + my-auto côté Tailwind, voir Masthead.tsx), et
+   "transform" ne sert donc plus qu'à la rotation — plus aucune ambiguïté
+   possible. */
+.stamp-live {
+  position: relative;
+  transform: rotate(-9deg);
+  box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
+  outline: 2px dashed rgba(26, 26, 26, 0.5);
+  outline-offset: 5px;
 }
 
 /* Ouverture du lecteur d'article interne : la page pivote depuis sa
