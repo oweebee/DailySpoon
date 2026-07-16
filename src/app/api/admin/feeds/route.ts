@@ -91,8 +91,13 @@ export async function POST(req: NextRequest) {
       await prisma.medalFeed.deleteMany({ where: { freshrssId } });
     }
     // Reflète immédiatement le réglage sur les articles déjà en base de ce
-    // flux, sans attendre la prochaine génération.
-    await prisma.article.updateMany({ where: { feedId: freshrssId }, data: { medal } });
+    // flux, sans attendre la prochaine génération. Certains articles plus
+    // anciens n'ont pas de feedId enregistré (champ ajouté après coup) — on
+    // les rattrape par titre de flux, comme pour l'exclusion de flux.
+    await prisma.article.updateMany({
+      where: { OR: [{ feedId: freshrssId }, ...(title ? [{ feedId: null, feedTitle: title }] : [])] },
+      data: { medal }
+    });
   }
 
   return NextResponse.json({ ok: true });

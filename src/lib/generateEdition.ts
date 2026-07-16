@@ -96,19 +96,27 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
  * /admin/categories. Recalculé à chaque génération (pas seulement au moment
  * du toggle admin, qui le fait déjà pour les articles déjà en base) pour
  * couvrir aussi les articles insérés juste avant dans cette même run.
+ *
+ * Le rapprochement se fait par feedId, mais certains articles plus anciens
+ * n'en ont pas (champ ajouté après coup, ou absent de la réponse FreshRSS
+ * pour ce flux) — on les rattrape par titre de flux, comme pour l'exclusion
+ * de flux (ExcludedFeed) qui a le même souci.
  */
 async function syncMedalFlags(): Promise<void> {
-  const medalFeeds = await prisma.medalFeed.findMany({ select: { freshrssId: true } });
+  const medalFeeds = await prisma.medalFeed.findMany({ select: { freshrssId: true, label: true } });
   const medalFeedIds = medalFeeds.map((f) => f.freshrssId);
+  const medalTitles = medalFeeds.map((f) => f.label);
 
-  if (medalFeedIds.length > 0) {
-    await prisma.article.updateMany({
-      where: { feedId: { in: medalFeedIds }, medal: false },
-      data: { medal: true }
-    });
-  }
+  const matchCondition = {
+    OR: [{ feedId: { in: medalFeedIds } }, { feedId: null, feedTitle: { in: medalTitles } }]
+  };
+
   await prisma.article.updateMany({
-    where: { medal: true, ...(medalFeedIds.length > 0 ? { feedId: { notIn: medalFeedIds } } : {}) },
+    where: { AND: [matchCondition, { medal: false }] },
+    data: { medal: true }
+  });
+  await prisma.article.updateMany({
+    where: { medal: true, NOT: matchCondition },
     data: { medal: false }
   });
 }

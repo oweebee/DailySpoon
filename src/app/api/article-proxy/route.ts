@@ -129,7 +129,7 @@ function renderPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
 <style>
   * { box-sizing: border-box; }
   html { background: #dcdcdc; }
@@ -179,7 +179,7 @@ function renderPage(opts: {
     margin: 22px 0 6px;
   }
   h1 {
-    font-family: "Bodoni Moda", Georgia, serif;
+    font-family: "Anton", Georgia, serif;
     font-weight: 900;
     font-size: 2.15rem;
     line-height: 1.15;
@@ -196,7 +196,7 @@ function renderPage(opts: {
   .article-body { text-align: justify; hyphens: auto; }
   .article-body > p:first-of-type::first-letter {
     float: left;
-    font-family: "Bodoni Moda", Georgia, serif;
+    font-family: "Anton", Georgia, serif;
     font-weight: 900;
     font-size: 3.6em;
     line-height: 0.82;
@@ -210,7 +210,8 @@ function renderPage(opts: {
     height: auto;
     display: block;
     margin: 1.4em auto;
-    filter: grayscale(1) contrast(1.1);
+    /* Contrairement aux vignettes de la liste (volontairement en noir et
+       blanc), la photo dans l'article ouvert reste en couleur. */
     border: 1px solid #1a1a1a;
     box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.15);
   }
@@ -225,7 +226,7 @@ function renderPage(opts: {
     font-style: italic;
   }
   .article-body h2, .article-body h3 {
-    font-family: "Bodoni Moda", Georgia, serif;
+    font-family: "Anton", Georgia, serif;
     font-weight: 800;
     margin: 1.4em 0 0.5em;
   }

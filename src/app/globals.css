@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Rye&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -18,7 +18,7 @@ body {
 /* Lettrine de une, comme dans les vieux quotidiens */
 .drop-cap::first-letter {
   float: left;
-  font-family: "Bodoni Moda", Georgia, serif;
+  font-family: "Anton", Georgia, serif;
   font-weight: 900;
   font-size: 3.4em;
   line-height: 0.85;

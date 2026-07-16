@@ -6,10 +6,13 @@ const config: Config = {
     extend: {
       fontFamily: {
         serif: ["Georgia", "Cambria", "Times New Roman", "Times", "serif"],
-        // Bodoni Moda : Didone à fort contraste, dans l'esprit des mastheads
-        // de vieilles gazettes (cf. maquette "La Petite Gazette").
-        display: ['"Bodoni Moda"', "Georgia", "serif"],
-        masthead: ['"Bodoni Moda"', "Georgia", "serif"],
+        // "Swell Type" et "Newshound" (mockups fournis) sont des polices
+        // payantes non disponibles ici — Rye et Anton sont les équivalents
+        // gratuits (Google Fonts) les plus proches dans le même esprit :
+        // Rye pour le masthead (gothique/western, très typé), Anton pour
+        // le reste des titres (gros titre de tabloïd condensé et massif).
+        display: ["Anton", "Georgia", "serif"],
+        masthead: ['"Rye"', "Georgia", "serif"],
         sans: ["-apple-system", "Segoe UI", "Helvetica", "Arial", "sans-serif"]
       },
       colors: {
