@@ -68,6 +68,15 @@ function capPerCategory(items: RawItem[], max: number): { aiItems: RawItem[]; ov
  */
 export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}) {
   const date = todayDateOnly();
+  // Bornes du jour calendaire en cours — sert à regrouper TOUS les articles
+  // récupérés aujourd'hui (à travers plusieurs régénérations), pas
+  // seulement ceux touchés par CETTE régénération précise. Nécessaire
+  // depuis que chaque régénération crée sa propre édition (editionId n'est
+  // donc plus un identifiant stable pour "les articles du jour" comme
+  // avant) : sans ça, une régénération qui ne trouve que 1-2 items
+  // vraiment nouveaux depuis la dernière fois se retrouverait avec une une
+  // quasi vide, perdant tout le reste des articles du jour déjà récupérés.
+  const todayRange = { gte: date, lt: new Date(date.getTime() + 24 * 60 * 60 * 1000) };
 
   const edition = await prisma.edition.create({
     data: { date, status: "draft" }
@@ -79,9 +88,12 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   const rawItems = await fetchNewItemsFromSelectedCategories();
   console.log(`[edition] Fetched ${rawItems.length} new items from FreshRSS.`);
 
-  if (rawItems.length === 0 && (await prisma.article.count({ where: { editionId: edition.id } })) === 0) {
-    console.log("[edition] No new items and no existing articles — leaving edition as draft.");
-    return { editionId: edition.id, articleCount: 0 };
+  if (rawItems.length === 0) {
+    const existingToday = await prisma.article.count({ where: { fetchedAt: todayRange, included: true } });
+    if (existingToday === 0) {
+      console.log("[edition] No new items and nothing fetched today yet — leaving edition as draft.");
+      return { editionId: edition.id, articleCount: 0 };
+    }
   }
 
   // Seuls les articles "included" (flux non exclu, catégorie sélectionnée)
@@ -141,15 +153,15 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // plutôt que par lots isolés de 12 comme processArticles — c'est ce score
   // qui détermine ensuite les articles "à la une" sur la page d'accueil.
   if (!options.forceNoAi) {
-    await curateFrontPageScores(edition.id);
+    await curateFrontPageScores(todayRange);
   }
 
   const heroArticle = await prisma.article.findFirst({
-    where: { editionId: edition.id },
+    where: { fetchedAt: todayRange, included: true },
     orderBy: { priorityScore: "desc" }
   });
 
-  const articleCount = await prisma.article.count({ where: { editionId: edition.id } });
+  const articleCount = await prisma.article.count({ where: { fetchedAt: todayRange, included: true } });
 
   await prisma.edition.update({
     where: { id: edition.id },
@@ -174,7 +186,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 
   const qualifyingArticles = await prisma.article.findMany({
     where: {
-      editionId: edition.id,
+      fetchedAt: todayRange,
       processed: true,
       included: true,
       aiRewritten: true,
@@ -267,13 +279,14 @@ async function syncMedalFlags(): Promise<void> {
 
 /**
  * Demande à l'IA de définir les news marquantes de la journée : relit tous
- * les articles inclus de l'édition (déjà réécrits) EN UNE FOIS et leur
- * attribue un score d'importance cohérent sur l'ensemble du jour, plutôt que
- * le score par lot de 12 posé par processArticles. Silencieux et sans effet
+ * les articles inclus récupérés AUJOURD'HUI (déjà réécrits, toutes
+ * régénérations confondues — pas seulement ceux de cette run précise) EN UNE
+ * FOIS et leur attribue un score d'importance cohérent sur l'ensemble du
+ * jour, plutôt que le score par lot de 12 posé par processArticles. Silencieux et sans effet
  * si aucune clé IA n'est configurée pour le fournisseur choisi (curateFrontPage
  * renvoie alors une Map vide) — les scores existants restent tels quels.
  */
-async function curateFrontPageScores(editionId: string): Promise<void> {
+async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }): Promise<void> {
   // Carte "Impression IA" de /admin/categories : les catégories décochées là
   // ne doivent même pas être soumises à cette passe (ni affichées sur la une,
   // ni comparées aux autres) — inutile de dépenser des tokens dessus.
@@ -285,7 +298,7 @@ async function curateFrontPageScores(editionId: string): Promise<void> {
 
   const todaysArticles = await prisma.article.findMany({
     where: {
-      editionId,
+      fetchedAt: todayRange,
       included: true,
       processed: true,
       // La une doit être une vraie "impression IA" : les articles tombés en
