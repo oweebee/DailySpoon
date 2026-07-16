@@ -1,4 +1,5 @@
 import { CategoryGrid } from "./CategoryGrid";
+import { ArticleLink } from "./ArticleLink";
 
 export type ArticleLike = {
   id: string;
@@ -37,11 +38,11 @@ export function EditionView({
   }
 
   const sorted = [...articles].sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
-  // "À la une" affiche les 2 articles les plus prioritaires côte à côte
+  // "À la une" affiche les 3 articles les plus prioritaires côte à côte
   // (au lieu d'un seul en pleine largeur) ; le reste part dans les colonnes
   // de rubriques comme avant.
-  const [heroA, heroB, ...rest] = sorted;
-  const heroes = [heroA, heroB].filter((a): a is ArticleLike => Boolean(a));
+  const [heroA, heroB, heroC, ...rest] = sorted;
+  const heroes = [heroA, heroB, heroC].filter((a): a is ArticleLike => Boolean(a));
 
   const MAX_PER_CATEGORY = 20;
 
@@ -75,29 +76,39 @@ export function EditionView({
 
   return (
     <div>
-      {/* ——— À la une ——— : les 2 articles les plus prioritaires côte à
+      {/* ——— À la une ——— : les 3 articles les plus prioritaires côte à
           côte (en largeur), pas un seul en pleine largeur. */}
       <div className="mb-10 border-b-2 border-ink pb-10">
         <p className="mb-5 text-center text-xs uppercase tracking-[0.35em] text-journal">
           ✦ À la une ✦
         </p>
+        {/* On saute directement au nombre de colonnes final à "md" (pas de
+            palier à 2 colonnes avant 3) : avec 3 héros, un palier
+            intermédiaire à 2 colonnes ferait passer à la ligne le 3e
+            article seul, et "divide-x" (qui ignore les retours à la ligne)
+            lui poserait à tort un filet à gauche — même bug que réglé plus
+            tôt pour les colonnes de rubriques. */}
         <div
-          className={`grid gap-x-10 gap-y-10 ${
-            heroes.length > 1 ? "md:grid-cols-2 md:divide-x md:divide-ink/30" : ""
+          className={`grid gap-x-8 gap-y-8 ${
+            heroes.length === 2
+              ? "md:grid-cols-2 md:divide-x md:divide-ink/30"
+              : heroes.length >= 3
+                ? "md:grid-cols-3 md:divide-x md:divide-ink/30"
+                : ""
           }`}
         >
           {heroes.map((hero) => (
-            <article key={hero.id} className="text-center md:px-6 md:first:pl-0 md:last:pr-0">
-              <h1 className="mx-auto mb-5 max-w-2xl font-display text-2xl font-black leading-tight md:text-4xl">
+            <article key={hero.id} className="text-center md:px-5 md:first:pl-0 md:last:pr-0">
+              <h1 className="mx-auto mb-4 max-w-md font-display text-xl font-black leading-tight md:text-2xl">
                 {hero.headline}
               </h1>
               {/* Choix de style : pas de photo sur "à la une", même quand
-                  l'article en a une — uniquement du texte pour les 2
+                  l'article en a une — uniquement du texte pour les 3
                   articles vedettes. */}
-              <p className="newsprint mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">
+              <p className="newsprint mx-auto max-w-md text-left text-sm leading-snug text-neutral-800">
                 {hero.summary}
               </p>
-              <div className="mt-4">
+              <div className="mt-3">
                 <SourceLine article={hero} />
               </div>
             </article>
@@ -179,9 +190,9 @@ export function SourceLine({ article, showDate = true }: { article: ArticleLike;
   return (
     <p className="mt-1 text-xs italic text-sepia">
       {formatted && <span>{formatted} · </span>}
-      <a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+      <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
         Source : {article.feedTitle || article.sourceTitle}
-      </a>
+      </ArticleLink>
     </p>
   );
 }

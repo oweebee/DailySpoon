@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ArticleLike } from "./EditionView";
 import { SourceLine, formatStamp } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
+import { ArticleLink } from "./ArticleLink";
 
 const INITIAL_COUNT = 5;
 const STEP = 5;
@@ -69,12 +70,18 @@ export function CategoryColumn({
         {visible.map((article) => (
           <article key={article.id} className="py-4 first:pt-0">
             {article.imageUrl && (
-              <ArticleImage
-                src={article.imageUrl}
-                alt={article.headline || article.sourceTitle}
-                dateLabel={formatStamp(article.publishedAt)}
-                className="mb-2 aspect-[16/9] w-full"
-              />
+              <ArticleLink
+                href={article.sourceUrl}
+                title={article.headline || article.sourceTitle}
+                className="mb-2 block aspect-[16/9] w-full"
+              >
+                <ArticleImage
+                  src={article.imageUrl}
+                  alt={article.headline || article.sourceTitle}
+                  dateLabel={formatStamp(article.publishedAt)}
+                  className="h-full w-full"
+                />
+              </ArticleLink>
             )}
             <h3 className="font-display text-base font-bold leading-snug">{article.headline}</h3>
             <p className="newsprint mt-1 text-[0.8rem] leading-snug text-neutral-700">

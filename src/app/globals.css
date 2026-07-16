@@ -63,3 +63,36 @@ body {
   transform: rotate(0deg) scale(0.97);
   box-shadow: 1px 2px 4px rgba(26, 26, 26, 0.28);
 }
+
+/* Ouverture du lecteur d'article interne : la page pivote depuis sa
+   tranche gauche pour s'ouvrir face à l'écran, comme une page de journal
+   qu'on tourne, plutôt qu'un simple fondu/zoom de fenêtre. */
+@keyframes page-turn {
+  from {
+    transform: perspective(1600px) rotateY(-85deg);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(1600px) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+.page-turn {
+  transform-origin: left center;
+  backface-visibility: hidden;
+  animation: page-turn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes modal-backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-backdrop-fade {
+  animation: modal-backdrop-fade 0.25s ease-out forwards;
+}
