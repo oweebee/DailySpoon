@@ -17,7 +17,10 @@ export function CategoryColumn({
   onDragStart,
   onDragEnd,
   onDropHere,
-  clampSummary = false
+  clampSummary = false,
+  showMedal = true,
+  showDateStamp = true,
+  showFavorite = true
 }: {
   label: string;
   articles: ArticleLike[];
@@ -32,6 +35,14 @@ export function CategoryColumn({
   /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
    *  on ouvre l'article via la photo ou le lien source. */
   clampSummary?: boolean;
+  /** La page d'accueil (FrontPageView) n'a pas la notion de médaille, de
+   *  tampon-date sur la photo (toujours l'édition du jour) ni de favoris —
+   *  ces trois options permettent de les masquer, tout en gardant le
+   *  comportement habituel (true) partout ailleurs (/direct, colonnes
+   *  classiques). */
+  showMedal?: boolean;
+  showDateStamp?: boolean;
+  showFavorite?: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
 
@@ -82,8 +93,8 @@ export function CategoryColumn({
                 <ArticleImage
                   src={article.imageUrl}
                   alt={article.headline || article.sourceTitle}
-                  dateLabel={formatStamp(article.publishedAt)}
-                  medal={article.medal}
+                  dateLabel={showDateStamp ? formatStamp(article.publishedAt) : null}
+                  medal={showMedal ? article.medal : false}
                   className="h-full w-full"
                 />
               </ArticleLink>
@@ -96,7 +107,7 @@ export function CategoryColumn({
             >
               {article.summary}
             </p>
-            <SourceLine article={article} showDate={!article.imageUrl} />
+            <SourceLine article={article} showDate={!article.imageUrl} showFavorite={showFavorite} />
           </article>
         ))}
       </div>

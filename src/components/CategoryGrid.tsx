@@ -24,12 +24,18 @@ export type CategoryEntry = {
  */
 export function CategoryGrid({
   initialCategories,
-  clampSummary = false
+  clampSummary = false,
+  showMedal = true,
+  showDateStamp = true,
+  showFavorite = true
 }: {
   initialCategories: CategoryEntry[];
   /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
    *  on ouvre l'article via la photo ou le lien source. */
   clampSummary?: boolean;
+  showMedal?: boolean;
+  showDateStamp?: boolean;
+  showFavorite?: boolean;
 }) {
   const [categories, setCategories] = useState(initialCategories);
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null);
@@ -73,6 +79,9 @@ export function CategoryGrid({
           onDragEnd={() => setDraggedLabel(null)}
           onDropHere={() => handleDrop(cat.label)}
           clampSummary={clampSummary}
+          showMedal={showMedal}
+          showDateStamp={showDateStamp}
+          showFavorite={showFavorite}
         />
       ))}
     </div>

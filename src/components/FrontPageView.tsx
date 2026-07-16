@@ -1,20 +1,21 @@
 import { ArticleLink } from "./ArticleLink";
 import { ArticleImage } from "./ArticleImage";
 import { SourceLine, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
+import { CategoryGrid } from "./CategoryGrid";
 import { SpoonDivider } from "./SpoonDivider";
 
 /**
- * Vraie mise en page de "une" de journal — boîtes encadrées façon coupures
- * de presse (gros article au centre, deux articles secondaires de part et
- * d'autre, puis des rubriques en encadrés en bas de page), plutôt que la
- * grille à filets verticaux de EditionView (toujours utilisée telle quelle
- * sur /direct, inchangée).
+ * Vraie mise en page de "une" de journal : gros article vedette au centre
+ * avec ses deux secondaires flanqués par un simple filet vertical (même
+ * langage visuel que le bandeau "à la une" de EditionView — pas de boîtes
+ * encadrées partout, qui alourdissaient trop la page), puis les rubriques en
+ * colonnes classiques (CategoryGrid, réutilisé tel quel pour rester cohérent
+ * avec /direct) en bas de page. /direct garde EditionView inchangé.
  *
  * "Adapté au mieux" par l'IA sans appel supplémentaire : aucune requête IA
- * dédiée à la mise en page — le nombre de héros affichés et la taille des
- * encadrés de rubrique s'adaptent simplement aux signaux déjà produits par
- * le traitement IA existant (priorityScore, médaille, volume d'articles par
- * rubrique), qui varient naturellement à chaque impression.
+ * dédiée à la mise en page — le nombre de héros affichés s'adapte simplement
+ * aux signaux déjà produits par le traitement IA existant (priorityScore,
+ * médaille), qui varient naturellement à chaque impression.
  */
 export function FrontPageView({
   articles,
@@ -72,6 +73,7 @@ export function FrontPageView({
   }
 
   const orderIndex = new Map(categoryOrder.map((c, i) => [c.label, i]));
+  const idByLabel = new Map(categoryOrder.map((c) => [c.label, c.freshrssId]));
   const categories = [...byCategory.keys()].sort((a, b) => {
     const ia = orderIndex.has(a) ? orderIndex.get(a)! : Number.MAX_SAFE_INTEGER;
     const ib = orderIndex.has(b) ? orderIndex.get(b)! : Number.MAX_SAFE_INTEGER;
@@ -81,37 +83,47 @@ export function FrontPageView({
 
   return (
     <div>
-      <p className="mb-4 text-center text-xs uppercase tracking-[0.35em] text-journal">
-        ✦ Édition du jour ✦
-      </p>
-
-      {/* ——— Bandeau "à la une" : gros article encadré au centre, deux
-          secondaires de part et d'autre — le nombre de colonnes s'adapte
+      {/* ——— Bandeau "à la une" : gros article vedette au centre, ses
+          secondaires de part et d'autre séparés par un simple filet
+          vertical — même langage que le bandeau "à la une" de EditionView,
+          pas une boîte encadrée par article. Le nombre de colonnes s'adapte
           au nombre de héros réellement disponibles (1 à 3). */}
       {heroMain && (
-        <div
-          className={`mb-6 grid grid-cols-1 gap-4 ${
-            heroes.length === 3 ? "md:grid-cols-[1fr_1.6fr_1fr]" : heroes.length === 2 ? "md:grid-cols-[1.6fr_1fr]" : ""
-          }`}
-        >
-          {heroSideA && <SideHeroBox article={heroSideA} />}
-          <MainHeroBox article={heroMain} />
-          {heroSideB && <SideHeroBox article={heroSideB} />}
+        <div className="mb-12 border-b-2 border-ink pb-10">
+          <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
+            ✦ À la une ✦
+          </p>
+          <div
+            className={`grid grid-cols-1 gap-8 ${
+              heroes.length === 3
+                ? "md:grid-cols-[1fr_1.7fr_1fr] md:divide-x md:divide-ink/30"
+                : heroes.length === 2
+                  ? "md:grid-cols-[1.7fr_1fr] md:divide-x md:divide-ink/30"
+                  : ""
+            }`}
+          >
+            {heroSideA && <SideHeroBox article={heroSideA} className="md:pr-8" />}
+            <MainHeroBox article={heroMain} className={heroSideA ? "md:px-8" : heroSideB ? "md:pr-8" : ""} />
+            {heroSideB && <SideHeroBox article={heroSideB} className="md:pl-8" />}
+          </div>
         </div>
       )}
 
-      {/* ——— Rubriques en encadrés, en bas de page — la taille de chaque
-          encadré s'adapte au volume d'articles qu'il contient : une
-          rubrique bien fournie ce jour-là prend plus de place, une
-          rubrique clairsemée reste compacte. */}
+      {/* ——— Rubriques en colonnes classiques (même composant que /direct),
+          sans médaille/tampon-date/favoris : notions qui n'ont pas leur
+          place sur une page toujours à la date du jour. */}
       {categories.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((cat) => {
-            const arts = byCategory.get(cat)!;
-            const big = arts.length >= 4;
-            return <CategoryBox key={cat} label={cat} articles={arts} big={big} />;
-          })}
-        </div>
+        <CategoryGrid
+          initialCategories={categories.map((cat) => ({
+            label: cat,
+            freshrssId: idByLabel.get(cat) ?? null,
+            articles: byCategory.get(cat)!
+          }))}
+          clampSummary
+          showMedal={false}
+          showDateStamp={false}
+          showFavorite={false}
+        />
       )}
 
       <SpoonDivider />
@@ -119,17 +131,17 @@ export function FrontPageView({
   );
 }
 
-function MainHeroBox({ article }: { article: ArticleLike }) {
+function MainHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
   return (
-    <article className="flex flex-col border-2 border-ink p-5">
-      <h1 className="mb-3 text-center font-display text-2xl font-black leading-tight md:text-3xl">
+    <article className={`flex flex-col text-center ${className}`}>
+      <h1 className="mx-auto mb-4 max-w-2xl font-display text-2xl font-black leading-tight md:text-3xl">
         {article.headline}
       </h1>
       {article.imageUrl && (
         <ArticleLink
           href={article.sourceUrl}
           title={article.headline || article.sourceTitle}
-          className="mb-3 block aspect-[16/9] w-full"
+          className="mb-4 block aspect-[16/9] w-full"
         >
           <ArticleImage
             src={article.imageUrl}
@@ -138,19 +150,19 @@ function MainHeroBox({ article }: { article: ArticleLike }) {
           />
         </ArticleLink>
       )}
-      <p className="newsprint line-clamp-[10] flex-1 text-sm leading-snug text-neutral-800">
+      <p className="newsprint mx-auto max-w-xl line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
         {article.summary}
       </p>
-      <div className="mt-3 border-t border-ink/30 pt-2">
+      <div className="mt-3">
         <SourceLine article={article} center showFavorite={false} />
       </div>
     </article>
   );
 }
 
-function SideHeroBox({ article }: { article: ArticleLike }) {
+function SideHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
   return (
-    <article className="border-2 border-ink p-4">
+    <article className={className}>
       <h2 className="mb-2 font-display text-base font-bold leading-snug">{article.headline}</h2>
       {article.imageUrl && (
         <ArticleLink
@@ -170,31 +182,5 @@ function SideHeroBox({ article }: { article: ArticleLike }) {
         <SourceLine article={article} showFavorite={false} />
       </div>
     </article>
-  );
-}
-
-function CategoryBox({ label, articles, big }: { label: string; articles: ArticleLike[]; big: boolean }) {
-  const shown = articles.slice(0, big ? 6 : 3);
-  return (
-    <div className={`border-2 border-ink p-4 ${big ? "sm:col-span-2" : ""}`}>
-      <h3 className="mb-3 border-b-2 border-ink pb-2 text-center font-display text-xs font-bold uppercase tracking-[0.25em]">
-        {label}
-      </h3>
-      <div className="divide-y divide-ink/20">
-        {shown.map((a) => (
-          <div key={a.id} className="py-3 first:pt-0 last:pb-0">
-            <ArticleLink
-              href={a.sourceUrl}
-              title={a.headline || a.sourceTitle}
-              className="block font-display text-sm font-bold leading-snug hover:underline"
-            >
-              {a.headline}
-            </ArticleLink>
-            <p className="newsprint mt-1 line-clamp-3 text-xs leading-snug text-neutral-700">{a.summary}</p>
-            <SourceLine article={a} showFavorite={false} />
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
