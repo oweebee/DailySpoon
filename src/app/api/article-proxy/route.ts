@@ -201,7 +201,7 @@ function renderPage(opts: {
     font-family: Georgia, "Times New Roman", serif;
     color: #1a1a1a;
     line-height: 1.7;
-    font-size: 17.5px;
+    font-size: 15px;
     /* Papier gris : même grain de bruit + vignette que le reste du site,
        pour que la page proxifiée fasse illusion de vieux papier journal. */
     background-color: #f0f0f0;

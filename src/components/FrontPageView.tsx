@@ -250,7 +250,7 @@ function StaticCategorySection({
           </div>
         )}
         <div className="min-w-0">
-          <h4 className="font-display text-sm font-bold leading-snug">{lead.headline}</h4>
+          <h4 className="font-display text-base font-bold leading-snug">{lead.headline}</h4>
           <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(lead)}</p>
         </div>
       </article>
