@@ -140,6 +140,13 @@ export function EditionView({
         </div>
       </div>
 
+      {/* ——— Mobile : cuillères placées AU-DESSUS des rubriques, pas en bas
+          de page — chaque rubrique remplit maintenant tout l'écran
+          (fillMobile dans CategoryGrid/CategoryColumn), donc les laisser
+          après tout ce contenu les rendrait invisibles sans défiler bien
+          plus bas. */}
+      <SpoonDivider className="mb-6 text-center text-sepia md:hidden" />
+
       {/* ——— Rubriques en colonnes avec filets verticaux ———
           Note : pas de "divide-x" ici. Cette classe ajoute un filet à
           gauche de chaque colonne sauf la 1ère du DOM, sans tenir compte
@@ -157,8 +164,9 @@ export function EditionView({
         clampSummary={clampSummary}
       />
 
-      {/* Cul-de-lampe de fin d'édition */}
-      <SpoonDivider />
+      {/* Cul-de-lampe de fin d'édition — desktop seulement (mobile l'a déjà
+          au-dessus des rubriques, voir plus haut). */}
+      <SpoonDivider className="mt-14 hidden text-center text-sepia md:block" />
     </div>
   );
 }

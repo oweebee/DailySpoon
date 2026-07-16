@@ -21,7 +21,9 @@ export function CategoryColumn({
   showMedal = true,
   showDateStamp = true,
   showFavorite = true,
-  scrollExpand = false
+  scrollExpand = false,
+  autoInfinite = false,
+  fillMobile = false
 }: {
   label: string;
   articles: ArticleLike[];
@@ -54,6 +56,17 @@ export function CategoryColumn({
    *  chaque rubrique a déjà sa page dédiée en plein écran (grandir n'y pose
    *  aucun problème). */
   scrollExpand?: boolean;
+  /** Version mobile : pas de bouton du tout — la rubrique a déjà sa propre
+   *  page dédiée en plein écran (défilement vertical libre, pas de hauteur à
+   *  préserver), donc on charge directement le lot suivant dès qu'on
+   *  approche du bas de la liste déjà affichée, sans jamais demander de
+   *  clic. Mutuellement exclusif avec scrollExpand (desktop). */
+  autoInfinite?: boolean;
+  /** Uniquement passé depuis le carrousel mobile (/direct) : force la
+   *  colonne à occuper au moins toute la hauteur restante de l'écran, pour
+   *  que la page de chaque rubrique remplisse l'écran plutôt que de laisser
+   *  du vide avant le bas. */
+  fillMobile?: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
   const [expanded, setExpanded] = useState(false);
@@ -75,25 +88,28 @@ export function CategoryColumn({
     setVisibleCount((c) => Math.min(c + STEP, articles.length));
   }
 
-  // Défilement "à l'infini" à l'intérieur de l'encart figé : dès que la
-  // sentinelle en bas de liste devient visible, on révèle le lot suivant
-  // d'articles déjà chargés pour cette rubrique (jusqu'à épuisement).
+  // Défilement "à l'infini" : soit à l'intérieur de l'encart figé (desktop,
+  // une fois "expanded" après clic), soit directement sur le défilement de
+  // la page (mobile, autoInfinite, dès le départ — pas de clic requis). Dans
+  // le 2nd cas, root=null observe la fenêtre elle-même plutôt qu'un
+  // conteneur à hauteur fixe.
+  const watching = (scrollExpand && expanded) || autoInfinite;
   useEffect(() => {
-    if (!expanded) return;
+    if (!watching) return;
     const sentinel = sentinelRef.current;
-    const root = listRef.current;
-    if (!sentinel || !root) return;
+    const root = scrollExpand ? listRef.current : null;
+    if (!sentinel) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
           setVisibleCount((c) => Math.min(c + STEP, articles.length));
         }
       },
-      { root, rootMargin: "200px" }
+      { root, rootMargin: "400px" }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [expanded, articles.length]);
+  }, [watching, scrollExpand, articles.length]);
 
   return (
     // Filets et paddings calculés par position réelle dans la rangée
@@ -115,7 +131,7 @@ export function CategoryColumn({
             }
           : undefined
       }
-      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""}`}
+      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""} ${fillMobile ? "min-h-[65dvh]" : ""}`}
     >
       <h2
         draggable={draggable}
@@ -160,14 +176,14 @@ export function CategoryColumn({
             <SourceLine article={article} showDate={!article.imageUrl} showFavorite={showFavorite} />
           </article>
         ))}
-        {expanded && remaining > 0 && (
+        {(expanded || autoInfinite) && remaining > 0 && (
           <div ref={sentinelRef} className="py-3 text-center text-[0.6rem] italic uppercase tracking-[0.2em] text-sepia/70">
             Chargement de la suite…
           </div>
         )}
       </div>
 
-      {!expanded && remaining > 0 && (
+      {!expanded && !autoInfinite && remaining > 0 && (
         <button
           onClick={handleShowMore}
           className="mt-3 w-full border-t border-dashed border-ink/40 pt-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:text-ink hover:underline"

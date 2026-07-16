@@ -113,16 +113,25 @@ export function FrontPageView({
         </div>
       )}
 
+      {/* ——— Mobile : cuillères placées AU-DESSUS du carrousel (pas en bas
+          de page comme sur desktop) — puisque chaque page du carrousel
+          remplit maintenant tout l'écran (min-h ci-dessous), les cuillères
+          resteraient invisibles tout en bas si on les laissait après tout ce
+          contenu ; ici elles restent visibles dès l'arrivée sur la page. */}
+      {(heroMain || categories.length > 0) && <SpoonDivider className="mb-6 text-center text-sepia sm:hidden" />}
+
       {/* ——— Mobile : UN SEUL carrousel swipe (scroll-snap natif, pas de
           librairie JS) — "à la une" est sa propre page dédiée en premier,
           puis une page dédiée par rubrique ensuite. Chaque page fait
           exactement 100% de la largeur (pas de "peek" du voisin, pas de
-          gap) : on ne doit jamais voir la page suivante en lisant l'actuelle. */}
+          gap) : on ne doit jamais voir la page suivante en lisant l'actuelle.
+          Chaque page a une hauteur minimale pour occuper tout l'écran
+          disponible (plutôt qu'un petit encadré flottant suivi de vide). */}
       {(heroMain || categories.length > 0) && (
         <div className="-mx-6 mb-10 flex snap-x snap-mandatory overflow-x-auto sm:hidden">
           {heroMain && (
             <div className="w-full shrink-0 snap-center px-6">
-              <div className="border-2 border-ink p-6">
+              <div className="flex min-h-[65dvh] flex-col border-2 border-ink p-6">
                 <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
                   ✦ À la une ✦
                 </p>
@@ -136,7 +145,7 @@ export function FrontPageView({
           )}
           {categories.map((cat, i) => (
             <div key={cat} className="w-full shrink-0 snap-center px-6">
-              <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
+              <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} fillMobile />
             </div>
           ))}
         </div>
@@ -156,7 +165,9 @@ export function FrontPageView({
         </div>
       )}
 
-      <SpoonDivider />
+      {/* Desktop seulement — mobile a déjà ses cuillères au-dessus du
+          carrousel (voir plus haut). */}
+      <SpoonDivider className="mt-14 hidden text-center text-sepia sm:block" />
     </div>
   );
 }
@@ -238,19 +249,26 @@ function StaticCategorySection({
   label,
   articles,
   tone,
-  limit
+  limit,
+  fillMobile = false
 }: {
   label: string;
   articles: ArticleLike[];
   tone: number;
   limit?: number;
+  /** Uniquement passé depuis le carrousel mobile : force l'encadré à occuper
+   *  au moins toute la hauteur restante de l'écran, plutôt qu'un petit
+   *  encadré flottant suivi de vide avant le bas de la page. */
+  fillMobile?: boolean;
 }) {
   const shown = typeof limit === "number" ? articles.slice(0, limit) : articles;
   const [lead, ...briefs] = shown;
   if (!lead) return null;
 
   return (
-    <section className={CATEGORY_BOX_TONES[tone % CATEGORY_BOX_TONES.length]}>
+    <section
+      className={`${CATEGORY_BOX_TONES[tone % CATEGORY_BOX_TONES.length]} ${fillMobile ? "min-h-[65dvh]" : ""}`}
+    >
       <h3 className="mb-4 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">{label}</h3>
 
       <article className={`mb-3 pb-3 border-b border-ink/20 ${lead.imageUrl ? "flex gap-4" : ""}`}>
