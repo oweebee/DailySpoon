@@ -20,9 +20,11 @@ body {
      pour se répéter sans raccord visible) — image seule, telle quelle : pas
      de dégradé/vignette superposé, pas de redimensionnement (taille
      naturelle), répétition en pavé par défaut (background-repeat non
-     précisé = "repeat"). */
+     précisé = "repeat"). Pas de "background-attachment: fixed" : la valeur
+     par défaut ("scroll") fait défiler la texture AVEC le texte, comme si
+     le texte était imprimé dessus, au lieu de rester immobile pendant que
+     la page défile par-dessus. */
   background-image: url("/textures/journal.png");
-  background-attachment: fixed;
 }
 
 /* Lettrine de une, comme dans les vieux quotidiens */
