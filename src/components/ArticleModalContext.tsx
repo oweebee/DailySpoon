@@ -29,12 +29,11 @@ export function useArticleModal(): ArticleModalContextValue {
 
 /**
  * Fenêtre interne à l'app pour lire un article sans quitter DailySpoon ni
- * ouvrir un nouvel onglet. Charge la page source dans une iframe.
- *
- * Limite connue : beaucoup de sites d'actu refusent volontairement d'être
- * affichés en iframe (en-tête X-Frame-Options / CSP frame-ancestors) — dans
- * ce cas la zone reste blanche. Le lien "Ouvrir dans un nouvel onglet" dans
- * l'en-tête de la fenêtre sert de filet de secours pour ces sources.
+ * ouvrir un nouvel onglet. Charge l'article via /api/article-proxy (extrait
+ * proprement côté serveur avec Readability, façon Morss) plutôt que le site
+ * source directement — ce qui contourne le blocage iframe que beaucoup de
+ * sites imposent (X-Frame-Options / CSP frame-ancestors). Le lien "Ouvrir
+ * dans un nouvel onglet" reste un filet de secours si l'extraction échoue.
  */
 export function ArticleModalProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ArticleModalState>(null);
@@ -78,11 +77,16 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
                 </button>
               </div>
             </div>
+            {/* Passe par notre proxy d'article (extraction Readability,
+                façon Morss) plutôt que de charger le site source
+                directement : beaucoup de sites (TechCrunch, Numerama, ...)
+                refusent l'affichage en iframe via X-Frame-Options/CSP. Le
+                contenu servi ici vient de notre propre domaine, donc
+                jamais bloqué. */}
             <iframe
-              src={state.url}
+              src={`/api/article-proxy?url=${encodeURIComponent(state.url)}`}
               title={state.title || "Article"}
-              className="h-full w-full flex-1 bg-white"
-              referrerPolicy="no-referrer"
+              className="h-full w-full flex-1 bg-paper"
             />
           </div>
         </div>
