@@ -9,8 +9,13 @@ import { Masthead } from "./Masthead";
 // scroll fluide lent façon smooth-scroll classique.
 const SNAP_DURATION_MS = 180;
 
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
+// Ease-IN-OUT : démarre doucement, accélère, PUIS ralentit à nouveau juste
+// avant d'arriver pour se poser en douceur sur la position cible — plutôt
+// qu'un ease-in pur qui finirait à pleine vitesse et s'arrêterait net (ce qui
+// donne une impression de "freinage brutal" à l'oeil, pas un atterrissage
+// propre).
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 /**
@@ -25,10 +30,27 @@ function animateScrollTo(target: number, cancelRef: { current: number | null }) 
   if (Math.abs(distance) < 1) return;
   const startTime = performance.now();
 
+  // Le "scroll anchoring" natif du navigateur (activé par défaut) essaie de
+  // compenser tout seul les changements de taille de contenu au-dessus/dans
+  // la zone visible (ex. une image qui finit de charger pendant qu'on
+  // défile) en réajustant la position de défilement — ce qui vient
+  // perturber/adoucir artificiellement la fin de NOTRE animation, donnant
+  // l'impression d'un ralentissement juste avant l'arrivée alors que la
+  // courbe d'accélération elle-même n'en produit aucun. On le désactive le
+  // temps de l'animation, puis on le restaure.
+  const html = document.documentElement;
+  const previousAnchor = html.style.overflowAnchor;
+  html.style.overflowAnchor = "none";
+
   function step(now: number) {
     const t = Math.min(1, (now - startTime) / SNAP_DURATION_MS);
-    window.scrollTo(0, start + distance * easeOutCubic(t));
-    cancelRef.current = t < 1 ? requestAnimationFrame(step) : null;
+    window.scrollTo(0, start + distance * easeInOutCubic(t));
+    if (t < 1) {
+      cancelRef.current = requestAnimationFrame(step);
+    } else {
+      cancelRef.current = null;
+      html.style.overflowAnchor = previousAnchor;
+    }
   }
   cancelRef.current = requestAnimationFrame(step);
 }
