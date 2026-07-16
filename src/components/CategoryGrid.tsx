@@ -84,6 +84,7 @@ export function CategoryGrid({
               showMedal={showMedal}
               showDateStamp={showDateStamp}
               showFavorite={showFavorite}
+              scrollExpand
             />
           </div>
         ))}

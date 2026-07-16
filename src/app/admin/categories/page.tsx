@@ -40,9 +40,6 @@ export default function AdminCategoriesPage() {
     });
   }
 
-  const [generating, setGenerating] = useState(false);
-  const [genResult, setGenResult] = useState<string | null>(null);
-
   async function loadCategories() {
     setLoading(true);
     setError(null);
@@ -156,19 +153,6 @@ export default function AdminCategoriesPage() {
     });
   }
 
-  async function regenerate() {
-    setGenerating(true);
-    setGenResult(null);
-    const res = await fetch("/api/cron/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({})
-    });
-    const body = await res.json().catch(() => ({}));
-    setGenerating(false);
-    setGenResult(res.ok ? `Édition mise à jour : ${body.articleCount} articles.` : body.error || "Échec");
-  }
-
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.href = "/admin/login";
@@ -203,17 +187,6 @@ export default function AdminCategoriesPage() {
         doit inclure. Décocher une catégorie ou un flux le retire immédiatement de l’édition
         (partout, articles déjà récupérés compris), pas seulement des futures récupérations.
       </p>
-
-      <div className="mb-8 flex items-center gap-3">
-        <button
-          onClick={regenerate}
-          disabled={generating}
-          className="stamp-button border-2 border-ink bg-ink px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
-        >
-          {generating ? "Génération en cours..." : "Régénérer l’édition maintenant"}
-        </button>
-        {genResult && <span className="text-sm italic text-sepia">{genResult}</span>}
-      </div>
 
       <h2 className="mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
         Catégories & flux

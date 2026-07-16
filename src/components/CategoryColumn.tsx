@@ -130,7 +130,7 @@ export function CategoryColumn({
       <div
         ref={listRef}
         style={expanded && lockedHeight ? { maxHeight: lockedHeight, overflowY: "auto" } : undefined}
-        className={`divide-y divide-ink/20 ${expanded ? "pr-1" : ""}`}
+        className={`divide-y divide-ink/20 ${expanded ? "pr-4" : ""}`}
       >
         {visible.map((article) => (
           <article key={article.id} className="py-4 first:pt-0">
