@@ -88,13 +88,12 @@ export function FrontPageView({
 
   return (
     <div>
-      {/* ——— Bandeau "à la une" : gros article vedette au centre, ses
-          secondaires de part et d'autre séparés par un simple filet
-          vertical — même langage que le bandeau "à la une" de EditionView,
-          pas une boîte encadrée par article. Le nombre de colonnes s'adapte
-          au nombre de héros réellement disponibles (1 à 3). */}
+      {/* ——— Bandeau "à la une", encadré comme un vrai bloc de une : gros
+          article vedette au centre, ses secondaires de part et d'autre
+          séparés par un simple filet vertical. Le nombre de colonnes
+          s'adapte au nombre de héros réellement disponibles (1 à 3). */}
       {heroMain && (
-        <div className="mb-12 border-b-2 border-ink pb-10">
+        <div className="mb-10 border-2 border-ink p-6 md:p-8">
           <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
             ✦ À la une ✦
           </p>
@@ -114,14 +113,21 @@ export function FrontPageView({
         </div>
       )}
 
-      {/* ——— Rubriques, en colonnes statiques : juste le texte, pas de
-          composant partagé avec /direct (qui a besoin des liens/sources). */}
+      {/* ——— Rubriques, encadrées, en colonnes façon vrai journal imprimé
+          (CSS columns plutôt que grid : le contenu s'écoule colonne par
+          colonne sans laisser de gros blancs quand une rubrique est plus
+          courte que sa voisine — un grid classique aligne les rangées et
+          crée ces vides). Chaque encadré alterne un léger fond teinté et un
+          padding différent pour éviter que tout se ressemble. */}
       {categories.length > 0 && (
-        <div className="grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((cat) => {
+        <div className="columns-1 gap-6 sm:columns-2 lg:columns-3">
+          {categories.map((cat, i) => {
             const arts = byCategory.get(cat)!;
-            const big = arts.length >= 4;
-            return <StaticCategorySection key={cat} label={cat} articles={arts} big={big} />;
+            return (
+              <div key={cat} className="mb-6 break-inside-avoid">
+                <StaticCategorySection label={cat} articles={arts} tone={i % 3} />
+              </div>
+            );
           })}
         </div>
       )}
@@ -178,22 +184,42 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
   );
 }
 
+// Trois traitements d'encadré qui tournent d'une rubrique à l'autre (au lieu
+// d'un unique style répété partout) — bordure simple/double et padding
+// différents, mais toujours à plat, sans ombre ni coin arrondi, pour rester
+// dans le langage papier déjà établi plutôt que de repartir sur des cartes
+// modernes.
+const CATEGORY_BOX_TONES = [
+  "border-2 border-ink bg-paper p-5",
+  "border border-ink/70 bg-ink/[0.035] p-6",
+  "border-4 border-double border-ink bg-paper p-5"
+];
+
 /**
- * Rubrique en deux temps, façon vraie page de journal : un article vedette
- * en tête (illustré si une photo est disponible, en ligne image+texte plutôt
- * qu'empilés) puis le reste en "brèves" — juste titre + résumé concis, sans
- * photo, pour garder la colonne lisible et éviter un mur de vignettes.
+ * Rubrique encadrée, en deux temps façon vraie page de journal : un article
+ * vedette en tête (illustré si une photo est disponible, en ligne image+texte
+ * plutôt qu'empilés) puis le reste en "brèves" — juste titre + résumé
+ * concis, sans photo, pour garder l'encadré lisible et éviter un mur de
+ * vignettes. Plafonné à 5 articles quelle que soit la rubrique : en colonnes
+ * CSS (voir FrontPageView), un encadré trop long déséquilibrerait la colonne
+ * qui l'accueille et créerait justement les gros vides que ce format évite.
  */
-function StaticCategorySection({ label, articles, big }: { label: string; articles: ArticleLike[]; big: boolean }) {
-  const shown = articles.slice(0, big ? 6 : 3);
+function StaticCategorySection({
+  label,
+  articles,
+  tone
+}: {
+  label: string;
+  articles: ArticleLike[];
+  tone: number;
+}) {
+  const shown = articles.slice(0, 5);
   const [lead, ...briefs] = shown;
   if (!lead) return null;
 
   return (
-    <section className={big ? "sm:col-span-2" : ""}>
-      <h3 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-        {label}
-      </h3>
+    <section className={CATEGORY_BOX_TONES[tone % CATEGORY_BOX_TONES.length]}>
+      <h3 className="mb-4 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">{label}</h3>
 
       <article className={`mb-3 pb-3 border-b border-ink/20 ${lead.imageUrl ? "flex gap-4" : ""}`}>
         {lead.imageUrl && (
