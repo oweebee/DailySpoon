@@ -18,6 +18,13 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "DailySpoon"
+  },
+  // Next.js ne génère que "apple-mobile-web-app-capable" via appleWebApp
+  // ci-dessus — cette balise générique (non préfixée "apple-") est celle que
+  // Chrome/Firefox pour Android vérifient aussi pour juger qu'une page est
+  // une vraie "web app" installable plutôt qu'un simple raccourci-favori.
+  other: {
+    "mobile-web-app-capable": "yes"
   }
 };
 
