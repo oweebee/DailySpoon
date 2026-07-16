@@ -10,6 +10,11 @@ import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
 // alors progressivement, sur plusieurs générations successives.
 const MAX_OG_BACKFILL_PER_RUN = 25;
 
+// Rétention de l'historique (page "En direct", recherche, accueil — tout
+// partage la même table Article) : 2 ans. Un article marqué favori n'est
+// jamais purgé, quel que soit son âge.
+const RETENTION_DAYS = 730;
+
 function todayDateOnly(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -31,6 +36,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   });
 
   await cleanExistingHtmlArtifacts();
+  await pruneOldArticles();
 
   const rawItems = await fetchNewItemsFromSelectedCategories();
   console.log(`[edition] Fetched ${rawItems.length} new items from FreshRSS.`);
@@ -89,6 +95,25 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   console.log(`[edition] Edition ${date.toISOString().slice(0, 10)} ready with ${articleCount} articles.`);
 
   return { editionId: edition.id, articleCount };
+}
+
+/**
+ * Purge les articles plus vieux que RETENTION_DAYS (2 ans), sur la date de
+ * publication d'origine (ou de récupération si elle est inconnue). Les
+ * articles marqués favoris sont exclus de la purge, quel que soit leur âge —
+ * un favori mis de côté ne doit jamais disparaître tout seul.
+ */
+async function pruneOldArticles(): Promise<void> {
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await prisma.article.deleteMany({
+    where: {
+      favorite: false,
+      OR: [{ publishedAt: { lt: cutoff } }, { publishedAt: null, fetchedAt: { lt: cutoff } }]
+    }
+  });
+  if (count > 0) {
+    console.log(`[edition] Rétention (${RETENTION_DAYS} j) : ${count} article(s) purgé(s).`);
+  }
 }
 
 /**

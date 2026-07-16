@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { EditionView, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
+import { useEffect, useRef, useState } from "react";
+import { EditionView, SourceLine, formatStamp, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
+import { ArticleImage } from "./ArticleImage";
+import { ArticleLink } from "./ArticleLink";
 
 export function DirectView({
   initialArticles,
@@ -12,6 +14,40 @@ export function DirectView({
 }) {
   const [pulling, setPulling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Recherche live : interroge /api/articles/search (tout l'historique en
+  // base, pas seulement les ~1000 articles chargés dans initialArticles),
+  // avec un léger debounce pour ne pas déclencher une requête à chaque
+  // frappe.
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ArticleLike[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = query.trim();
+    if (!q) {
+      setSearchResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/articles/search?q=${encodeURIComponent(q)}`);
+        const body = await res.json().catch(() => ({}));
+        setSearchResults(body.articles || []);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
 
   async function pull() {
     setPulling(true);
@@ -33,25 +69,44 @@ export function DirectView({
     }
   }
 
+  const isSearching = query.trim().length > 0;
+
   return (
     <div>
-      <div className="mb-10 flex flex-col items-center gap-3 border-b-2 border-ink pb-8 text-center">
-        <p className="text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
-        <p className="max-w-md text-sm italic text-sepia">
-          Va chercher les derniers articles de tes catégories FreshRSS et reconstruit l’édition,
-          sans attendre demain matin.
-        </p>
-        <button
-          onClick={pull}
-          disabled={pulling}
-          className="stamp-button border-2 border-ink bg-ink px-5 py-2.5 font-display text-xs uppercase tracking-[0.25em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
-        >
-          {pulling ? "Aspiration en cours..." : "Aspirer les news"}
-        </button>
-        {message && <p className="text-sm italic text-sepia">{message}</p>}
+      <div className="mb-10 border-b-2 border-ink pb-5">
+        <div className="flex flex-col items-center gap-3 pb-5 text-center">
+          <p className="text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
+          <p className="max-w-md text-sm italic text-sepia">
+            Va chercher les derniers articles de tes catégories FreshRSS et reconstruit l’édition,
+            sans attendre demain matin.
+          </p>
+          <button
+            onClick={pull}
+            disabled={pulling}
+            className="stamp-button border-2 border-ink bg-ink px-5 py-2.5 font-display text-xs uppercase tracking-[0.25em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
+          >
+            {pulling ? "Aspiration en cours..." : "Aspirer les news"}
+          </button>
+          {message && <p className="text-sm italic text-sepia">{message}</p>}
+        </div>
+
+        <div className="flex justify-end">
+          <label className="flex items-center gap-2 border-b border-ink/40 pb-1 focus-within:border-journal">
+            <WesternMagnifier className="h-4 w-4 shrink-0 text-ink/70" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Rechercher dans l’historique…"
+              className="w-48 bg-transparent text-sm italic text-ink placeholder:text-sepia/70 focus:outline-none sm:w-64"
+            />
+          </label>
+        </div>
       </div>
 
-      {initialArticles.length === 0 ? (
+      {isSearching ? (
+        <SearchResults results={searchResults} searching={searching} />
+      ) : initialArticles.length === 0 ? (
         <p className="py-24 text-center italic text-sepia">
           Rien pour l’instant — clique sur « Aspirer les news » pour aller chercher les derniers
           articles.
@@ -60,5 +115,56 @@ export function DirectView({
         <EditionView articles={initialArticles} categoryOrder={categoryOrder} clampSummary />
       )}
     </div>
+  );
+}
+
+function SearchResults({ results, searching }: { results: ArticleLike[] | null; searching: boolean }) {
+  if (searching && !results) {
+    return <p className="py-16 text-center italic text-sepia">Recherche…</p>;
+  }
+  if (!results || results.length === 0) {
+    return (
+      <p className="py-16 text-center italic text-sepia">Aucun article ne correspond à cette recherche.</p>
+    );
+  }
+  return (
+    <div className="grid gap-x-0 gap-y-8 md:grid-cols-2 lg:grid-cols-4">
+      {results.map((article) => (
+        <article key={article.id} className="py-4">
+          {article.imageUrl && (
+            <ArticleLink
+              href={article.sourceUrl}
+              title={article.headline || article.sourceTitle}
+              className="mb-2 block aspect-[16/9] w-full"
+            >
+              <ArticleImage
+                src={article.imageUrl}
+                alt={article.headline || article.sourceTitle}
+                dateLabel={formatStamp(article.publishedAt)}
+                medal={article.medal}
+                className="h-full w-full"
+              />
+            </ArticleLink>
+          )}
+          <h3 className="font-display text-base font-bold leading-snug">{article.headline}</h3>
+          <p className="newsprint mt-1 text-[0.8rem] leading-snug text-neutral-700">{article.summary}</p>
+          <SourceLine article={article} showDate={!article.imageUrl} />
+        </article>
+      ))}
+    </div>
+  );
+}
+
+/** Loupe façon "chercheur d'or"/western : manche façon corde tressée
+ *  (hachures obliques) plutôt qu'un simple trait plein. */
+function WesternMagnifier({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <circle cx="10" cy="10" r="6.5" />
+      <line x1="14.6" y1="14.6" x2="21" y2="21" strokeWidth="2.2" />
+      <line x1="15.3" y1="15.9" x2="16.4" y2="14.8" strokeWidth="0.9" />
+      <line x1="16.8" y1="17.4" x2="17.9" y2="16.3" strokeWidth="0.9" />
+      <line x1="18.3" y1="18.9" x2="19.4" y2="17.8" strokeWidth="0.9" />
+    </svg>
   );
 }

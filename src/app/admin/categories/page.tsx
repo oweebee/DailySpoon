@@ -232,7 +232,7 @@ export default function AdminCategoriesPage() {
                     e.preventDefault();
                     handleDrop(cat.freshrssId);
                   }}
-                  className={`border-b border-ink/30 ${draggedId === cat.freshrssId ? "opacity-40" : ""}`}
+                  className={`border-b border-ink/30 transition-colors hover:bg-ink/5 ${draggedId === cat.freshrssId ? "opacity-40" : ""}`}
                 >
                   <div className="flex items-center justify-between gap-4 py-3">
                     <button
@@ -269,7 +269,7 @@ export default function AdminCategoriesPage() {
                       {childFeeds.map((feed) => (
                         <li
                           key={feed.freshrssId}
-                          className="flex items-center justify-between gap-4 py-1.5"
+                          className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
                         >
                           <span className="text-sm">{feed.title}</span>
                           <div className="flex shrink-0 items-center gap-4">
@@ -331,7 +331,7 @@ export default function AdminCategoriesPage() {
                     {orphanFeeds.map((feed) => (
                       <li
                         key={feed.freshrssId}
-                        className="flex items-center justify-between gap-4 py-1.5"
+                        className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
                       >
                         <span className="text-sm">{feed.title}</span>
                         <div className="flex shrink-0 items-center gap-4">
