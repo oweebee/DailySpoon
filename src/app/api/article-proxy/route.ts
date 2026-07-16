@@ -167,9 +167,14 @@ function renderPage(opts: {
     margin: 0 auto;
   }
   .meta-top {
-    display: flex;
+    /* Grille à 3 colonnes (pas flex + space-between) : le lien du milieu
+       reste réellement centré sur la ligne, quelles que soient les
+       longueurs du lien de gauche et du nom de site à droite — sinon son
+       centre "flottant" ne s'aligne pas avec le kicker centré juste
+       en dessous. */
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     font-size: 0.68rem;
     text-transform: uppercase;
@@ -181,6 +186,9 @@ function renderPage(opts: {
   }
   .meta-top a { color: #8b1a1a; text-decoration: none; }
   .meta-top a:hover { text-decoration: underline; }
+  .meta-left { text-align: left; }
+  .meta-center { text-align: center; }
+  .meta-right { text-align: right; }
   .double-rule { border-top: 3px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; height: 6px; margin: 2px 0 22px; }
   .kicker {
     text-align: center;
@@ -248,9 +256,13 @@ function renderPage(opts: {
 <body>
   <div class="page">
     <p class="meta-top">
-      <a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Voir l'original ↗</a>
-      ${showTranslateLink ? `<a href="${escapeHtml(translateHref)}">${translateLabel}</a>` : ""}
-      <span>${escapeHtml(kicker)}</span>
+      <span class="meta-left">
+        <a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Voir l'original ↗</a>
+      </span>
+      <span class="meta-center">
+        ${showTranslateLink ? `<a href="${escapeHtml(translateHref)}">${translateLabel}</a>` : ""}
+      </span>
+      <span class="meta-right">${escapeHtml(kicker)}</span>
     </p>
     <div class="double-rule"></div>
     <p class="kicker">✦ ${escapeHtml(kicker)} ✦</p>

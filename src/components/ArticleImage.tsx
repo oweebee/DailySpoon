@@ -97,11 +97,11 @@ function WarMedal() {
       </defs>
 
       <g filter="url(#medalShadow)">
-        {/* Ruban, épinglé en haut à gauche */}
-        <path d="M14,4 L30,4 L30,40 L22,32 L14,40 Z" fill="url(#ribbonRed)" stroke="#3d0505" strokeWidth="0.75" />
-        <path d="M14,4 L30,4 L30,9 L14,9 Z" fill="#c9a227" opacity="0.85" />
-        <circle cx="22" cy="6" r="3.2" fill="#d9d9d9" stroke="#4a4a4a" strokeWidth="0.6" />
-        <circle cx="21" cy="5" r="1" fill="#fff" opacity="0.8" />
+        {/* Ruban, centré sur l'axe du médaillon (x=30) */}
+        <path d="M22,4 L38,4 L38,40 L30,32 L22,40 Z" fill="url(#ribbonRed)" stroke="#3d0505" strokeWidth="0.75" />
+        <path d="M22,4 L38,4 L38,9 L22,9 Z" fill="#c9a227" opacity="0.85" />
+        <circle cx="30" cy="6" r="3.2" fill="#d9d9d9" stroke="#4a4a4a" strokeWidth="0.6" />
+        <circle cx="29" cy="5" r="1" fill="#fff" opacity="0.8" />
 
         {/* Médaillon */}
         <circle cx="30" cy="56" r="21" fill="url(#medalGold)" stroke="#6b4e0a" strokeWidth="2" />
