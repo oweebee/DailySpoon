@@ -254,6 +254,20 @@ function htmlResponse(html: string): NextResponse {
   return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
+// Reddit sert son HTML complet côté serveur sur l'ancienne interface
+// (old.reddit.com) mais son contenu est chargé en JavaScript sur la
+// nouvelle (www.reddit.com/reddit.com) — un fetch serveur classique n'y
+// récupère qu'une coquille vide. On réécrit vers old.reddit.com, qui reste
+// en service et rend le texte du post directement dans le HTML.
+function toScrapableUrl(u: URL): string {
+  if (/(^|\.)reddit\.com$/i.test(u.hostname) && u.hostname !== "old.reddit.com") {
+    const rewritten = new URL(u.toString());
+    rewritten.hostname = "old.reddit.com";
+    return rewritten.toString();
+  }
+  return u.toString();
+}
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   if (!url) return new NextResponse("URL manquante", { status: 400 });
@@ -266,13 +280,14 @@ export async function GET(req: NextRequest) {
     return new NextResponse("URL invalide", { status: 400 });
   }
   const originalUrl = parsed.toString();
+  const fetchUrl = toScrapableUrl(parsed);
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     let res: Response;
     try {
-      res = await fetch(originalUrl, {
+      res = await fetch(fetchUrl, {
         signal: controller.signal,
         headers: {
           "User-Agent":
@@ -296,7 +311,7 @@ export async function GET(req: NextRequest) {
 
     const rawBuffer = await res.arrayBuffer();
     const rawHtml = decodeHtml(rawBuffer, res.headers.get("content-type"));
-    const dom = new JSDOM(rawHtml, { url: originalUrl });
+    const dom = new JSDOM(rawHtml, { url: fetchUrl });
     // Cast : le type Document de jsdom et celui de lib.dom (attendu par
     // Readability) ne s'unifient pas toujours parfaitement en TS, alors
     // qu'ils sont compatibles à l'exécution (usage standard recommandé par
@@ -321,7 +336,7 @@ export async function GET(req: NextRequest) {
       const src = el.getAttribute("src");
       if (src) {
         try {
-          el.setAttribute("src", proxyImageUrl(new URL(src, originalUrl).toString()));
+          el.setAttribute("src", proxyImageUrl(new URL(src, fetchUrl).toString()));
         } catch {
           // URL déjà relative/invalide, on laisse tel quel plutôt que de planter.
         }
