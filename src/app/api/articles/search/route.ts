@@ -28,13 +28,39 @@ function stripAccents(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+// Même fuseau que celui utilisé PARTOUT ailleurs dans l'appli pour afficher
+// les dates (voir DISPLAY_TZ dans EditionView.tsx) — indispensable ici aussi
+// : sinon "14 juillet" était compris comme le jour calendaire UTC alors que
+// les heures affichées à l'écran sont en Europe/Paris (UTC+1/+2). Un article
+// publié le 14 juillet à 23h30 UTC s'affiche "15 juillet, 01h30" à l'écran
+// mais matchait "14 juillet" côté recherche — d'où le décalage observé.
+const SEARCH_TZ = "Europe/Paris";
+
+/** Décalage (en minutes) du fuseau "timeZone" par rapport à UTC, au moment "date". */
+function tzOffsetMinutes(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset" }).formatToParts(date);
+  const raw = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+  const match = raw.match(/GMT([+-]\d+)(?::(\d+))?/);
+  if (!match) return 0;
+  const hours = Number(match[1]);
+  const minutes = match[2] ? Number(match[2]) : 0;
+  return hours * 60 + (hours < 0 ? -minutes : minutes);
+}
+
+/** Instant UTC correspondant à "année-mois-jour 00:00" en heure d'Europe/Paris. */
+function localMidnightUtc(year: number, month: number, day: number): Date {
+  const naiveUtc = Date.UTC(year, month, day);
+  const offset = tzOffsetMinutes(new Date(naiveUtc), SEARCH_TZ);
+  return new Date(naiveUtc - offset * 60_000);
+}
+
 /**
  * Reconnaît une recherche du style "15 juillet" ou "15 juillet 2026" (accents
  * et casse ignorés, "1er" toléré) et la convertit en plage [début, fin[ du
- * jour visé — année courante par défaut si omise (l'appli est encore jeune,
- * pas besoin de deviner entre plusieurs années possibles). Renvoie null si la
- * recherche ne ressemble pas à une date, ou si la date n'existe pas
- * (ex. "31 avril").
+ * jour visé en heure d'Europe/Paris — année courante par défaut si omise
+ * (l'appli est encore jeune, pas besoin de deviner entre plusieurs années
+ * possibles). Renvoie null si la recherche ne ressemble pas à une date, ou si
+ * la date n'existe pas (ex. "31 avril").
  */
 function parseFrenchDateQuery(raw: string): { start: Date; end: Date } | null {
   const q = stripAccents(raw.trim().toLowerCase());
@@ -46,10 +72,11 @@ function parseFrenchDateQuery(raw: string): { start: Date; end: Date } | null {
   if (month === undefined || day < 1 || day > 31) return null;
 
   const year = match[3] ? Number(match[3]) : new Date().getUTCFullYear();
-  const start = new Date(Date.UTC(year, month, day));
-  if (start.getUTCMonth() !== month || start.getUTCDate() !== day) return null; // ex. "31 avril"
+  const checkDay = new Date(Date.UTC(year, month, day));
+  if (checkDay.getUTCMonth() !== month || checkDay.getUTCDate() !== day) return null; // ex. "31 avril"
 
-  const end = new Date(Date.UTC(year, month, day + 1));
+  const start = localMidnightUtc(year, month, day);
+  const end = localMidnightUtc(year, month, day + 1);
   return { start, end };
 }
 

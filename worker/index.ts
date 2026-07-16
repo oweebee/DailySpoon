@@ -1,7 +1,6 @@
 import cron from "node-cron";
-import { generateDailyEdition, todayDateOnly } from "../src/lib/generateEdition";
+import { generateDailyEdition } from "../src/lib/generateEdition";
 import { getSettings } from "../src/lib/settings";
-import { prisma } from "../src/lib/prisma";
 
 // Self-hosted daily scheduler (no Vercel cron needed).
 // Checked every minute against the current /admin/settings (or env var
@@ -9,6 +8,7 @@ import { prisma } from "../src/lib/prisma";
 // immediately — no restart or redeploy needed.
 
 let lastRunDate: string | null = null;
+let lastFallbackSlot: string | null = null;
 
 function currentHourMinuteInTz(tz: string): { hour: number; minute: number; dateKey: string } {
   const now = new Date();
@@ -57,14 +57,13 @@ async function runOnce() {
 // Filet de sécurité en mode manuel : PAS de génération IA automatique (celle-
 // là ne se déclenche jamais toute seule si le planning est désactivé — c'est
 // voulu). Ici on parle uniquement de l'aspiration brute des flux RSS
-// ("Aspirer les news" sur /direct, forceNoAi — zéro coût IA) : si personne
-// n'a rien déclenché du tout un jour donné (ni bouton manuel, ni "Aspirer"),
-// on la lance nous-mêmes à midi pour que la base d'articles continue de
-// s'étoffer même si personne ne passe sur le site pendant longtemps. Ne se
-// déclenche QUE si aucune édition n'existe déjà pour aujourd'hui — jamais en
-// double avec quoi que ce soit fait plus tôt dans la journée.
-const FALLBACK_HOUR = 12;
-const FALLBACK_MINUTE = 0;
+// ("Aspirer les news" sur /direct, forceNoAi — zéro coût IA), relancée
+// toutes les FALLBACK_INTERVAL_HOURS heures pour que la base d'articles
+// continue de s'étoffer même si personne ne passe sur le site pendant
+// longtemps. fetchNewItemsFromSelectedCategories dédoublonne déjà par
+// freshrssItemId, donc relancer souvent ne coûte rien de plus qu'un appel
+// réseau vers FreshRSS si rien de neuf n'est paru entre-temps.
+const FALLBACK_INTERVAL_HOURS = 3;
 
 async function runOnceNoAi() {
   console.log(`[worker] Aspiration RSS de secours (sans IA) — ${new Date().toISOString()}`);
@@ -88,18 +87,14 @@ async function tick() {
     return;
   }
 
-  // Planning désactivé (mode manuel, bouton sur l'accueil) : on ne fait rien
-  // tant qu'il n'est pas midi, et on ne relance jamais deux fois le même
-  // jour (que ce soit nous-mêmes ou une action manuelle).
+  // Planning désactivé (mode manuel, bouton sur l'accueil) : aspiration de
+  // secours à chaque créneau de FALLBACK_INTERVAL_HOURS heures (00h, 03h,
+  // 06h...), une seule fois par créneau.
   const { hour, minute, dateKey } = currentHourMinuteInTz(settings.editionTz);
-  if (hour === FALLBACK_HOUR && minute === FALLBACK_MINUTE && lastRunDate !== dateKey) {
-    lastRunDate = dateKey;
-    const existing = await prisma.edition.findFirst({ where: { date: todayDateOnly() } });
-    if (!existing) {
-      await runOnceNoAi();
-    } else {
-      console.log("[worker] Déjà de l'activité aujourd'hui — pas d'aspiration de secours.");
-    }
+  const slot = `${dateKey}-${Math.floor(hour / FALLBACK_INTERVAL_HOURS)}`;
+  if (minute === 0 && hour % FALLBACK_INTERVAL_HOURS === 0 && lastFallbackSlot !== slot) {
+    lastFallbackSlot = slot;
+    await runOnceNoAi();
   }
 }
 
