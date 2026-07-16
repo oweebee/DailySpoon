@@ -449,9 +449,19 @@ export async function GET(req: NextRequest) {
         })
       );
     }
-    // 3) Ni Redlib ni l'API JSON n'ont marché — on retombe sur le chemin
-    // générique ci-dessous (fetch direct de reddit.com), qui échouera
-    // probablement aussi mais affichera au moins la page de repli propre.
+    // 3) Ni les miroirs Redlib ni l'API JSON n'ont marché. Retomber sur le
+    // fetch générique ne ferait que refaire le même appel bloqué vers
+    // reddit.com pour la même erreur — autant l'annoncer clairement tout
+    // de suite plutôt que de perdre du temps sur une requête vouée à
+    // échouer.
+    return htmlResponse(
+      renderPage({
+        title: "Reddit indisponible depuis ce serveur",
+        bodyHtml:
+          "<p>Reddit bloque les requêtes venant de ce serveur (IP d'hébergeur), y compris via son API publique et les miroirs de secours essayés. Utilise « Ouvrir dans un nouvel onglet » pour lire ce post directement.</p>",
+        originalUrl
+      })
+    );
   }
 
   try {

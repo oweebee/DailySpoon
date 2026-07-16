@@ -1,11 +1,64 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 type ArticleModalState = {
   url: string;
   title?: string;
 } | null;
+
+// Reddit bloque les requêtes serveur-à-serveur (voir /api/article-proxy) —
+// y compris l'API JSON officielle et les miroirs de secours essayés. Seule
+// solution qui reste : le widget d'embed officiel de Reddit
+// (embed.redditmedia.com), chargé et exécuté par le NAVIGATEUR du
+// visiteur — donc avec son IP, jamais bloquée. Contrepartie : ça affiche
+// une carte compacte (façon embed de tweet), pas le texte intégral du post.
+const REDDIT_POST_RE = /reddit\.com\/r\/[^/]+\/comments\//i;
+
+function isRedditPostUrl(url: string): boolean {
+  return REDDIT_POST_RE.test(url);
+}
+
+function redditSubreddit(url: string): string | null {
+  const m = /reddit\.com\/r\/([^/]+)/i.exec(url);
+  return m ? m[1] : null;
+}
+
+function RedditEmbed({ url, title }: { url: string; title?: string }) {
+  useEffect(() => {
+    const w = window as unknown as { rembeddit?: { watch: () => void } };
+    if (w.rembeddit?.watch) {
+      w.rembeddit.watch();
+      return;
+    }
+    if (document.getElementById("reddit-embed-platform-script")) return;
+    const script = document.createElement("script");
+    script.id = "reddit-embed-platform-script";
+    script.src = "https://embed.redditmedia.com/widgets/platform.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, [url]);
+
+  const sub = redditSubreddit(url);
+
+  return (
+    <div className="h-full w-full overflow-auto bg-paper p-6">
+      <blockquote className="reddit-embed-bq" data-embed-height="500">
+        <a href={url}>{title || url}</a>
+        {sub && (
+          <>
+            {" "}
+            dans <a href={`https://www.reddit.com/r/${sub}/`}>r/{sub}</a>
+          </>
+        )}
+      </blockquote>
+      <p className="mt-4 text-center text-xs italic text-sepia">
+        Aperçu Reddit — chargé directement par ton navigateur (le serveur de DailySpoon est
+        bloqué par Reddit). Pour le texte intégral, utilise « Ouvrir dans un nouvel onglet ».
+      </p>
+    </div>
+  );
+}
 
 type ArticleModalContextValue = {
   openArticle: (url: string, title?: string) => void;
@@ -74,17 +127,24 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
                 </button>
               </div>
             </div>
-            {/* Passe par notre proxy d'article (extraction Readability,
-                façon Morss) plutôt que de charger le site source
-                directement : beaucoup de sites (TechCrunch, Numerama, ...)
-                refusent l'affichage en iframe via X-Frame-Options/CSP. Le
-                contenu servi ici vient de notre propre domaine, donc
-                jamais bloqué. */}
-            <iframe
-              src={`/api/article-proxy?url=${encodeURIComponent(state.url)}`}
-              title={state.title || "Article"}
-              className="h-full w-full flex-1 bg-paper"
-            />
+            {isRedditPostUrl(state.url) ? (
+              // Reddit bloque notre proxy serveur (voir /api/article-proxy) —
+              // on bascule sur son widget d'embed officiel, chargé côté
+              // navigateur avec l'IP du visiteur plutôt que celle du serveur.
+              <RedditEmbed url={state.url} title={state.title} />
+            ) : (
+              // Passe par notre proxy d'article (extraction Readability,
+              // façon Morss) plutôt que de charger le site source
+              // directement : beaucoup de sites (TechCrunch, Numerama, ...)
+              // refusent l'affichage en iframe via X-Frame-Options/CSP. Le
+              // contenu servi ici vient de notre propre domaine, donc
+              // jamais bloqué.
+              <iframe
+                src={`/api/article-proxy?url=${encodeURIComponent(state.url)}`}
+                title={state.title || "Article"}
+                className="h-full w-full flex-1 bg-paper"
+              />
+            )}
           </div>
         </div>
       )}
