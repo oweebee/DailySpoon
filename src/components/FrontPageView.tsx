@@ -138,7 +138,7 @@ export function FrontPageView({
       {(heroMain || categories.length > 0) && (
         <div className="-mx-6 mb-10 flex snap-x snap-mandatory overflow-x-auto sm:hidden">
           {heroMain && (
-            <div className="h-[70dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
+            <div className="h-[84dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
               <div className="flex min-h-full flex-col border-2 border-ink p-6">
                 <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
                   ✦ À la une ✦
@@ -152,7 +152,7 @@ export function FrontPageView({
             </div>
           )}
           {categories.map((cat, i) => (
-            <div key={cat} className="h-[70dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
+            <div key={cat} className="h-[84dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
               <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} fillMobile />
             </div>
           ))}

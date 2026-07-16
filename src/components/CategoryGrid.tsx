@@ -81,7 +81,7 @@ export function CategoryGrid({
           sommet. */}
       <div className="-mx-6 flex snap-x snap-mandatory overflow-x-auto md:hidden">
         {categories.map((cat) => (
-          <div key={cat.label} className="h-[70dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
+          <div key={cat.label} className="h-[84dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
             <CategoryColumn
               label={cat.label}
               articles={cat.articles}

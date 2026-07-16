@@ -29,40 +29,54 @@ export function Masthead({ date }: { date: Date }) {
 
   return (
     <header className="mb-10">
-      {/* Bandeau supérieur */}
-      <div className="flex items-center justify-between border-b border-ink py-1 text-[0.65rem] uppercase tracking-[0.25em] text-sepia">
-        <span>Édition quotidienne personnelle</span>
-        <span>Prix : ≈ 10 ¢</span>
-      </div>
+      {/* Zone repère pour le timbre "EN DIRECT" en desktop : englobe le
+          bandeau du haut, le titre ET le double filet, pour que le timbre
+          puisse être centré verticalement sur toute cette hauteur (entre le
+          bandeau et le menu du dessous), pas juste sur la ligne du titre. */}
+      <div className="relative">
+        {/* Bandeau supérieur */}
+        <div className="flex items-center justify-between border-b border-ink py-1 text-[0.65rem] uppercase tracking-[0.25em] text-sepia">
+          <span>Édition quotidienne personnelle</span>
+          <span>Prix : ≈ 10 ¢</span>
+        </div>
 
-      {/* Masthead gothique centré */}
-      <div className="relative py-6 text-center">
-        <Link href="/" className="font-masthead text-5xl font-black uppercase tracking-tight md:text-7xl">
-          DailySp
-          <SpoonO />
-          <SpoonO />n
-        </Link>
+        {/* Masthead gothique centré */}
+        <div className="relative py-6 text-center">
+          <Link href="/" className="font-masthead text-5xl font-black uppercase tracking-tight md:text-7xl">
+            DailySp
+            <SpoonO />
+            <SpoonO />n
+          </Link>
 
-        {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
-            globals.css), plus ".stamp-button" : les deux se disputaient la
-            propriété "transform" (rotation vs centrage vertical Tailwind),
-            ce qui empêchait la rotation de s'afficher. Centrage vertical ici
-            via inset-y-0/my-auto (Tailwind), sans transform, donc plus de
-            conflit possible avec la rotation de .stamp-live.
-            Mobile : le timbre était tronqué en position absolue à droite du
-            titre (pas assez de place) — en dessous de "md", il redevient un
-            simple bloc centré sous le titre ; à partir de "md" seulement, il
-            reprend sa position absolue à droite. */}
+          {/* Timbre "EN DIRECT" version mobile : bloc centré sous le titre,
+              en flux normal (une position absolue le tronquait, pas assez de
+              place à droite du titre en mobile). */}
+          <Link
+            href="/direct"
+            className="stamp-live relative mx-auto mt-4 block w-fit border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-white md:hidden"
+          >
+            En direct
+          </Link>
+        </div>
+
+        <div className="double-rule" />
+
+        {/* Timbre "EN DIRECT" version desktop — classe ".stamp-live"
+            autonome (voir globals.css), qui NE se combine PAS avec
+            ".stamp-button" : les deux se disputaient la propriété
+            "transform" (rotation vs centrage vertical), ce qui empêchait la
+            rotation de s'afficher. Centré verticalement sur toute la zone
+            "bandeau + titre + filet" ci-dessus via inset-y-0/my-auto (sans
+            transform, donc aucun conflit avec la rotation de .stamp-live). */}
         <Link
           href="/direct"
-          className="stamp-live relative mx-auto mt-4 block w-fit border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-white md:absolute md:inset-y-0 md:-right-5 md:mx-0 md:mt-0 md:my-auto md:h-fit md:px-5 md:py-2 md:text-sm"
+          className="stamp-live absolute inset-y-0 -right-2.5 my-auto hidden h-fit border-2 border-ink bg-ink px-5 py-2 font-display text-sm font-bold uppercase tracking-[0.25em] text-white md:block"
         >
           En direct
         </Link>
       </div>
 
       {/* Ligne de date entre deux filets */}
-      <div className="double-rule" />
       <div className="flex items-center justify-between py-1.5 text-xs uppercase tracking-[0.2em]">
         <span className="capitalize">{formatted}</span>
         <nav className="space-x-6">
