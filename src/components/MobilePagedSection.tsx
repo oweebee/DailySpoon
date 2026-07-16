@@ -33,6 +33,7 @@ export function MobilePagedSection({
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const isFirstRender = useRef(true);
 
   // Détecte quelle page est actuellement affichée après un swipe.
   useEffect(() => {
@@ -46,6 +47,20 @@ export function MobilePagedSection({
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Remonte en haut de la nouvelle colonne à chaque changement de page : le
+  // swipe est horizontal mais le défilement vertical est maintenant celui de
+  // la fenêtre (plus de zone de défilement interne par page), donc rien ne
+  // ramenait automatiquement en haut de la rubrique fraîchement swipée si on
+  // avait déjà défilé dans la précédente. On ignore le tout premier rendu
+  // (arrivée sur la page), pour ne pas faire sauter la fenêtre au chargement.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    containerRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
+  }, [activeIndex]);
 
   // Cale la hauteur du conteneur sur celle de la page active, et la
   // réajuste en continu (ResizeObserver) tant que son contenu change de
