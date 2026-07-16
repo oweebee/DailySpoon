@@ -131,16 +131,40 @@ model Edition {
 // valeur d'"editionId" par article — à la génération suivante, un article
 // déjà vu est réattribué à la NOUVELLE édition, ce qui viderait
 // silencieusement les éditions précédentes de leurs articles si on ne
-// gardait qu'Article comme source pour les archives. Ici, une ligne n'est
-// jamais modifiée ni réattribuée après coup : elle reste fidèle à
+// gardait qu'Article comme source pour les archives. Une ligne EditionArticle
+// n'est jamais modifiée ni réattribuée après coup : elle reste fidèle à
 // l'impression du jour où elle a été créée, même si l'article vivant
 // correspondant change ensuite de contenu ou change d'édition.
+//
+// Simple table de LIAISON (édition x article) — le contenu réel vit dans
+// ArticleSnapshotContent, partagé entre toutes les éditions du jour où
+// l'article n'a pas changé (voir plus bas). Sans ça, régénérer 5 fois dans la
+// même journée dupliquait 5 fois le texte complet d'un article resté
+// identique entre-temps.
 model EditionArticle {
   id        String   @id @default(cuid())
   edition   Edition  @relation(fields: [editionId], references: [id], onDelete: Cascade)
   editionId String
   articleId String // référence informative vers l'Article vivant d'origine (pas de contrainte stricte : il peut depuis avoir été purgé)
 
+  content   ArticleSnapshotContent @relation(fields: [contentId], references: [id])
+  contentId String
+
+  @@index([editionId])
+  @@index([contentId])
+}
+
+// Contenu figé partagé, dédupliqué par empreinte (contentHash = hachage des
+// champs ci-dessous) : deux régénérations le même jour où un article n'a
+// strictement pas changé (même score IA, même résumé, même médaille...)
+// pointent vers la MÊME ligne ici au lieu d'en dupliquer une copie complète
+// à chaque fois. Dès qu'un seul champ change (nouvelle passe de curation IA,
+// médaille retirée, image retrouvée...), une nouvelle ligne est créée pour
+// cette nouvelle combinaison — le contenu ici n'est donc jamais modifié après
+// coup, seulement créé une fois par combinaison distincte.
+model ArticleSnapshotContent {
+  id               String    @id @default(cuid())
+  contentHash      String    @unique
   headline         String?
   summary          String?   @db.Text
   frontPageSummary String?   @db.Text
@@ -154,7 +178,7 @@ model EditionArticle {
   publishedAt      DateTime?
   medal            Boolean   @default(false)
 
-  @@index([editionId])
+  editionArticles  EditionArticle[]
 }
 
 // Runtime-configurable settings, editable from /admin/settings instead of

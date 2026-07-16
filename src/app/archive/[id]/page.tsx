@@ -23,9 +23,12 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
   if (!edition) notFound();
 
   const [snapshot, selectedCategories] = await Promise.all([
+    // Le contenu réel est sur ArticleSnapshotContent (déduplication entre
+    // régénérations d'un même jour), d'où le "include" ci-dessous.
     prisma.editionArticle.findMany({
       where: { editionId: edition.id },
-      orderBy: { publishedAt: "desc" }
+      include: { content: true },
+      orderBy: { content: { publishedAt: "desc" } }
     }),
     prisma.selectedCategory.findMany({ orderBy: { order: "asc" } })
   ]);
@@ -33,18 +36,18 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
 
   const articles = snapshot.map((a) => ({
     id: a.id,
-    headline: a.headline,
-    summary: a.summary,
-    frontPageSummary: a.frontPageSummary,
-    category: a.category,
-    priorityScore: a.priorityScore,
-    sourceUrl: a.sourceUrl,
-    sourceTitle: a.sourceTitle,
-    feedTitle: a.feedTitle,
-    imageUrl: a.imageUrl,
-    publishedAt: a.publishedAt,
+    headline: a.content.headline,
+    summary: a.content.summary,
+    frontPageSummary: a.content.frontPageSummary,
+    category: a.content.category,
+    priorityScore: a.content.priorityScore,
+    sourceUrl: a.content.sourceUrl,
+    sourceTitle: a.content.sourceTitle,
+    feedTitle: a.content.feedTitle,
+    imageUrl: a.content.imageUrl,
+    publishedAt: a.content.publishedAt,
     favorite: false,
-    medal: a.medal
+    medal: a.content.medal
   }));
 
   // Heure de génération affichée en plus de la date, pour distinguer les

@@ -33,7 +33,17 @@ export function MobilePagedSection({
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(0);
   const isFirstRender = useRef(true);
+  // Position de défilement (verticale, relative au haut du conteneur)
+  // mémorisée par page — pas d'entrée = jamais visitée/jamais défilée, donc
+  // on atterrit en haut ; une entrée existante restaure exactement l'endroit
+  // où on était avant de swiper ailleurs.
+  const scrollOffsets = useRef<Record<number, number>>({});
+
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
 
   // Détecte quelle page est actuellement affichée après un swipe.
   useEffect(() => {
@@ -48,24 +58,26 @@ export function MobilePagedSection({
     return () => container.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Remonte en haut de la nouvelle colonne à chaque changement de page : le
-  // swipe est horizontal mais le défilement vertical est maintenant celui de
-  // la fenêtre (plus de zone de défilement interne par page), donc rien ne
-  // ramenait automatiquement en haut de la rubrique fraîchement swipée si on
-  // avait déjà défilé dans la précédente. On ignore le tout premier rendu
-  // (arrivée sur la page), pour ne pas faire sauter la fenêtre au chargement.
+  // Enregistre en continu la position de défilement de la page ACTUELLEMENT
+  // active (indépendant du swipe horizontal, qui ne touche pas au défilement
+  // vertical de la fenêtre) — sert à la restaurer si on revient sur cette
+  // page plus tard.
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
+    function onWindowScroll() {
+      const container = containerRef.current;
+      if (!container) return;
+      scrollOffsets.current[activeIndexRef.current] = Math.max(0, window.scrollY - container.offsetTop);
     }
-    containerRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
-  }, [activeIndex]);
+    window.addEventListener("scroll", onWindowScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onWindowScroll);
+  }, []);
 
   // Cale la hauteur du conteneur sur celle de la page active, et la
   // réajuste en continu (ResizeObserver) tant que son contenu change de
   // taille — notamment le défilement infini des colonnes, qui charge des
-  // articles au fur et à mesure qu'on approche du bas.
+  // articles au fur et à mesure qu'on approche du bas. Doit s'exécuter avant
+  // la restauration de position ci-dessous, sinon le conteneur peut ne pas
+  // encore être assez haut pour atteindre la position mémorisée.
   useEffect(() => {
     const el = pageRefs.current[activeIndex];
     const container = containerRef.current;
@@ -78,6 +90,21 @@ export function MobilePagedSection({
     ro.observe(el);
     return () => ro.disconnect();
   }, [activeIndex, pages.length]);
+
+  // À chaque changement de page : remonte en haut si cette colonne n'a
+  // jamais été défilée, ou restaure sa position exacte si on y était déjà
+  // allé et qu'on y avait défilé. On ignore le tout premier rendu (arrivée
+  // sur la page), pour ne pas faire sauter la fenêtre au chargement.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const container = containerRef.current;
+    if (!container) return;
+    const offset = scrollOffsets.current[activeIndex] ?? 0;
+    window.scrollTo({ top: container.offsetTop + offset, behavior: "auto" });
+  }, [activeIndex]);
 
   return (
     <div

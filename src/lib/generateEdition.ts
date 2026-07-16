@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
 import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
@@ -54,6 +55,44 @@ function capPerCategory(items: RawItem[], max: number): { aiItems: RawItem[]; ov
   }
 
   return { aiItems, overflowItems };
+}
+
+/**
+ * Empreinte des champs figés dans une photo d'archive (ArticleSnapshotContent)
+ * — deux articles (ou deux régénérations du même article) avec exactement les
+ * mêmes valeurs ici partagent la même ligne de contenu au lieu d'en dupliquer
+ * une copie. Volontairement simple (concaténation + sha256) : la stabilité
+ * entre deux appels compte plus que la résistance aux collisions.
+ */
+function snapshotContentHash(a: {
+  headline: string | null;
+  summary: string | null;
+  frontPageSummary: string | null;
+  category: string | null;
+  priorityScore: number | null;
+  imageUrl: string | null;
+  sourceUrl: string;
+  sourceTitle: string;
+  feedTitle: string;
+  categoryLabel: string | null;
+  publishedAt: Date | null;
+  medal: boolean;
+}): string {
+  const parts = [
+    a.headline ?? "",
+    a.summary ?? "",
+    a.frontPageSummary ?? "",
+    a.category ?? "",
+    a.priorityScore?.toString() ?? "",
+    a.imageUrl ?? "",
+    a.sourceUrl,
+    a.sourceTitle,
+    a.feedTitle,
+    a.categoryLabel ?? "",
+    a.publishedAt?.toISOString() ?? "",
+    String(a.medal)
+  ];
+  return createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
 /**
@@ -194,11 +233,20 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     }
   });
 
-  if (qualifyingArticles.length > 0) {
-    await prisma.editionArticle.createMany({
-      data: qualifyingArticles.map((a) => ({
-        editionId: edition.id,
-        articleId: a.id,
+  // Le contenu réel (texte, image, score...) est stocké une seule fois par
+  // combinaison distincte dans ArticleSnapshotContent (déduplication par
+  // empreinte) — EditionArticle ne fait plus que lier une édition à ce
+  // contenu. Si un article n'a strictement pas changé depuis la dernière
+  // régénération du jour (même score IA, même résumé, même médaille...), sa
+  // nouvelle ligne EditionArticle réutilise le contenu déjà existant au lieu
+  // d'en dupliquer une copie complète.
+  for (const a of qualifyingArticles) {
+    const hash = snapshotContentHash(a);
+    const content = await prisma.articleSnapshotContent.upsert({
+      where: { contentHash: hash },
+      update: {},
+      create: {
+        contentHash: hash,
         headline: a.headline,
         summary: a.summary,
         frontPageSummary: a.frontPageSummary,
@@ -211,7 +259,10 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
         categoryLabel: a.categoryLabel,
         publishedAt: a.publishedAt,
         medal: a.medal
-      }))
+      }
+    });
+    await prisma.editionArticle.create({
+      data: { editionId: edition.id, articleId: a.id, contentId: content.id }
     });
   }
 

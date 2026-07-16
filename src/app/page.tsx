@@ -36,28 +36,31 @@ export default async function HomePage() {
   // la DERNIÈRE édition ayant touché cet article, et serait donc réattribué
   // (voire vidé) dès la génération suivante si on continuait à s'en servir
   // ici. EditionArticle ne change plus jamais après coup — voir
-  // schema.prisma et generateEdition.ts.
+  // schema.prisma et generateEdition.ts. Le contenu réel est sur
+  // ArticleSnapshotContent (déduplication entre régénérations d'un même
+  // jour), d'où le "include" ci-dessous.
   const snapshot = latestEdition
     ? await prisma.editionArticle.findMany({
         where: { editionId: latestEdition.id },
-        orderBy: { publishedAt: "desc" }
+        include: { content: true },
+        orderBy: { content: { publishedAt: "desc" } }
       })
     : [];
 
   const articles = snapshot.map((a) => ({
     id: a.id,
-    headline: a.headline,
-    summary: a.summary,
-    frontPageSummary: a.frontPageSummary,
-    category: a.category,
-    priorityScore: a.priorityScore,
-    sourceUrl: a.sourceUrl,
-    sourceTitle: a.sourceTitle,
-    feedTitle: a.feedTitle,
-    imageUrl: a.imageUrl,
-    publishedAt: a.publishedAt,
+    headline: a.content.headline,
+    summary: a.content.summary,
+    frontPageSummary: a.content.frontPageSummary,
+    category: a.content.category,
+    priorityScore: a.content.priorityScore,
+    sourceUrl: a.content.sourceUrl,
+    sourceTitle: a.content.sourceTitle,
+    feedTitle: a.content.feedTitle,
+    imageUrl: a.content.imageUrl,
+    publishedAt: a.content.publishedAt,
     favorite: false,
-    medal: a.medal
+    medal: a.content.medal
   }));
 
   const editionDate = latestEdition?.date ?? new Date();
