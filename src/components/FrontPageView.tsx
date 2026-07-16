@@ -30,13 +30,6 @@ export function FrontPageView({
   articles: ArticleLike[];
   categoryOrder?: CategoryOrderEntry[];
 }) {
-export function FrontPageView({
-  articles,
-  categoryOrder = []
-}: {
-  articles: ArticleLike[];
-  categoryOrder?: CategoryOrderEntry[];
-}) {
   if (articles.length === 0) {
     return (
       <p className="py-24 text-center italic text-sepia">
