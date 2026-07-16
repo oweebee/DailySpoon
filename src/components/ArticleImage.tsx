@@ -9,9 +9,9 @@ import { useState } from "react";
  * blocked, dead link, etc.) instead of showing a broken-image icon.
  *
  * dateLabel, if given, is stamped on top of the photo like an archival
- * press-photo date stamp: rotated, ink-red, blended into the image with
- * mix-blend-multiply so it reads as ink pressed onto the print rather than
- * a modern UI badge.
+ * press-photo date stamp: rotated, ink-red, with a solid paper-colored chip
+ * behind it so it stays readable over ANY photo — including dark/black
+ * backgrounds, where a blend-mode stamp would disappear entirely.
  */
 export function ArticleImage({
   src,
@@ -39,7 +39,7 @@ export function ArticleImage({
       />
       {dateLabel && (
         <span
-          className="pointer-events-none absolute bottom-2 right-2 rotate-[-9deg] select-none border-[3px] border-[#c81e1e] px-2.5 py-1 font-mono text-[0.85rem] font-bold uppercase tracking-wider text-[#c81e1e] opacity-90 mix-blend-multiply"
+          className="pointer-events-none absolute bottom-2 right-2 rotate-[-9deg] select-none border-[3px] border-[#c81e1e] bg-paper px-2.5 py-1 font-mono text-[0.85rem] font-bold uppercase tracking-wider text-[#c81e1e] shadow-[0_1px_4px_rgba(0,0,0,0.4)]"
           aria-hidden="true"
         >
           {dateLabel}
