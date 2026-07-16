@@ -16,6 +16,14 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+  /* La bande tout en haut (sous l'encoche/la barre de statut, hauteur =
+     safe-area-inset-top) doit être noire plutôt que dans le gris clair du
+     reste des marges — peint par-dessus le fond uni via un dégradé calé
+     sur exactement cette hauteur, sans toucher au reste du fond. */
+  background-image: linear-gradient(#1a1a1a, #1a1a1a);
+  background-repeat: no-repeat;
+  background-size: 100% env(safe-area-inset-top);
+  background-position: top;
   /* Pas de texture ici : uniquement sur le bloc de contenu lui-même
      (.paper-panel, utilisé par tous les <main>) — les marges de part et
      d'autre restent unies, comme avant. */

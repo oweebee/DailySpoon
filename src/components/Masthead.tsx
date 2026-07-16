@@ -48,10 +48,14 @@ export function Masthead({ date }: { date: Date }) {
             propriété "transform" (rotation vs centrage vertical Tailwind),
             ce qui empêchait la rotation de s'afficher. Centrage vertical ici
             via inset-y-0/my-auto (Tailwind), sans transform, donc plus de
-            conflit possible avec la rotation de .stamp-live. */}
+            conflit possible avec la rotation de .stamp-live.
+            Mobile : le timbre était tronqué en position absolue à droite du
+            titre (pas assez de place) — en dessous de "md", il redevient un
+            simple bloc centré sous le titre ; à partir de "md" seulement, il
+            reprend sa position absolue à droite. */}
         <Link
           href="/direct"
-          className="stamp-live absolute -right-3 inset-y-0 my-auto h-fit border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-white sm:-right-5 sm:px-5 sm:py-2 sm:text-sm"
+          className="stamp-live relative mx-auto mt-4 block w-fit border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-white md:absolute md:inset-y-0 md:-right-5 md:mx-0 md:mt-0 md:my-auto md:h-fit md:px-5 md:py-2 md:text-sm"
         >
           En direct
         </Link>
