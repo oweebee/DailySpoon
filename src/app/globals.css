@@ -98,9 +98,16 @@ body {
    jamais en pratique malgré "!important". Ici le centrage vertical se fait
    SANS transform (inset-y-0 + my-auto côté Tailwind, voir Masthead.tsx), et
    "transform" ne sert donc plus qu'à la rotation — plus aucune ambiguïté
-   possible. */
+   possible.
+   PAS de "position" ici volontairement : les classes Tailwind @tailwind
+   utilities vivent dans un layer CSS nommé, qui perd TOUJOURS face à une
+   règle non "layered" comme celle-ci, quels que soient l'ordre ou la
+   spécificité — "position: relative" ici écrasait alors le "absolute" posé
+   en JSX (Masthead.tsx), transformant le timbre en bloc pleine largeur qui,
+   une fois pivoté, traversait tout l'écran en diagonale. La position se
+   règle donc entièrement via les classes Tailwind côté JSX (relative en
+   mobile, absolute en desktop). */
 .stamp-live {
-  position: relative;
   transform: rotate(-9deg);
   box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
   outline: 2px dashed rgba(26, 26, 26, 0.5);
