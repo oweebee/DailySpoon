@@ -123,12 +123,10 @@ export function EditionView({
               </h1>
               {/* Choix de style : pas de photo sur "à la une", même quand
                   l'article en a une — uniquement du texte pour les 3
-                  articles vedettes. */}
-              <p
-                className={`newsprint mx-auto max-w-md text-left text-sm leading-snug text-neutral-800 ${
-                  clampSummary ? "line-clamp-[10]" : ""
-                }`}
-              >
+                  articles vedettes. Aperçu toujours limité à 10 lignes ici
+                  (peu importe la page) — pour lire la suite, on ouvre
+                  l'article via le lien source. */}
+              <p className="newsprint mx-auto max-w-md line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
                 {hero.summary}
               </p>
               <div className="mt-3">
