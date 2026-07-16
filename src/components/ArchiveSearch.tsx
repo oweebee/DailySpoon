@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 type SearchArticle = {
   id: string;
   headline: string | null;
+  publishedAt: string | Date | null;
   edition?: { date: string | Date } | null;
 };
 
@@ -108,8 +109,13 @@ function groupByDay(results: SearchArticle[] | null): DayResult[] {
   if (!results) return [];
   const byKey = new Map<string, DayResult>();
   for (const a of results) {
-    if (!a.edition?.date) continue;
-    const d = new Date(a.edition.date);
+    // Regroupé par date de PUBLICATION de l'article (publishedAt), pas par
+    // date de génération de son édition (edition.date) : les deux peuvent
+    // diverger (un article publié le 10 peut n'être récupéré/inclus dans une
+    // édition que le 16), et chercher "10 juillet" doit faire remonter le
+    // 10, pas le jour où l'édition correspondante a été générée.
+    if (!a.publishedAt) continue;
+    const d = new Date(a.publishedAt);
     const key = d.toISOString().slice(0, 10);
     if (!byKey.has(key)) {
       const label = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(d);
