@@ -78,11 +78,16 @@ export default async function HomePage() {
       {!settings.editionScheduleEnabled && <PrintStampButton provider={settings.aiProvider} />}
       {/* Compte d'articles affiché en permanence (pas seulement dans le
           message transitoire du bouton d'impression, qui peut ne jamais
-          s'afficher si la requête traîne au-delà du timeout du proxy) —
-          voir aussi /archive/[id] pour l'équivalent sur une édition passée. */}
+          s'afficher si la requête traîne au-delà du timeout du proxy) — avec
+          le vivier de départ (avant plafond IA par catégorie) entre
+          parenthèses quand il diffère du compte final retenu sur la une.
+          Voir aussi /archive/[id] pour l'équivalent sur une édition passée. */}
       {latestEdition && articles.length > 0 && (
         <p className="mb-6 -mt-6 text-center text-xs uppercase tracking-[0.3em] text-sepia">
           {articles.length} article{articles.length > 1 ? "s" : ""}
+          {latestEdition.sourcePoolCount != null && latestEdition.sourcePoolCount !== articles.length && (
+            <> (sur {latestEdition.sourcePoolCount} récupéré{latestEdition.sourcePoolCount > 1 ? "s" : ""})</>
+          )}
         </p>
       )}
       {articles.length > 0 ? (

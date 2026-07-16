@@ -121,6 +121,12 @@ model Edition {
   headline    String? // front-page headline
   status      String    @default("draft") // draft | published | failed
   generatedAt DateTime  @default(now())
+  // Nombre total d'articles "included" du jour couvert par cette édition
+  // (avant le plafond IA par catégorie, MAX_AI_ITEMS_PER_CATEGORY) — le vivier
+  // de départ, à distinguer de snapshot.length qui ne compte que ceux
+  // réellement réécrits par l'IA et retenus sur la une (voir generateEdition.ts).
+  // null pour les éditions générées avant ce champ.
+  sourcePoolCount Int?
   articles    Article[]
   snapshot    EditionArticle[]
 }

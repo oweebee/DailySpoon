@@ -239,7 +239,10 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     where: { id: edition.id },
     data: {
       headline: heroArticle?.headline ?? edition.headline,
-      status: articleCount > 0 ? "published" : "draft"
+      status: articleCount > 0 ? "published" : "draft",
+      // Vivier total (avant plafond IA par catégorie) — voir schema.prisma,
+      // affiché à côté du compte final retenu sur la une (snapshot.length).
+      sourcePoolCount: articleCount
     }
   });
 

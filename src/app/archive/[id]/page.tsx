@@ -74,6 +74,9 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
         {" · "}Édition de {timeLabel}
         {" · "}
         {articles.length} article{articles.length > 1 ? "s" : ""}
+        {edition.sourcePoolCount != null && edition.sourcePoolCount !== articles.length && (
+          <> (sur {edition.sourcePoolCount} récupéré{edition.sourcePoolCount > 1 ? "s" : ""})</>
+        )}
       </p>
       {articles.length > 0 ? (
         <FrontPageView articles={articles} categoryOrder={categoryOrder} date={edition.date} />
