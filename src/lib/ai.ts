@@ -396,6 +396,13 @@ Réponds UNIQUEMENT avec un tableau JSON de ${items.length} objets, dans le mêm
  * résultat de cette recherche. Un seul appel par génération (pas par
  * article) : coût marginal (quelques centimes, souvent sous le quota
  * gratuit journalier de Google pour ce type de requête).
+ *
+ * La date du jour est ANCRÉE explicitement dans le prompt (au format long,
+ * heure de Paris) : sans ça, un modèle avec recherche web n'a aucune
+ * garantie de savoir quel jour on est réellement (son "aujourd'hui" interne
+ * peut être périmé ou ambigu), et peut ramener des résultats de recherche
+ * datés de n'importe quand — d'où la consigne explicite de rejeter tout
+ * résultat dont la date n'est pas clairement celle du jour indiqué.
  */
 async function fetchTrendingTopicsGemini(
   apiKey: string,
@@ -403,7 +410,19 @@ async function fetchTrendingTopicsGemini(
   items: CurationItem[]
 ): Promise<string | null> {
   const categories = [...new Set(items.map((it) => it.category).filter(Boolean))];
-  const prompt = `Recherche sur le web les news les plus marquantes/importantes dans le monde et en France aujourd'hui, en particulier dans ces domaines : ${categories.join(", ") || "actualité générale"}.
+  const todayLabel = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).format(new Date());
+
+  const prompt = `Nous sommes le ${todayLabel} (heure de Paris) — utilise cette date comme référence, pas une autre.
+
+Recherche sur le web les news les plus marquantes/importantes publiées AUJOURD'HUI, ${todayLabel}, UNIQUEMENT — dans le monde et en France, en particulier dans ces domaines : ${categories.join(", ") || "actualité générale"}.
+
+IMPORTANT : ne retiens QUE des actualités dont tu es certain qu'elles datent bien d'aujourd'hui (${todayLabel}). Exclus tout article plus ancien, tout résumé/rétrospective, et tout résultat dont tu n'es pas sûr de la date exacte de publication — dans le doute, ignore-le plutôt que de le citer avec une date incertaine.
 
 Réponds avec une liste courte (8 à 10 items maximum) de sujets factuels en quelques mots chacun (pas de phrase complète), un par ligne, sans numérotation ni commentaire, format :
 Sujet 1
