@@ -98,12 +98,19 @@ export default function AdminSettingsPage() {
         });
         // Clé déjà enregistrée : charge tout de suite la liste des moteurs
         // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
-        if (s.geminiApiKey) loadGeminiModels(s.geminiApiKey);
+        // Le moteur déjà enregistré (s.geminiModel) est passé explicitement
+        // ici plutôt que lu depuis `form` : à cet instant, le state React
+        // issu du setForm ci-dessus n'est pas encore appliqué (closure figée
+        // sur l'ancien `form.geminiModel`, vide) — sans ce paramètre,
+        // loadGeminiModels croyait toujours qu'aucun moteur n'était choisi
+        // et écrasait systématiquement avec le premier de la liste au
+        // rechargement de la page.
+        if (s.geminiApiKey) loadGeminiModels(s.geminiApiKey, s.geminiModel || "");
       })
       .finally(() => setLoading(false));
   }, []);
 
-  async function loadGeminiModels(apiKey: string) {
+  async function loadGeminiModels(apiKey: string, currentModel?: string) {
     if (!apiKey) {
       setModelsError("Renseigne d'abord une clé API Gemini.");
       return;
@@ -124,8 +131,11 @@ export default function AdminSettingsPage() {
         setGeminiModels(body.models || []);
         // Si aucun moteur n'est encore choisi (première config), on
         // présélectionne le premier de la liste plutôt que de laisser le
-        // champ vide.
-        if (!form.geminiModel && body.models?.[0]) {
+        // champ vide. `currentModel`, quand fourni par l'appelant, prime sur
+        // `form.geminiModel` (qui peut être périmé — voir l'appel initial
+        // dans le useEffect ci-dessus).
+        const preferred = currentModel !== undefined ? currentModel : form.geminiModel;
+        if (!preferred && body.models?.[0]) {
           set("geminiModel", body.models[0].id);
         }
       }

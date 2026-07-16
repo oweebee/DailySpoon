@@ -14,13 +14,13 @@ import { getSettings } from "./settings";
 const MAX_OG_BACKFILL_PER_RUN = 25;
 
 // Coût IA : au plus ce nombre d'articles inclus PAR CATÉGORIE FreshRSS (celles
-// choisies dans /admin/categories, connues avant même de lancer l'IA) passent
-// réellement par l'IA à chaque génération. Les articles inclus au-delà de ce
-// plafond restent affichés (traitement brut fallbackProcess, catégorie
-// FreshRSS d'origine, sans coût IA) plutôt que d'être exclus purement et
-// simplement — ils ne disparaissent pas, ils ne sont juste pas réécrits/notés
-// par l'IA ce jour-là.
-const MAX_AI_ITEMS_PER_CATEGORY = 5;
+// choisies dans /admin/categories) passent par l'IA à chaque génération.
+// Workflow visé : UNE seule impression par jour (le soir), qui doit couvrir
+// toute la journée — donc pas un petit plafond de curation type "top 5", mais
+// un simple garde-fou de sécurité contre une journée pathologiquement
+// chargée dans une seule catégorie (au-delà, le surplus reste affiché en
+// traitement brut fallbackProcess, sans coût IA, plutôt que d'être exclu).
+const MAX_AI_ITEMS_PER_CATEGORY = 200;
 
 // Exporté pour le worker (voir worker/index.ts) : sert à vérifier si une
 // édition existe déjà pour aujourd'hui avant de déclencher une génération de
@@ -168,29 +168,15 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     }
   }
 
-  // Seuls les articles "included" (flux non exclu, catégorie sélectionnée)
-  // passent par l'IA (ou l'heuristique gratuite si pas de clé) — les autres
-  // sont stockés avec un traitement brut systématique, sans jamais
-  // consommer l'API payante, puisqu'ils ne sont de toute façon pas destinés
-  // à être affichés dans l'édition normale (juste trouvables en recherche).
-  const includedItems = rawItems.filter((r) => r.included);
-  const hiddenItems = rawItems.filter((r) => !r.included);
-
-  // Plafond de coût par catégorie : seuls les MAX_AI_ITEMS_PER_CATEGORY items
-  // les plus récents de chaque catégorie FreshRSS partent réellement à l'IA ;
-  // le reste (overflowItems) est quand même stocké et affiché, juste sans
-  // réécriture IA (fallbackProcess), comme les articles non "included".
-  const { aiItems, overflowItems } = capPerCategory(includedItems, MAX_AI_ITEMS_PER_CATEGORY);
-
-  const processedAi = aiItems.length > 0 ? await processArticles(aiItems, options) : [];
-
-  const resultByItemId = new Map<string, ProcessedArticle>();
-  aiItems.forEach((raw, i) => resultByItemId.set(raw.freshrssItemId, processedAi[i]));
-  overflowItems.forEach((raw) => resultByItemId.set(raw.freshrssItemId, fallbackProcess(raw)));
-  hiddenItems.forEach((raw) => resultByItemId.set(raw.freshrssItemId, fallbackProcess(raw)));
-
+  // Stockage initial de TOUS les items tout juste récupérés, systématiquement
+  // en traitement brut (fallbackProcess, aucun coût IA ici) — la sélection IA
+  // proprement dite se fait juste après, séparément, sur TOUT le vivier du
+  // jour pas encore réécrit (voir plus bas) : un article aspiré plus tôt
+  // dans la journée par la veille sans IA (toutes les 3h) doit pouvoir être
+  // choisi par l'IA lors d'une impression complète plus tard, pas seulement
+  // les items tout juste récupérés par CET appel précis.
   for (const raw of rawItems) {
-    const ai = resultByItemId.get(raw.freshrssItemId)!;
+    const fallback = fallbackProcess(raw);
 
     await prisma.article.upsert({
       where: { freshrssItemId: raw.freshrssItemId },
@@ -207,17 +193,74 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
         publishedAt: raw.publishedAt,
         processed: true,
         included: raw.included,
-        headline: ai.headline,
-        summary: ai.summary,
-        category: ai.category,
-        priorityScore: ai.priorityScore,
-        aiRewritten: ai.aiRewritten,
+        headline: fallback.headline,
+        summary: fallback.summary,
+        category: fallback.category,
+        priorityScore: fallback.priorityScore,
+        aiRewritten: false,
         editionId: edition.id
       }
     });
   }
 
   await syncMedalFlags();
+
+  // Sélection IA : TOUT le vivier "included" du jour PAS ENCORE réécrit par
+  // l'IA (aiRewritten: false) — pas seulement les items tout juste récupérés
+  // ci-dessus, pour qu'une impression du soir couvre la journée complète
+  // (y compris les articles déjà stockés en brut par l'aspiration de secours
+  // toutes les 3h). MAX_AI_ITEMS_PER_CATEGORY n'est qu'un garde-fou de
+  // sécurité par catégorie, pas une curation — jamais en mode "Aspirer les
+  // news" (forceNoAi).
+  if (!options.forceNoAi) {
+    const pending = await prisma.article.findMany({
+      where: { publishedAt: contentRange, included: true, aiRewritten: false },
+      orderBy: { publishedAt: "desc" }
+    });
+
+    const pendingAsRawItems: RawItem[] = pending.map((a) => ({
+      freshrssItemId: a.freshrssItemId,
+      feedId: a.feedId,
+      feedTitle: a.feedTitle,
+      categoryLabel: a.categoryLabel,
+      sourceUrl: a.sourceUrl,
+      sourceTitle: a.sourceTitle,
+      sourceExcerpt: a.sourceExcerpt,
+      imageUrl: a.imageUrl,
+      publishedAt: a.publishedAt,
+      included: a.included
+    }));
+
+    const { aiItems } = capPerCategory(pendingAsRawItems, MAX_AI_ITEMS_PER_CATEGORY);
+
+    if (aiItems.length > 0) {
+      const processedAi: ProcessedArticle[] = await processArticles(aiItems, options);
+      const idByFreshrssId = new Map(pending.map((a) => [a.freshrssItemId, a.id]));
+
+      await Promise.all(
+        aiItems.map((item, i) => {
+          const articleId = idByFreshrssId.get(item.freshrssItemId);
+          if (!articleId) return Promise.resolve();
+          const ai = processedAi[i];
+          return prisma.article.update({
+            where: { id: articleId },
+            data: {
+              headline: ai.headline,
+              summary: ai.summary,
+              category: ai.category,
+              priorityScore: ai.priorityScore,
+              aiRewritten: ai.aiRewritten
+            }
+          });
+        })
+      );
+
+      console.log(
+        `[edition] ${aiItems.length} article(s) réécrits par l'IA ce passage ` +
+          `(plafond ${MAX_AI_ITEMS_PER_CATEGORY}/catégorie, sur ${pending.length} en attente).`
+      );
+    }
+  }
 
   // Une passe IA dédiée, une seule fois par génération (jamais en mode
   // "Aspirer les news" sans IA) : recalcule priorityScore sur TOUS les

@@ -25,7 +25,10 @@ const DEFAULT_CATEGORIES = [
   "Autre"
 ];
 
-const BATCH_SIZE = 12;
+// Plus le lot est grand, plus les instructions du prompt (fixes) sont
+// amorties sur un grand nombre d'articles plutôt que répétées à chaque
+// appel — réduit le coût en tokens d'entrée sans changer la qualité.
+const BATCH_SIZE = 24;
 
 /**
  * Style d'écriture appliqué par l'IA lors de la réécriture des titres/
@@ -57,6 +60,13 @@ const NO_EXCERPT_PLACEHOLDER = "Aucun aperçu fourni par le flux — consulte la
 // est doublé plutôt que coupé à la même longueur qu'un article court.
 const BASE_SUMMARY_LEN = 800;
 const LONG_SOURCE_THRESHOLD = BASE_SUMMARY_LEN * 2;
+
+// Longueur max de l'extrait source envoyé à l'IA pour la réécriture — au-delà,
+// coupé avant l'appel (optimisation de coût en tokens d'entrée). Un extrait
+// RSS dépasse rarement cette taille de toute façon ; les articles vraiment
+// longs restent signalés via "long" dans le prompt pour un résumé plus
+// développé, indépendamment de la taille brute envoyée.
+const MAX_EXCERPT_CHARS_FOR_AI = 1500;
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -212,19 +222,21 @@ function buildPrompt(batch: RawItem[], writingStyle: string = "normal"): string 
     index: i,
     source: item.feedTitle,
     title: item.sourceTitle,
-    excerpt: (item.sourceExcerpt || "").slice(0, 3000),
+    // Coupé à MAX_EXCERPT_CHARS_FOR_AI avant l'appel (optimisation de coût) —
+    // "long" ci-dessous reste calculé sur la longueur ORIGINALE, non coupée,
+    // pour continuer à détecter les articles vraiment substantiels même si
+    // l'extrait envoyé est raccourci.
+    excerpt: (item.sourceExcerpt || "").slice(0, MAX_EXCERPT_CHARS_FOR_AI),
     categoryHint: item.categoryLabel,
-    // Signal explicite plutôt que de faire deviner la longueur voulue à
-    // partir de la taille de l'extrait fourni.
     long: (item.sourceExcerpt || "").length > LONG_SOURCE_THRESHOLD
   }));
 
   const style = styleInstruction(writingStyle);
 
   return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". \
-${style ? `\n${style}\n\n` : ""}Voici une liste d'articles bruts issus de FreshRSS. Pour CHAQUE article, dans l'ordre, produis :
+${style ? `\n${style}\n\n` : ""}Voici une liste d'articles bruts issus de FreshRSS. Pour CHAQUE article, dans l'ordre, produis, de façon CONCISE (le coût dépend directement de la longueur du texte produit) :
 - "headline": un titre court et accrocheur, réécrit dans un style journalistique clair (en français), pas juste copié.
-- "summary": un résumé fidèle, réécrit dans tes propres mots (ne pas copier le texte source mot pour mot). Longueur adaptée à l'article : 2-4 phrases si "long" est false, mais si "long" est true (article source substantiel), rédige un résumé deux fois plus développé qu'à l'habitude (environ 6-8 phrases) pour refléter le contenu réel de l'article. Cite intelligemment la provenance de l'info directement dans le texte, sans lien ni URL : selon le sujet, mentionne soit le média fourni dans "source" (ex : "selon Presse-citron", "rapporte Le Monde"), soit une personne ou un porte-parole cité dans l'article si l'info vient clairement de sa bouche (ex : "selon Elon Musk", "d'après le maire de Paris") — choisis ce qui est le plus naturel pour CET article précis, ne force pas la citation si elle alourdit une phrase courte.
+- "summary": un résumé fidèle et CONCIS, réécrit dans tes propres mots (ne pas copier le texte source mot pour mot). 2-3 phrases si "long" est false, 4-5 phrases si "long" est true — jamais plus, va à l'essentiel. Cite intelligemment la provenance de l'info directement dans le texte, sans lien ni URL : selon le sujet, mentionne soit le média fourni dans "source" (ex : "selon Presse-citron", "rapporte Le Monde"), soit une personne ou un porte-parole cité dans l'article si l'info vient clairement de sa bouche (ex : "selon Elon Musk", "d'après le maire de Paris") — choisis ce qui est le plus naturel pour CET article précis, ne force pas la citation si elle alourdit une phrase courte.
 - "category": une rubrique parmi ${JSON.stringify(DEFAULT_CATEGORIES)} (choisis la plus pertinente ; utilise "Une" seulement pour l'article vraiment le plus important du lot).
 - "priorityScore": un entier de 1 à 100 indiquant l'importance de la nouvelle pour l'édition du jour (100 = à la une, 1 = anecdotique).
 
@@ -290,7 +302,21 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
   const provider = settings.aiProvider === "gemini" ? "gemini" : "anthropic";
 
   try {
-    const curationPrompt = buildCurationPrompt(items, settings.writingStyle);
+    // Signal externe optionnel (Gemini uniquement, via Grounding with Google
+    // Search) : identifie les news objectivement marquantes du jour sur le
+    // web AVANT de noter les articles, pour que priorityScore reflète aussi
+    // une importance réelle/mondiale, pas seulement une comparaison interne
+    // entre les articles du jour. Best-effort : une erreur ici ne bloque
+    // jamais la curation elle-même (juste moins de contexte).
+    const trendingTopics =
+      provider === "gemini" && settings.geminiApiKey
+        ? await fetchTrendingTopicsGemini(settings.geminiApiKey, settings.geminiModel, items).catch((err) => {
+            console.warn("[ai] Recherche des news marquantes du jour indisponible :", (err as Error)?.message);
+            return null;
+          })
+        : null;
+
+    const curationPrompt = buildCurationPrompt(items, settings.writingStyle, trendingTopics);
     const text =
       provider === "gemini"
         ? settings.geminiApiKey
@@ -325,28 +351,87 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
   }
 }
 
-function buildCurationPrompt(items: CurationItem[], writingStyle: string = "normal"): string {
+function buildCurationPrompt(
+  items: CurationItem[],
+  writingStyle: string = "normal",
+  trendingTopics: string | null = null
+): string {
   const list = items.map((it) => ({
     id: it.id,
     headline: it.headline,
-    summary: (it.summary || "").slice(0, 400),
+    // Coupé court (optimisation de coût) : il ne s'agit que de comparer
+    // l'importance relative des articles entre eux, pas de les résumer en
+    // détail ici — le résumé complet existe déjà dans "summary" (Article),
+    // servant de repli si frontPageSummary n'est pas produit.
+    summary: (it.summary || "").slice(0, 220),
     category: it.category,
     source: it.source
   }));
 
   const style = styleInstruction(writingStyle);
 
-  return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". ${style ? `\n${style}\n` : ""}Voici TOUS les articles retenus pour l'édition d'aujourd'hui, déjà réécrits.
+  const trendingBlock = trendingTopics
+    ? `\nVoici, à titre de repère OBJECTIF, une liste des sujets identifiés comme marquants dans l'actualité mondiale/française aujourd'hui (obtenue via une recherche web séparée, indépendante de la liste d'articles ci-dessous) :\n${trendingTopics}\n\nSi un article ci-dessous correspond clairement à l'un de ces sujets, ce doit être un signal FORT qui pousse son priorityScore vers le haut (typiquement 85-100), en plus de ta propre comparaison entre les articles. Un article qui ne correspond à aucun de ces sujets n'est pas pénalisé pour autant — continue de le noter normalement selon les critères habituels. Ignore cette liste si aucun article ne semble y correspondre.\n`
+    : "";
 
-Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne :
+  return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". ${style ? `\n${style}\n` : ""}Voici TOUS les articles retenus pour l'édition d'aujourd'hui, déjà réécrits.
+${trendingBlock}
+Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne, de façon CONCISE (le coût dépend directement de la longueur du texte produit) :
 - "priorityScore" : un score d'importance de 1 à 100 (100 = doit faire la une du jour, 1 = anecdotique). Les scores doivent réellement discriminer : seuls 1 à 3 articles au grand maximum doivent approcher 100, le reste doit s'étaler selon l'importance réelle.
-- "frontPageSummary" : une réécriture du résumé fourni qui va droit à l'essentiel (l'info principale d'abord). Adapte la longueur au sujet : la plupart des articles n'ont besoin que de 2-3 phrases, mais si le sujet est substantiel/complexe, tu peux aller jusqu'à 10 phrases maximum pour rester fidèle et complet — jamais plus. Intègre aussi une citation journalistique de la source fournie ("source") directement dans le texte (ex : "selon Presse-citron", "rapporte Le Monde", "d'après Reuters"), SANS jamais insérer de lien ni d'URL — juste le nom du média mentionné en passant, comme dans un vrai article de journal.
+- "frontPageSummary" : une réécriture COURTE du résumé fourni qui va droit à l'essentiel (l'info principale d'abord). 1-2 phrases pour la plupart des articles, 3-4 phrases maximum pour un sujet vraiment substantiel/complexe — jamais plus. Intègre aussi une citation journalistique de la source fournie ("source") directement dans le texte (ex : "selon Presse-citron", "rapporte Le Monde", "d'après Reuters"), SANS jamais insérer de lien ni d'URL — juste le nom du média mentionné en passant, comme dans un vrai article de journal. Le texte reste basé sur le résumé DailySpoon fourni ci-dessous pour cet article, jamais sur le contenu de la recherche web ci-dessus (qui ne sert qu'à évaluer l'importance).
 
 Articles :
 ${JSON.stringify(list, null, 2)}
 
 Réponds UNIQUEMENT avec un tableau JSON de ${items.length} objets, dans le même ordre, sans texte avant ou après, format :
 [{"id": "...", "priorityScore": 0, "frontPageSummary": "..."}, ...]`;
+}
+
+/**
+ * Recherche web groundée (Grounding with Google Search, Gemini uniquement)
+ * pour identifier les news objectivement marquantes du jour, AVANT de noter
+ * les articles — sert uniquement de signal d'importance externe dans
+ * buildCurationPrompt ; le contenu réel des articles reste toujours basé sur
+ * le résumé DailySpoon (déjà réécrit à partir du flux RSS), jamais sur le
+ * résultat de cette recherche. Un seul appel par génération (pas par
+ * article) : coût marginal (quelques centimes, souvent sous le quota
+ * gratuit journalier de Google pour ce type de requête).
+ */
+async function fetchTrendingTopicsGemini(
+  apiKey: string,
+  model: string,
+  items: CurationItem[]
+): Promise<string | null> {
+  const categories = [...new Set(items.map((it) => it.category).filter(Boolean))];
+  const prompt = `Recherche sur le web les news les plus marquantes/importantes dans le monde et en France aujourd'hui, en particulier dans ces domaines : ${categories.join(", ") || "actualité générale"}.
+
+Réponds avec une liste courte (8 à 10 items maximum) de sujets factuels en quelques mots chacun (pas de phrase complète), un par ligne, sans numérotation ni commentaire, format :
+Sujet 1
+Sujet 2
+...`;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 300 }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Gemini grounding API ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data: any = await res.json();
+  const text: string = (data?.candidates?.[0]?.content?.parts || []).map((p: any) => p?.text || "").join("");
+  return text.trim() || null;
 }
 
 async function callAnthropicRaw(prompt: string, apiKey: string, model: string): Promise<string> {
