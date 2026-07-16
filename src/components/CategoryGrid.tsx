@@ -71,12 +71,12 @@ export function CategoryGrid({
       {/* ——— Mobile : une rubrique par "page", swipe au doigt (scroll-snap
           natif, pas de librairie JS) — le glisser-déposer de réorganisation
           n'a pas de sens ici (conflit avec le swipe horizontal), donc pas de
-          props draggable dans cette branche. Chaque page laisse dépasser un
-          peu la suivante (w-[88%]) pour indiquer qu'il y a autre chose à
-          glisser. */}
-      <div className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2 md:hidden">
+          props draggable dans cette branche. Chaque page fait exactement
+          100% de la largeur, sans gap : la colonne voisine ne doit jamais
+          être visible pendant la lecture de l'actuelle. */}
+      <div className="-mx-6 flex snap-x snap-mandatory overflow-x-auto md:hidden">
         {categories.map((cat) => (
-          <div key={cat.label} className="w-[88%] shrink-0 snap-center">
+          <div key={cat.label} className="w-full shrink-0 snap-center px-6">
             <CategoryColumn
               label={cat.label}
               articles={cat.articles}

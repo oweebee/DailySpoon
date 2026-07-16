@@ -122,7 +122,7 @@ export function EditionView({
         >
           {heroes.map((hero) => (
             <article key={hero.id} className="text-center md:px-5 md:first:pl-0 md:last:pr-0">
-              <h1 className="mx-auto mb-4 max-w-md font-display text-xl font-black leading-tight md:text-2xl">
+              <h1 className="mx-auto mb-4 max-w-md font-display text-lg font-black leading-tight md:text-xl">
                 {hero.headline}
               </h1>
               {/* Choix de style : pas de photo sur "à la une", même quand
@@ -130,7 +130,7 @@ export function EditionView({
                   articles vedettes. Aperçu toujours limité à 10 lignes ici
                   (peu importe la page) — pour lire la suite, on ouvre
                   l'article via le lien source. */}
-              <p className="newsprint mx-auto max-w-md line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
+              <p className="newsprint mx-auto max-w-md line-clamp-[10] text-left text-base leading-snug text-neutral-800">
                 {hero.summary}
               </p>
               <div className="mt-3">

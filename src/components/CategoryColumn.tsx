@@ -99,9 +99,9 @@ export function CategoryColumn({
                 />
               </ArticleLink>
             )}
-            <h3 className="font-display text-base font-bold leading-snug">{article.headline}</h3>
+            <h3 className="font-display text-sm font-bold leading-snug">{article.headline}</h3>
             <p
-              className={`newsprint mt-1 text-[0.8rem] leading-snug text-neutral-700 ${
+              className={`newsprint mt-1 text-sm leading-snug text-neutral-700 ${
                 clampSummary ? "line-clamp-[10]" : ""
               }`}
             >

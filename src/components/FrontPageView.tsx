@@ -86,26 +86,23 @@ export function FrontPageView({
     return a.localeCompare(b);
   });
 
+  const heroGridClass = `grid grid-cols-1 gap-8 ${
+    heroes.length === 3
+      ? "md:grid-cols-[1fr_1.7fr_1fr] md:divide-x md:divide-ink/30"
+      : heroes.length === 2
+        ? "md:grid-cols-[1.7fr_1fr] md:divide-x md:divide-ink/30"
+        : ""
+  }`;
+
   return (
     <div>
-      {/* ——— Bandeau "à la une", encadré comme un vrai bloc de une : gros
-          article vedette au centre, ses secondaires de part et d'autre
-          séparés par un simple filet vertical. Le nombre de colonnes
-          s'adapte au nombre de héros réellement disponibles (1 à 3). */}
+      {/* ——— Desktop/tablette : "à la une" en bloc fixe au-dessus des
+          rubriques, comme avant. Sur mobile ce même contenu devient la
+          PREMIÈRE page du carrousel swipe ci-dessous, pas un bloc séparé. */}
       {heroMain && (
-        <div className="mb-10 border-2 border-ink p-6 md:p-8">
-          <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
-            ✦ À la une ✦
-          </p>
-          <div
-            className={`grid grid-cols-1 gap-8 ${
-              heroes.length === 3
-                ? "md:grid-cols-[1fr_1.7fr_1fr] md:divide-x md:divide-ink/30"
-                : heroes.length === 2
-                  ? "md:grid-cols-[1.7fr_1fr] md:divide-x md:divide-ink/30"
-                  : ""
-            }`}
-          >
+        <div className="mb-10 hidden border-2 border-ink p-6 sm:block md:p-8">
+          <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">✦ À la une ✦</p>
+          <div className={heroGridClass}>
             {heroSideA && <SideHeroBox article={heroSideA} className="md:pr-8" />}
             <MainHeroBox article={heroMain} className={heroSideA ? "md:px-8" : heroSideB ? "md:pr-8" : ""} />
             {heroSideB && <SideHeroBox article={heroSideB} className="md:pl-8" />}
@@ -113,31 +110,47 @@ export function FrontPageView({
         </div>
       )}
 
-      {/* ——— Rubriques, encadrées. Mobile : une rubrique par "page", swipe
-          au doigt (scroll-snap natif). Tablette/desktop : colonnes CSS
-          (le contenu s'écoule colonne par colonne sans laisser de gros
-          blancs quand une rubrique est plus courte que sa voisine — un grid
-          classique aligne les rangées et crée ces vides). Chaque encadré
-          alterne un léger fond teinté et un padding différent pour éviter
-          que tout se ressemble. */}
-      {categories.length > 0 && (
-        <>
-          <div className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2 sm:hidden">
-            {categories.map((cat, i) => (
-              <div key={cat} className="w-[88%] shrink-0 snap-center">
-                <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
+      {/* ——— Mobile : UN SEUL carrousel swipe (scroll-snap natif, pas de
+          librairie JS) — "à la une" est sa propre page dédiée en premier,
+          puis une page dédiée par rubrique ensuite. Chaque page fait
+          exactement 100% de la largeur (pas de "peek" du voisin, pas de
+          gap) : on ne doit jamais voir la page suivante en lisant l'actuelle. */}
+      {(heroMain || categories.length > 0) && (
+        <div className="-mx-6 mb-10 flex snap-x snap-mandatory overflow-x-auto sm:hidden">
+          {heroMain && (
+            <div className="w-full shrink-0 snap-center px-6">
+              <div className="border-2 border-ink p-6">
+                <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
+                  ✦ À la une ✦
+                </p>
+                <div className={heroGridClass}>
+                  {heroSideA && <SideHeroBox article={heroSideA} />}
+                  <MainHeroBox article={heroMain} />
+                  {heroSideB && <SideHeroBox article={heroSideB} />}
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+          {categories.map((cat, i) => (
+            <div key={cat} className="w-full shrink-0 snap-center px-6">
+              <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
+            </div>
+          ))}
+        </div>
+      )}
 
-          <div className="hidden sm:block sm:columns-2 sm:gap-6 lg:columns-3">
-            {categories.map((cat, i) => (
-              <div key={cat} className="mb-6 break-inside-avoid">
-                <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
-              </div>
-            ))}
-          </div>
-        </>
+      {/* ——— Tablette/desktop : rubriques en colonnes CSS (le contenu
+          s'écoule colonne par colonne sans laisser de gros blancs quand une
+          rubrique est plus courte que sa voisine — un grid classique aligne
+          les rangées et crée ces vides). */}
+      {categories.length > 0 && (
+        <div className="hidden sm:block sm:columns-2 sm:gap-6 lg:columns-3">
+          {categories.map((cat, i) => (
+            <div key={cat} className="mb-6 break-inside-avoid">
+              <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
+            </div>
+          ))}
+        </div>
       )}
 
       <SpoonDivider />
@@ -155,7 +168,7 @@ function frontText(article: ArticleLike): string {
 function MainHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
   return (
     <article className={`flex flex-col text-center ${className}`}>
-      <h1 className="mx-auto mb-4 max-w-2xl font-display text-2xl font-black leading-tight md:text-3xl">
+      <h1 className="mx-auto mb-4 max-w-2xl font-display text-xl font-black leading-tight md:text-2xl">
         {article.headline}
       </h1>
       {article.imageUrl && (
@@ -167,7 +180,7 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </div>
       )}
-      <p className="newsprint mx-auto max-w-xl text-left text-sm leading-snug text-neutral-800">
+      <p className="newsprint mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">
         {frontText(article)}
       </p>
     </article>
@@ -177,7 +190,7 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
 function SideHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
   return (
     <article className={className}>
-      <h2 className="mb-2 font-display text-base font-bold leading-snug">{article.headline}</h2>
+      <h2 className="mb-2 font-display text-sm font-bold leading-snug">{article.headline}</h2>
       {article.imageUrl && (
         <div className="mb-2 aspect-[4/3] w-full">
           <ArticleImage
@@ -187,7 +200,7 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </div>
       )}
-      <p className="newsprint text-xs leading-snug text-neutral-700">{frontText(article)}</p>
+      <p className="newsprint text-sm leading-snug text-neutral-700">{frontText(article)}</p>
     </article>
   );
 }
@@ -237,8 +250,8 @@ function StaticCategorySection({
           </div>
         )}
         <div className="min-w-0">
-          <h4 className="font-display text-base font-bold leading-snug">{lead.headline}</h4>
-          <p className="newsprint mt-1 text-xs leading-snug text-neutral-700">{frontText(lead)}</p>
+          <h4 className="font-display text-sm font-bold leading-snug">{lead.headline}</h4>
+          <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(lead)}</p>
         </div>
       </article>
 
@@ -246,8 +259,8 @@ function StaticCategorySection({
         <div className="divide-y divide-ink/20">
           {briefs.map((a) => (
             <div key={a.id} className="py-2.5 first:pt-0 last:pb-0">
-              <h4 className="font-display text-sm font-bold leading-snug">{a.headline}</h4>
-              <p className="newsprint mt-1 text-xs leading-snug text-neutral-700">{frontText(a)}</p>
+              <h4 className="font-display text-xs font-bold leading-snug">{a.headline}</h4>
+              <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(a)}</p>
             </div>
           ))}
         </div>
