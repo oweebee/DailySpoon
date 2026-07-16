@@ -72,6 +72,8 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
           ← Retour aux archives
         </Link>
         {" · "}Édition de {timeLabel}
+        {" · "}
+        {articles.length} article{articles.length > 1 ? "s" : ""}
       </p>
       {articles.length > 0 ? (
         <FrontPageView articles={articles} categoryOrder={categoryOrder} date={edition.date} />

@@ -434,6 +434,13 @@ async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }): Promi
  * échec réseau ponctuel au premier fetch condamnait l'article à garder son
  * favicon générique pour toujours, alors que la vraie image existe bel et
  * bien sur la page (og:image fonctionne, juste pas retenté une fois posé).
+ *
+ * Les lookups og:image retenus sont lancés EN PARALLÈLE (Promise.all), pas
+ * en série : à 5s de timeout chacun, MAX_OG_BACKFILL_PER_RUN requêtes en
+ * série pouvaient approcher les 2 minutes, au-delà du timeout du proxy
+ * (Coolify) — la requête HTTP du bouton "Lancer l'impression" échouait
+ * alors silencieusement côté navigateur (aucun message affiché) alors que
+ * la génération continuait tranquillement côté serveur.
  */
 function isFaviconFallback(url: string | null): boolean {
   return !!url && url.includes("google.com/s2/favicons");
@@ -452,7 +459,15 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
     }
   });
 
-  let ogBackfillsUsed = 0;
+  // Pas d'image du tout, ou juste un favicon posé en dernier recours à un
+  // run précédent (voir isFaviconFallback) : dans les deux cas, on retente
+  // d'obtenir la vraie illustration — plafonné, puis lancé d'un coup.
+  const needingImage = candidates.filter(
+    (a) => a.sourceUrl && (!a.imageUrl || isFaviconFallback(a.imageUrl))
+  );
+  const toBackfill = needingImage.slice(0, MAX_OG_BACKFILL_PER_RUN);
+  const ogResults = await Promise.all(toBackfill.map((a) => fetchOgImage(a.sourceUrl!)));
+  const ogImageById = new Map(toBackfill.map((a, i) => [a.id, ogResults[i]]));
 
   for (const article of candidates) {
     const dirty =
@@ -461,16 +476,7 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
       looksLikeHtml(article.headline) ||
       looksLikeHtml(article.summary);
 
-    // Pas d'image du tout, ou juste un favicon posé en dernier recours à
-    // un run précédent (voir isFaviconFallback) : dans les deux cas, on
-    // retente d'obtenir la vraie illustration.
-    const needsRealImage = !article.imageUrl || isFaviconFallback(article.imageUrl);
-
-    let backfilledImage: string | null = null;
-    if (needsRealImage && article.sourceUrl && ogBackfillsUsed < MAX_OG_BACKFILL_PER_RUN) {
-      ogBackfillsUsed++;
-      backfilledImage = await fetchOgImage(article.sourceUrl);
-    }
+    let backfilledImage: string | null = ogImageById.get(article.id) ?? null;
 
     // Toujours rien — favicon du site en dernier recours (pas de requête
     // réseau de notre côté, juste une URL construite), seulement si
@@ -500,7 +506,7 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
   if (candidates.length > 0) {
     console.log(
       `[edition] Checked ${candidates.length} existing article(s) for leftover HTML` +
-        (ogBackfillsUsed > 0 ? ` (${ogBackfillsUsed} og:image lookup(s) attempted).` : ".")
+        (toBackfill.length > 0 ? ` (${toBackfill.length} og:image lookup(s) attempted in parallel).` : ".")
     );
   }
 }

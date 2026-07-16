@@ -76,6 +76,15 @@ export default async function HomePage() {
       {/* Planning désactivé dans /admin/settings : pas de génération auto,
           donc on donne un bouton pour lancer l'impression à la main. */}
       {!settings.editionScheduleEnabled && <PrintStampButton provider={settings.aiProvider} />}
+      {/* Compte d'articles affiché en permanence (pas seulement dans le
+          message transitoire du bouton d'impression, qui peut ne jamais
+          s'afficher si la requête traîne au-delà du timeout du proxy) —
+          voir aussi /archive/[id] pour l'équivalent sur une édition passée. */}
+      {latestEdition && articles.length > 0 && (
+        <p className="mb-6 -mt-6 text-center text-xs uppercase tracking-[0.3em] text-sepia">
+          {articles.length} article{articles.length > 1 ? "s" : ""}
+        </p>
+      )}
       {articles.length > 0 ? (
         <FrontPageView articles={articles} categoryOrder={categoryOrder} date={editionDate} />
       ) : (
