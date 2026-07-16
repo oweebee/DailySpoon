@@ -128,9 +128,17 @@ function SearchResults({ results, searching }: { results: ArticleLike[] | null; 
     );
   }
   return (
+    // Même grille et mêmes filets verticaux (calculés par position réelle
+    // dans la rangée, pas "divide-x") que les colonnes de rubriques en "En
+    // direct" — ici chaque carte est un article, pas une rubrique entière,
+    // mais le rendu (photo, titre, texte plafonné à 10 lignes, source) est
+    // identique.
     <div className="grid gap-x-0 gap-y-8 md:grid-cols-2 lg:grid-cols-4">
       {results.map((article) => (
-        <article key={article.id} className="py-4">
+        <article
+          key={article.id}
+          className="py-4 md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6"
+        >
           {article.imageUrl && (
             <ArticleLink
               href={article.sourceUrl}
@@ -147,7 +155,9 @@ function SearchResults({ results, searching }: { results: ArticleLike[] | null; 
             </ArticleLink>
           )}
           <h3 className="font-display text-base font-bold leading-snug">{article.headline}</h3>
-          <p className="newsprint mt-1 text-[0.8rem] leading-snug text-neutral-700">{article.summary}</p>
+          <p className="newsprint mt-1 line-clamp-[10] text-[0.8rem] leading-snug text-neutral-700">
+            {article.summary}
+          </p>
           <SourceLine article={article} showDate={!article.imageUrl} />
         </article>
       ))}

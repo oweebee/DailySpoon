@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback } from "./freshrss";
 import { processArticles } from "./ai";
 import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
+import { getSettings } from "./settings";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
 // og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
@@ -9,11 +10,6 @@ import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
 // réseau vers autant de sites différents d'un coup — le rattrapage se fait
 // alors progressivement, sur plusieurs générations successives.
 const MAX_OG_BACKFILL_PER_RUN = 25;
-
-// Rétention de l'historique (page "En direct", recherche, accueil — tout
-// partage la même table Article) : 2 ans. Un article marqué favori n'est
-// jamais purgé, quel que soit son âge.
-const RETENTION_DAYS = 730;
 
 function todayDateOnly(): Date {
   const now = new Date();
@@ -98,13 +94,18 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 }
 
 /**
- * Purge les articles plus vieux que RETENTION_DAYS (2 ans), sur la date de
- * publication d'origine (ou de récupération si elle est inconnue). Les
- * articles marqués favoris sont exclus de la purge, quel que soit leur âge —
- * un favori mis de côté ne doit jamais disparaître tout seul.
+ * Purge les articles plus vieux que la rétention réglée dans
+ * /admin/settings (6 mois à 5 ans, par défaut 2 ans ; 0 = illimité, aucune
+ * purge), sur la date de publication d'origine (ou de récupération si elle
+ * est inconnue). Les articles marqués favoris sont exclus de la purge, quel
+ * que soit leur âge — un favori mis de côté ne doit jamais disparaître tout
+ * seul.
  */
 async function pruneOldArticles(): Promise<void> {
-  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { retentionDays } = await getSettings();
+  if (!retentionDays || retentionDays <= 0) return; // illimité
+
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
   const { count } = await prisma.article.deleteMany({
     where: {
       favorite: false,
@@ -112,7 +113,7 @@ async function pruneOldArticles(): Promise<void> {
     }
   });
   if (count > 0) {
-    console.log(`[edition] Rétention (${RETENTION_DAYS} j) : ${count} article(s) purgé(s).`);
+    console.log(`[edition] Rétention (${retentionDays} j) : ${count} article(s) purgé(s).`);
   }
 }
 

@@ -95,5 +95,6 @@ model Settings {
   editionHour         Int?
   editionMinute       Int?
   editionTz           String?
+  retentionDays       Int? // rétention de l'historique en jours ; 0 = illimité ; null = défaut (730 = 2 ans)
   updatedAt           DateTime @default(now()) @updatedAt
 }

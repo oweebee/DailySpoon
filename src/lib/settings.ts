@@ -11,6 +11,8 @@ export type AppSettings = {
   editionHour: number;
   editionMinute: number;
   editionTz: string;
+  /** Rétention de l'historique en jours. 0 = illimité (jamais purgé). */
+  retentionDays: number;
 };
 
 /**
@@ -30,7 +32,8 @@ export async function getSettings(): Promise<AppSettings> {
     anthropicModel: row?.anthropicModel || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
     editionHour: row?.editionHour ?? Number(process.env.EDITION_HOUR ?? 6),
     editionMinute: row?.editionMinute ?? Number(process.env.EDITION_MINUTE ?? 0),
-    editionTz: row?.editionTz || process.env.EDITION_TZ || "Europe/Paris"
+    editionTz: row?.editionTz || process.env.EDITION_TZ || "Europe/Paris",
+    retentionDays: row?.retentionDays ?? Number(process.env.RETENTION_DAYS ?? 730)
   };
 }
 
@@ -52,6 +55,7 @@ export type SettingsInput = Partial<{
   editionHour: number | null;
   editionMinute: number | null;
   editionTz: string | null;
+  retentionDays: number | null;
 }>;
 
 /**
@@ -76,6 +80,12 @@ export async function updateSettings(input: SettingsInput): Promise<void> {
   if ("editionMinute" in input) {
     const v = input.editionMinute;
     data.editionMinute = v === null || v === undefined || Number.isNaN(v) ? null : v;
+  }
+  if ("retentionDays" in input) {
+    // 0 est une valeur volontaire ("illimité"), à bien distinguer de
+    // null/undefined (pas réglé -> retombe sur la valeur par défaut).
+    const v = input.retentionDays;
+    data.retentionDays = v === null || v === undefined || Number.isNaN(v) ? null : v;
   }
 
   await prisma.settings.upsert({

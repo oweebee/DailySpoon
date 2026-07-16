@@ -11,6 +11,7 @@ type SettingsForm = {
   editionHour: string;
   editionMinute: string;
   editionTz: string;
+  retentionDays: string;
 };
 
 const EMPTY: SettingsForm = {
@@ -21,8 +22,21 @@ const EMPTY: SettingsForm = {
   anthropicModel: "",
   editionHour: "",
   editionMinute: "",
-  editionTz: ""
+  editionTz: "",
+  retentionDays: "730"
 };
+
+// 6 mois à 5 ans, puis illimité (0 = jamais purgé). Les favoris échappent
+// de toute façon à la purge, quelle que soit cette valeur.
+const RETENTION_OPTIONS = [
+  { value: "180", label: "6 mois" },
+  { value: "365", label: "1 an" },
+  { value: "730", label: "2 ans (défaut)" },
+  { value: "1095", label: "3 ans" },
+  { value: "1460", label: "4 ans" },
+  { value: "1825", label: "5 ans" },
+  { value: "0", label: "Illimité" }
+];
 
 type TestResult = { ok: boolean; message: string };
 
@@ -49,7 +63,8 @@ export default function AdminSettingsPage() {
           anthropicModel: s.anthropicModel || "",
           editionHour: s.editionHour?.toString() ?? "",
           editionMinute: s.editionMinute?.toString() ?? "",
-          editionTz: s.editionTz || ""
+          editionTz: s.editionTz || "",
+          retentionDays: s.retentionDays !== undefined && s.retentionDays !== null ? s.retentionDays.toString() : "730"
         });
       })
       .finally(() => setLoading(false));
@@ -68,7 +83,8 @@ export default function AdminSettingsPage() {
       anthropicModel: form.anthropicModel,
       editionHour: form.editionHour === "" ? null : Number(form.editionHour),
       editionMinute: form.editionMinute === "" ? null : Number(form.editionMinute),
-      editionTz: form.editionTz
+      editionTz: form.editionTz,
+      retentionDays: form.retentionDays === "" ? null : Number(form.retentionDays)
     };
   }
 
@@ -207,6 +223,32 @@ export default function AdminSettingsPage() {
               onChange={(v) => set("editionTz", v)}
               placeholder="Europe/Paris"
             />
+          </fieldset>
+
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">
+              Rétention de l’historique
+            </legend>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
+                Durée de conservation des articles
+              </span>
+              <select
+                value={form.retentionDays}
+                onChange={(e) => set("retentionDays", e.target.value)}
+                className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
+              >
+                {RETENTION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs italic text-sepia">
+              Passé ce délai, les articles sont supprimés automatiquement à chaque génération —
+              sauf ceux marqués favoris, jamais purgés.
+            </p>
           </fieldset>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
