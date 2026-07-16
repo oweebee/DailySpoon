@@ -62,7 +62,11 @@ export function FrontPageView({
   const heroIds = new Set(heroes.map((h) => h.id));
   const rest = articles.filter((a) => !heroIds.has(a.id));
 
-  const MAX_PER_CATEGORY = 20;
+  // Pas de plafond ici : la limite à 5 (desktop, colonnes CSS équilibrées)
+  // est appliquée uniquement au rendu desktop de StaticCategorySection (prop
+  // "limit") — sur mobile, chaque rubrique a sa propre page dédiée qu'on
+  // peut faire défiler verticalement à l'infini, donc tous les articles de
+  // la catégorie sont gardés ici.
   const byCategory = new Map<string, ArticleLike[]>();
   for (const article of rest) {
     const cat = article.category || "Autre";
@@ -75,7 +79,6 @@ export function FrontPageView({
       const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
       return tb - ta;
     });
-    byCategory.set(cat, arts.slice(0, MAX_PER_CATEGORY));
   }
 
   const orderIndex = new Map(categoryOrder.map((c, i) => [c.label, i]));
@@ -147,7 +150,7 @@ export function FrontPageView({
         <div className="hidden sm:block sm:columns-2 sm:gap-6 lg:columns-3">
           {categories.map((cat, i) => (
             <div key={cat} className="mb-6 break-inside-avoid">
-              <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
+              <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} limit={5} />
             </div>
           ))}
         </div>
@@ -222,20 +225,27 @@ const CATEGORY_BOX_TONES = [
  * vedette en tête (illustré si une photo est disponible, en ligne image+texte
  * plutôt qu'empilés) puis le reste en "brèves" — juste titre + résumé
  * concis, sans photo, pour garder l'encadré lisible et éviter un mur de
- * vignettes. Plafonné à 5 articles quelle que soit la rubrique : en colonnes
- * CSS (voir FrontPageView), un encadré trop long déséquilibrerait la colonne
- * qui l'accueille et créerait justement les gros vides que ce format évite.
+ * vignettes.
+ *
+ * "limit" est optionnel et seulement passé côté desktop (colonnes CSS) : un
+ * encadré trop long y déséquilibrerait la colonne qui l'accueille et
+ * créerait justement les gros vides que ce format évite. Sur mobile
+ * (rubrique = sa propre page dédiée, défilement vertical libre), pas de
+ * limite passée : tous les articles de la rubrique sont affichés, jusqu'au
+ * bout de la rétention configurée.
  */
 function StaticCategorySection({
   label,
   articles,
-  tone
+  tone,
+  limit
 }: {
   label: string;
   articles: ArticleLike[];
   tone: number;
+  limit?: number;
 }) {
-  const shown = articles.slice(0, 5);
+  const shown = typeof limit === "number" ? articles.slice(0, limit) : articles;
   const [lead, ...briefs] = shown;
   if (!lead) return null;
 

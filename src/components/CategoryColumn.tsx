@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ArticleLike } from "./EditionView";
 import { SourceLine, formatStamp } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
@@ -20,7 +20,8 @@ export function CategoryColumn({
   clampSummary = false,
   showMedal = true,
   showDateStamp = true,
-  showFavorite = true
+  showFavorite = true,
+  scrollExpand = false
 }: {
   label: string;
   articles: ArticleLike[];
@@ -43,11 +44,56 @@ export function CategoryColumn({
   showMedal?: boolean;
   showDateStamp?: boolean;
   showFavorite?: boolean;
+  /** Version bureau : au lieu de faire grandir la colonne (et donc pousser
+   *  toute la mise en page) à chaque clic sur "afficher plus", on bascule la
+   *  liste dans un encart à hauteur figée (celle qu'elle avait juste avant
+   *  le clic) avec sa propre barre de défilement interne. Les articles
+   *  suivants se révèlent au fur et à mesure du défilement à l'intérieur de
+   *  cet encart, jusqu'à épuisement de l'historique déjà chargé — la
+   *  colonne elle-même ne bouge plus jamais. Désactivé sur mobile, où
+   *  chaque rubrique a déjà sa page dédiée en plein écran (grandir n'y pose
+   *  aucun problème). */
+  scrollExpand?: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
+  const [expanded, setExpanded] = useState(false);
+  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const visible = articles.slice(0, visibleCount);
   const remaining = articles.length - visible.length;
+
+  function handleShowMore() {
+    if (scrollExpand) {
+      // On fige la hauteur actuelle de l'encart avant de passer en mode
+      // défilement interne, pour que la colonne (et donc la page) ne bouge
+      // pas d'un pixel au clic.
+      if (listRef.current) setLockedHeight(listRef.current.getBoundingClientRect().height);
+      setExpanded(true);
+    }
+    setVisibleCount((c) => Math.min(c + STEP, articles.length));
+  }
+
+  // Défilement "à l'infini" à l'intérieur de l'encart figé : dès que la
+  // sentinelle en bas de liste devient visible, on révèle le lot suivant
+  // d'articles déjà chargés pour cette rubrique (jusqu'à épuisement).
+  useEffect(() => {
+    if (!expanded) return;
+    const sentinel = sentinelRef.current;
+    const root = listRef.current;
+    if (!sentinel || !root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((c) => Math.min(c + STEP, articles.length));
+        }
+      },
+      { root, rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [expanded, articles.length]);
 
   return (
     // Filets et paddings calculés par position réelle dans la rangée
@@ -81,7 +127,11 @@ export function CategoryColumn({
       >
         {label}
       </h2>
-      <div className="divide-y divide-ink/20">
+      <div
+        ref={listRef}
+        style={expanded && lockedHeight ? { maxHeight: lockedHeight, overflowY: "auto" } : undefined}
+        className={`divide-y divide-ink/20 ${expanded ? "pr-1" : ""}`}
+      >
         {visible.map((article) => (
           <article key={article.id} className="py-4 first:pt-0">
             {article.imageUrl && (
@@ -110,14 +160,21 @@ export function CategoryColumn({
             <SourceLine article={article} showDate={!article.imageUrl} showFavorite={showFavorite} />
           </article>
         ))}
+        {expanded && remaining > 0 && (
+          <div ref={sentinelRef} className="py-3 text-center text-[0.6rem] italic uppercase tracking-[0.2em] text-sepia/70">
+            Chargement de la suite…
+          </div>
+        )}
       </div>
 
-      {remaining > 0 && (
+      {!expanded && remaining > 0 && (
         <button
-          onClick={() => setVisibleCount((c) => Math.min(c + STEP, articles.length))}
+          onClick={handleShowMore}
           className="mt-3 w-full border-t border-dashed border-ink/40 pt-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:text-ink hover:underline"
         >
-          Suite — encore {Math.min(STEP, remaining)} de plus ({remaining} au total)
+          {scrollExpand
+            ? "Afficher plus d'articles"
+            : `Suite — encore ${Math.min(STEP, remaining)} de plus (${remaining} au total)`}
         </button>
       )}
     </section>

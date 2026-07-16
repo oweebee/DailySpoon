@@ -90,7 +90,9 @@ export function CategoryGrid({
       </div>
 
       {/* ——— Desktop/tablette : grille classique inchangée, avec
-          glisser-déposer sur le titre de chaque colonne. */}
+          glisser-déposer sur le titre de chaque colonne. "Afficher plus
+          d'articles" bascule ici en encart à défilement interne (hauteur
+          figée) plutôt que de faire grandir la colonne — scrollExpand. */}
       <div className="hidden gap-x-0 gap-y-8 md:grid md:grid-cols-2 lg:grid-cols-4">
         {categories.map((cat) => (
           <CategoryColumn
@@ -106,6 +108,7 @@ export function CategoryGrid({
             showMedal={showMedal}
             showDateStamp={showDateStamp}
             showFavorite={showFavorite}
+            scrollExpand
           />
         ))}
       </div>

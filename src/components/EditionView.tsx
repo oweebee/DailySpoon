@@ -67,8 +67,6 @@ export function EditionView({
   const heroIds = new Set(heroes.map((h) => h.id));
   const rest = articles.filter((a) => !heroIds.has(a.id));
 
-  const MAX_PER_CATEGORY = 20;
-
   const byCategory = new Map<string, ArticleLike[]>();
   for (const article of rest) {
     const cat = article.category || "Autre";
@@ -76,16 +74,17 @@ export function EditionView({
     byCategory.get(cat)!.push(article);
   }
 
-  // Les plus récents d'abord, toutes sources confondues, et on plafonne à
-  // 20 par rubrique pour ne pas la laisser grossir indéfiniment au fil des
-  // régénérations (bouton "Aspirer les news" notamment).
+  // Les plus récents d'abord, toutes sources confondues. Pas de plafond ici :
+  // sur desktop, CategoryColumn bascule maintenant en encart à défilement
+  // interne (hauteur figée) une fois "Afficher plus d'articles" cliqué, donc
+  // la colonne peut faire défiler tout l'historique déjà chargé (borné en
+  // amont par le "take: 1000" de la requête) sans jamais grandir elle-même.
   for (const [cat, arts] of byCategory) {
     arts.sort((a, b) => {
       const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
       const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
       return tb - ta;
     });
-    byCategory.set(cat, arts.slice(0, MAX_PER_CATEGORY));
   }
 
   const orderIndex = new Map(categoryOrder.map((c, i) => [c.label, i]));

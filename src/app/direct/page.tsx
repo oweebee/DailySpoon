@@ -8,8 +8,9 @@ export default async function DirectPage() {
   // Même agrégation que la page d'accueil : on ne filtre pas sur l'édition
   // du jour, sinon toute catégorie sans nouveauté aujourd'hui apparaît vide
   // et tout ce qui a été aspiré hier disparaît dès minuit. On prend les
-  // articles les plus récents toutes éditions confondues ; EditionView
-  // plafonne déjà à 20 par catégorie.
+  // articles les plus récents toutes éditions confondues ; EditionView ne
+  // plafonne plus par catégorie (l'encart "Afficher plus d'articles" sur
+  // desktop défile en interne dans tout ce qui est chargé ici).
   const [latestEdition, articles, selectedCategories] = await Promise.all([
     prisma.edition.findFirst({ orderBy: { date: "desc" } }),
     prisma.article.findMany({

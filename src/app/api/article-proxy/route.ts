@@ -304,6 +304,28 @@ function renderPage(opts: {
        blanc), la photo dans l'article ouvert reste en couleur. */
     border: 1px solid #1a1a1a;
     box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.15);
+    cursor: zoom-in;
+  }
+  /* Popup zoom plein écran au clic sur une image de l'article — overlay
+     sombre + image centrée, fermeture au clic n'importe où ou touche Échap. */
+  .lightbox-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(26, 26, 26, 0.92);
+    cursor: zoom-out;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .lightbox-overlay.is-open { display: flex; }
+  .lightbox-overlay img {
+    max-width: 100%;
+    max-height: 100%;
+    box-shadow: 0 10px 60px rgba(0, 0, 0, 0.6);
+    border: none;
+    margin: 0;
   }
   .article-body figure { margin: 1.4em 0; }
   .article-body figcaption { font-size: 0.75rem; color: #5c5c5c; font-style: italic; text-align: center; margin-top: 0.4em; }
@@ -343,6 +365,31 @@ function renderPage(opts: {
     <p class="source-bottom">Source : ${kicker}${starHtml}</p>
     <p class="colophon">${spoonSvg(-18)}${spoonSvg(14)}${spoonSvg(-18)}</p>
   </div>
+  <div class="lightbox-overlay" id="lightbox"><img id="lightbox-img" src="" alt="" /></div>
+  <script>
+(function () {
+  var overlay = document.getElementById("lightbox");
+  var overlayImg = document.getElementById("lightbox-img");
+  function open(src, alt) {
+    overlayImg.src = src;
+    overlayImg.alt = alt || "";
+    overlay.classList.add("is-open");
+  }
+  function close() {
+    overlay.classList.remove("is-open");
+    overlayImg.src = "";
+  }
+  document.querySelectorAll(".article-body img").forEach(function (img) {
+    img.addEventListener("click", function () {
+      open(img.currentSrc || img.src, img.alt);
+    });
+  });
+  overlay.addEventListener("click", close);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") close();
+  });
+})();
+</script>
   ${
     showStar
       ? `<script>
