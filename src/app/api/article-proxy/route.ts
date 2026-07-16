@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
+import { prisma } from "@/lib/prisma";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -109,6 +110,27 @@ function decodeHtml(buffer: ArrayBuffer, contentTypeHeader: string | null): stri
   }
 }
 
+// Étoile "shérif" (même silhouette que FavoriteStar.tsx côté app React) pour
+// marquer/démarquer un article en favori depuis la page proxifiée — servie
+// en HTML statique dans une iframe, donc pas de composant React ici : un
+// bouton + un petit script inline qui appelle /api/articles/favorite (même
+// origine que l'iframe, donc le cookie de session suit automatiquement).
+const STAR_PATH_D =
+  "M12,2 L14.35,8.76 L21.51,8.91 L15.80,13.24 L17.88,20.09 L12,16 L6.12,20.09 L8.20,13.24 L2.49,8.91 L9.65,8.76 Z";
+
+function favoriteStarHtml(): string {
+  return `<button type="button" class="js-fav-star fav-star" onclick="toggleFavorite()" aria-label="Favori">
+    <svg viewBox="0 0 24 24" width="15" height="15"><path d="${STAR_PATH_D}" /></svg>
+  </button>`;
+}
+
+// Trois cuillères (clin d'œil au nom "DailySpoon") en guise de fleuron de fin
+// d'article, à la place du symbole "❦ ❦ ❦" d'origine — en SVG plutôt qu'un
+// emoji pour rester en niveaux de gris (un emoji cuillère s'afficherait en
+// couleur, hors thème).
+const SPOON_SVG =
+  '<svg viewBox="0 0 24 24" width="16" height="16"><ellipse cx="12" cy="6.2" rx="5.1" ry="6.2"/><rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4"/></svg>';
+
 function renderPage(opts: {
   title: string;
   byline?: string | null;
@@ -120,13 +142,22 @@ function renderPage(opts: {
   showTranslateLink?: boolean;
   /** Page actuellement affichée en français traduit (vs langue d'origine). */
   translated?: boolean;
+  /** Id de l'Article en base correspondant à cette URL, s'il existe — permet
+   *  d'afficher l'étoile favori (absent si l'article n'est pas encore/plus
+   *  en base, ex. lien externe non aspiré). */
+  articleId?: string | null;
+  favorite?: boolean;
 }): string {
-  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated } = opts;
-  const metaBits = [siteName, byline]
-    .filter((v): v is string => Boolean(v))
-    .map(escapeHtml)
-    .join(" · ");
-  const kicker = siteName ? escapeHtml(siteName) : new URL(originalUrl).hostname.replace(/^www\./, "");
+  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite } = opts;
+  const kickerRaw = siteName || new URL(originalUrl).hostname.replace(/^www\./, "");
+  const kicker = escapeHtml(kickerRaw);
+  // La ligne "source" sous le titre reste toujours affichée (repli sur le
+  // seul nom du site si aucun byline), pour que l'étoile favori ait toujours
+  // un ancrage juste en dessous du titre.
+  const bylineRaw = [siteName, byline].filter((v): v is string => Boolean(v)).join(" · ") || kickerRaw;
+  const metaBits = escapeHtml(bylineRaw);
+  const showStar = Boolean(articleId);
+  const starHtml = showStar ? favoriteStarHtml() : "";
   // Traduction à la demande seulement (pas par défaut) : un lien dans le
   // bandeau du haut bascule vers /api/article-proxy?...&translate=1 (ou
   // l'enlève pour revenir à la langue d'origine), qui refait un rendu
@@ -213,6 +244,26 @@ function renderPage(opts: {
     color: #5c5c5c;
     margin-bottom: 28px;
   }
+  .fav-star {
+    display: inline-flex;
+    vertical-align: middle;
+    margin-left: 7px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: #5c5c5c;
+  }
+  .fav-star svg path { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
+  .fav-star.is-fav { color: #8a0303; }
+  .fav-star.is-fav svg path { fill: currentColor; }
+  .source-bottom {
+    text-align: center;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: #5c5c5c;
+    margin-top: 2.6em;
+  }
   .article-body { text-align: justify; hyphens: auto; }
   .article-body > p:first-of-type::first-letter {
     float: left;
@@ -250,7 +301,8 @@ function renderPage(opts: {
     font-weight: 800;
     margin: 1.4em 0 0.5em;
   }
-  .colophon { text-align: center; font-size: 1.3rem; letter-spacing: 0.5em; color: #5c5c5c; margin-top: 3.2em; }
+  .colophon { text-align: center; margin-top: 3.2em; color: #5c5c5c; }
+  .colophon svg { display: inline-block; vertical-align: middle; margin: 0 9px; fill: currentColor; }
 </style>
 </head>
 <body>
@@ -262,15 +314,43 @@ function renderPage(opts: {
       <span class="meta-center">
         ${showTranslateLink ? `<a href="${escapeHtml(translateHref)}">${translateLabel}</a>` : ""}
       </span>
-      <span class="meta-right">${escapeHtml(kicker)}</span>
+      <span class="meta-right">${kicker}</span>
     </p>
     <div class="double-rule"></div>
-    <p class="kicker">✦ ${escapeHtml(kicker)} ✦</p>
+    <p class="kicker">✦ ${kicker} ✦</p>
     <h1>${escapeHtml(title)}</h1>
-    ${metaBits ? `<p class="byline">${metaBits}</p>` : ""}
+    <p class="byline">${metaBits}${starHtml}</p>
     <div class="article-body">${bodyHtml}</div>
-    <p class="colophon">❦ ❦ ❦</p>
+    <p class="source-bottom">Source : ${kicker}${starHtml}</p>
+    <p class="colophon">${SPOON_SVG}${SPOON_SVG}${SPOON_SVG}</p>
   </div>
+  ${
+    showStar
+      ? `<script>
+(function () {
+  var articleId = ${JSON.stringify(articleId)};
+  var fav = ${favorite ? "true" : "false"};
+  function paint() {
+    document.querySelectorAll(".js-fav-star").forEach(function (el) {
+      el.classList.toggle("is-fav", fav);
+      el.setAttribute("aria-pressed", fav ? "true" : "false");
+      el.title = fav ? "Retirer des favoris" : "Ajouter aux favoris";
+    });
+  }
+  window.toggleFavorite = function () {
+    fav = !fav;
+    paint();
+    fetch("/api/articles/favorite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ articleId: articleId, favorite: fav })
+    }).catch(function () {});
+  };
+  paint();
+})();
+</script>`
+      : ""
+  }
 </body>
 </html>`;
 }
@@ -470,6 +550,15 @@ export async function GET(req: NextRequest) {
   const fetchUrl = originalUrl;
   const wantsTranslation = req.nextUrl.searchParams.get("translate") === "1";
 
+  // Retrouve l'Article correspondant (même sourceUrl) pour savoir s'il faut
+  // afficher l'étoile favori et dans quel état — absent si l'article n'est
+  // pas (ou plus) en base.
+  const articleRecord = await prisma.article
+    .findFirst({ where: { sourceUrl: originalUrl }, select: { id: true, favorite: true } })
+    .catch(() => null);
+  const articleId = articleRecord?.id ?? null;
+  const favorite = articleRecord?.favorite ?? false;
+
   if (isRedditPostUrl(parsed)) {
     // 1) Miroir Redlib (best-effort, voir REDLIB_INSTANCES) : rendu HTML
     //    complet côté serveur, passé par le même pipeline Readability que
@@ -511,7 +600,9 @@ export async function GET(req: NextRequest) {
             bodyHtml: finalBody,
             originalUrl,
             showTranslateLink: true,
-            translated: wantsTranslation
+            translated: wantsTranslation,
+            articleId,
+            favorite
           })
         );
       }
@@ -551,7 +642,9 @@ export async function GET(req: NextRequest) {
           bodyHtml: finalBody,
           originalUrl,
           showTranslateLink: true,
-          translated: wantsTranslation
+          translated: wantsTranslation,
+          articleId,
+          favorite
         })
       );
     }
@@ -565,7 +658,9 @@ export async function GET(req: NextRequest) {
         title: "Reddit indisponible depuis ce serveur",
         bodyHtml:
           "<p>Reddit bloque les requêtes venant de ce serveur (IP d'hébergeur), y compris via son API publique et les miroirs de secours essayés. Utilise « Ouvrir dans un nouvel onglet » pour lire ce post directement.</p>",
-        originalUrl
+        originalUrl,
+        articleId,
+        favorite
       })
     );
   }
@@ -592,7 +687,9 @@ export async function GET(req: NextRequest) {
         renderPage({
           title: "Article indisponible",
           bodyHtml: `<p>Le site source a répondu ${res.status}. Utilise « Ouvrir dans un nouvel onglet » pour lire l'article directement.</p>`,
-          originalUrl
+          originalUrl,
+          articleId,
+          favorite
         })
       );
     }
@@ -611,7 +708,9 @@ export async function GET(req: NextRequest) {
         renderPage({
           title: "Article non extrait",
           bodyHtml: `<p>Impossible d'extraire proprement le contenu de cet article. Utilise « Ouvrir dans un nouvel onglet » pour le lire directement sur le site source.</p>`,
-          originalUrl
+          originalUrl,
+          articleId,
+          favorite
         })
       );
     }
@@ -652,7 +751,9 @@ export async function GET(req: NextRequest) {
         bodyHtml: finalBody,
         originalUrl,
         showTranslateLink: true,
-        translated: wantsTranslation
+        translated: wantsTranslation,
+        articleId,
+        favorite
       })
     );
   } catch (err: any) {
@@ -662,7 +763,9 @@ export async function GET(req: NextRequest) {
         bodyHtml: `<p>Erreur lors de la récupération de l'article : ${escapeHtml(
           err?.message || "inconnue"
         )}. Utilise « Ouvrir dans un nouvel onglet ».</p>`,
-        originalUrl
+        originalUrl,
+        articleId,
+        favorite
       })
     );
   }
