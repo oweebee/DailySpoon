@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
-import { EditionView } from "@/components/EditionView";
+import { FrontPageView } from "@/components/FrontPageView";
 import { PrintStampButton } from "@/components/PrintStampButton";
 import { getSettings } from "@/lib/settings";
 
@@ -32,7 +32,7 @@ export default async function HomePage() {
           donc on donne un bouton pour lancer l'impression à la main. */}
       {!settings.editionScheduleEnabled && <PrintStampButton />}
       {articles.length > 0 ? (
-        <EditionView articles={articles} categoryOrder={categoryOrder} />
+        <FrontPageView articles={articles} categoryOrder={categoryOrder} />
       ) : (
         <p className="py-24 text-center italic text-sepia">
           Aucune édition générée pour l’instant. Sélectionne des catégories FreshRSS dans l’admin
