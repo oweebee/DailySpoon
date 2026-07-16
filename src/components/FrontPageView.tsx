@@ -125,13 +125,19 @@ export function FrontPageView({
           puis une page dédiée par rubrique ensuite. Chaque page fait
           exactement 100% de la largeur (pas de "peek" du voisin, pas de
           gap) : on ne doit jamais voir la page suivante en lisant l'actuelle.
-          Chaque page a une hauteur minimale pour occuper tout l'écran
-          disponible (plutôt qu'un petit encadré flottant suivi de vide). */}
+          Chaque page a sa PROPRE zone de défilement vertical (h-[...] +
+          overflow-y-auto) plutôt que de partager le défilement vertical de
+          toute la page : sinon, swiper vers la rubrique suivante alors qu'on
+          a déjà défilé vers le bas de la précédente atterrit au milieu de la
+          suivante au lieu de son sommet. Chaque page garde sa propre
+          position de défilement (remise à zéro tant qu'on ne l'a pas encore
+          parcourue), donc on arrive toujours en haut d'une rubrique qu'on
+          swipe pour la première fois. */}
       {(heroMain || categories.length > 0) && (
         <div className="-mx-6 mb-10 flex snap-x snap-mandatory overflow-x-auto sm:hidden">
           {heroMain && (
-            <div className="w-full shrink-0 snap-center px-6">
-              <div className="flex min-h-[65dvh] flex-col border-2 border-ink p-6">
+            <div className="h-[70dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
+              <div className="flex min-h-full flex-col border-2 border-ink p-6">
                 <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
                   ✦ À la une ✦
                 </p>
@@ -144,7 +150,7 @@ export function FrontPageView({
             </div>
           )}
           {categories.map((cat, i) => (
-            <div key={cat} className="w-full shrink-0 snap-center px-6">
+            <div key={cat} className="h-[70dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
               <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} fillMobile />
             </div>
           ))}
@@ -257,8 +263,8 @@ function StaticCategorySection({
   tone: number;
   limit?: number;
   /** Uniquement passé depuis le carrousel mobile : force l'encadré à occuper
-   *  au moins toute la hauteur restante de l'écran, plutôt qu'un petit
-   *  encadré flottant suivi de vide avant le bas de la page. */
+   *  au moins toute la hauteur de sa page (le parent défile déjà lui-même en
+   *  interne, voir FrontPageView), plutôt qu'un petit encadré flottant. */
   fillMobile?: boolean;
 }) {
   const shown = typeof limit === "number" ? articles.slice(0, limit) : articles;
@@ -267,7 +273,7 @@ function StaticCategorySection({
 
   return (
     <section
-      className={`${CATEGORY_BOX_TONES[tone % CATEGORY_BOX_TONES.length]} ${fillMobile ? "min-h-[65dvh]" : ""}`}
+      className={`${CATEGORY_BOX_TONES[tone % CATEGORY_BOX_TONES.length]} ${fillMobile ? "min-h-full" : ""}`}
     >
       <h3 className="mb-4 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">{label}</h3>
 

@@ -63,9 +63,9 @@ export function CategoryColumn({
    *  clic. Mutuellement exclusif avec scrollExpand (desktop). */
   autoInfinite?: boolean;
   /** Uniquement passé depuis le carrousel mobile (/direct) : force la
-   *  colonne à occuper au moins toute la hauteur restante de l'écran, pour
-   *  que la page de chaque rubrique remplisse l'écran plutôt que de laisser
-   *  du vide avant le bas. */
+   *  colonne à occuper au moins toute la hauteur de sa page (le parent
+   *  défile déjà lui-même en interne, voir CategoryGrid), plutôt que de
+   *  laisser un petit encadré flottant. */
   fillMobile?: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
@@ -131,7 +131,7 @@ export function CategoryColumn({
             }
           : undefined
       }
-      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""} ${fillMobile ? "min-h-[65dvh]" : ""}`}
+      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""} ${fillMobile ? "min-h-full" : ""}`}
     >
       <h2
         draggable={draggable}

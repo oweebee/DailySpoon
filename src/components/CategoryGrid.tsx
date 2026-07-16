@@ -73,10 +73,15 @@ export function CategoryGrid({
           n'a pas de sens ici (conflit avec le swipe horizontal), donc pas de
           props draggable dans cette branche. Chaque page fait exactement
           100% de la largeur, sans gap : la colonne voisine ne doit jamais
-          être visible pendant la lecture de l'actuelle. */}
+          être visible pendant la lecture de l'actuelle. Chaque page a sa
+          PROPRE zone de défilement vertical (h-[...] + overflow-y-auto)
+          plutôt que de partager le défilement vertical de toute la page :
+          sinon, swiper vers la rubrique suivante après avoir déjà défilé
+          dans la précédente atterrit au milieu de la suivante au lieu de son
+          sommet. */}
       <div className="-mx-6 flex snap-x snap-mandatory overflow-x-auto md:hidden">
         {categories.map((cat) => (
-          <div key={cat.label} className="w-full shrink-0 snap-center px-6">
+          <div key={cat.label} className="h-[70dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
             <CategoryColumn
               label={cat.label}
               articles={cat.articles}
