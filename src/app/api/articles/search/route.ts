@@ -24,7 +24,12 @@ export async function GET(req: NextRequest) {
       ]
     },
     orderBy: { publishedAt: "desc" },
-    take: MAX_RESULTS
+    take: MAX_RESULTS,
+    // L'édition (et sa date) est incluse pour /archive : la recherche y sert
+    // à retrouver quel JOUR archivé contient les mots recherchés, pas
+    // seulement l'article en lui-même — champ ignoré sans effet ailleurs
+    // (En direct affiche déjà les articles individuellement).
+    include: { edition: { select: { date: true } } }
   });
 
   return NextResponse.json({ articles });
