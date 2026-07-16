@@ -59,20 +59,26 @@ export async function GET(req: NextRequest) {
 
   const dateRange = parseFrenchDateQuery(q);
 
+  // Une recherche reconnue comme une date ("15 juillet"...) filtre UNIQUEMENT
+  // par date de publication — pas en plus de la recherche texte, sinon un
+  // article qui mentionne juste "juillet" quelque part dans son résumé (très
+  // courant dans un article d'actualité) remontait aussi, avec sa vraie date
+  // de publication qui n'a rien à voir avec celle recherchée.
+  const where = dateRange
+    ? { processed: true, publishedAt: { gte: dateRange.start, lt: dateRange.end } }
+    : {
+        processed: true,
+        OR: [
+          { headline: { contains: q, mode: "insensitive" as const } },
+          { summary: { contains: q, mode: "insensitive" as const } },
+          { sourceTitle: { contains: q, mode: "insensitive" as const } },
+          { feedTitle: { contains: q, mode: "insensitive" as const } },
+          { category: { contains: q, mode: "insensitive" as const } }
+        ]
+      };
+
   const articles = await prisma.article.findMany({
-    where: {
-      processed: true,
-      OR: [
-        { headline: { contains: q, mode: "insensitive" } },
-        { summary: { contains: q, mode: "insensitive" } },
-        { sourceTitle: { contains: q, mode: "insensitive" } },
-        { feedTitle: { contains: q, mode: "insensitive" } },
-        { category: { contains: q, mode: "insensitive" } },
-        // "15 juillet" / "15 juillet 2026" : recherche par date de
-        // publication plutôt que texte, en plus des conditions ci-dessus.
-        ...(dateRange ? [{ publishedAt: { gte: dateRange.start, lt: dateRange.end } }] : [])
-      ]
-    },
+    where,
     orderBy: { publishedAt: "desc" },
     take: MAX_RESULTS,
     // L'édition (et sa date) est incluse pour /archive : la recherche y sert
