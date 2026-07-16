@@ -3,7 +3,7 @@ import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
 import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
 import { stripHtml, looksLikeHtml } from "./text";
-import { todayRangeInTz, dayRangeInTz } from "./tz";
+import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
@@ -26,10 +26,12 @@ const MAX_AI_ITEMS_PER_CATEGORY = 200;
 // édition existe déjà pour aujourd'hui avant de déclencher une génération de
 // secours à midi, avec exactement le même calcul de "date" que celui utilisé
 // ici pour créer une nouvelle édition — pas de risque de décalage de fuseau
-// entre les deux.
+// entre les deux. Jour calendaire en heure de Paris (comme todayRangeInTz
+// utilisé pour scoper le CONTENU de l'édition) — PAS le jour UTC brut, qui
+// affichait encore "hier" comme date d'édition entre 00h et 01h/02h heure de
+// Paris alors que le contenu était déjà celui d'aujourd'hui.
 export function todayDateOnly(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return todayDateOnlyInTz("Europe/Paris");
 }
 
 /**

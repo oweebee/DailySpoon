@@ -54,3 +54,24 @@ export function dayRangeInTz(at: Date, timeZone: string): { gte: Date; lt: Date 
 export function todayRangeInTz(timeZone: string): { gte: Date; lt: Date } {
   return dayRangeInTz(new Date(), timeZone);
 }
+
+/**
+ * Jour calendaire EN COURS dans le fuseau donné, comme une simple date
+ * "à minuit UTC" (année-mois-jour) — pratique pour un champ Prisma
+ * `@db.Date` (Edition.date), qui ne garde que année/mois/jour de toute
+ * façon. Sans ce calcul en heure locale, un serveur en UTC affiche encore
+ * "hier" comme date d'édition entre 00h et 01h/02h (heure de Paris, selon
+ * heure d'été/hiver) alors que le contenu de l'édition (scopé lui aussi en
+ * heure de Paris, voir todayRangeInTz) est déjà bien celui d'aujourd'hui.
+ */
+export function todayDateOnlyInTz(timeZone: string): Date {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  return new Date(Date.UTC(get("year"), get("month") - 1, get("day")));
+}
