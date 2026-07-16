@@ -9,8 +9,9 @@ function SpoonO() {
   return (
     <svg
       viewBox="0 0 24 24"
+      preserveAspectRatio="none"
       aria-hidden="true"
-      className="inline-block h-[0.72em] w-[0.5em] align-[-0.03em]"
+      className="-mx-[0.04em] inline-block h-[1em] w-[0.48em] align-[-0.2em]"
     >
       <ellipse cx="12" cy="6.2" rx="5.1" ry="6.2" fill="currentColor" />
       <rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4" fill="currentColor" />
