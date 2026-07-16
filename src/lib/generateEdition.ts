@@ -3,7 +3,7 @@ import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
 import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
 import { stripHtml, looksLikeHtml } from "./text";
-import { todayRangeInTz } from "./tz";
+import { todayRangeInTz, dayRangeInTz } from "./tz";
 import { getSettings } from "./settings";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
@@ -126,7 +126,8 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // ne trouve que 1-2 items vraiment nouveaux depuis la dernière fois se
   // retrouverait avec une une quasi vide, perdant tout le reste des articles
   // du jour déjà récupérés.
-  const todayRange = todayRangeInTz("Europe/Paris");
+  const PARIS_TZ = "Europe/Paris";
+  const todayRange = todayRangeInTz(PARIS_TZ);
 
   const edition = await prisma.edition.create({
     data: { date, status: "draft" }
@@ -138,10 +139,31 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   const rawItems = await fetchNewItemsFromSelectedCategories();
   console.log(`[edition] Fetched ${rawItems.length} new items from FreshRSS.`);
 
+  // Contenu à afficher : les articles publiés AUJOURD'HUI (Paris) s'il y en
+  // a — sinon on retombe sur le jour le plus récent qui en a, plutôt que de
+  // laisser la une figée indéfiniment sur un jour périmé (rien publié
+  // depuis hier sur les flux sélectionnés). Sans ce repli, un "Lancer
+  // l'impression" manuel un jour calme ne rafraîchissait RIEN à l'écran —
+  // pas même une image corrigée entre-temps par cleanExistingHtmlArtifacts
+  // ci-dessus, puisque cette correction ne peut atteindre l'affichage qu'à
+  // travers une NOUVELLE photo figée (EditionArticle).
+  let contentRange = todayRange;
+  const hasToday = await prisma.article.count({ where: { publishedAt: todayRange, included: true } });
+  if (hasToday === 0) {
+    const mostRecent = await prisma.article.findFirst({
+      where: { included: true, publishedAt: { not: null } },
+      orderBy: { publishedAt: "desc" },
+      select: { publishedAt: true }
+    });
+    if (mostRecent?.publishedAt) {
+      contentRange = dayRangeInTz(mostRecent.publishedAt, PARIS_TZ);
+    }
+  }
+
   if (rawItems.length === 0) {
-    const existingToday = await prisma.article.count({ where: { publishedAt: todayRange, included: true } });
-    if (existingToday === 0) {
-      console.log("[edition] No new items and nothing fetched today yet — leaving edition as draft.");
+    const existingForContent = await prisma.article.count({ where: { publishedAt: contentRange, included: true } });
+    if (existingForContent === 0) {
+      console.log("[edition] No new items and nothing to show yet — leaving edition as draft.");
       return { editionId: edition.id, articleCount: 0 };
     }
   }
@@ -203,15 +225,15 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // plutôt que par lots isolés de 12 comme processArticles — c'est ce score
   // qui détermine ensuite les articles "à la une" sur la page d'accueil.
   if (!options.forceNoAi) {
-    await curateFrontPageScores(todayRange);
+    await curateFrontPageScores(contentRange);
   }
 
   const heroArticle = await prisma.article.findFirst({
-    where: { publishedAt: todayRange, included: true },
+    where: { publishedAt: contentRange, included: true },
     orderBy: { priorityScore: "desc" }
   });
 
-  const articleCount = await prisma.article.count({ where: { publishedAt: todayRange, included: true } });
+  const articleCount = await prisma.article.count({ where: { publishedAt: contentRange, included: true } });
 
   await prisma.edition.update({
     where: { id: edition.id },
@@ -236,7 +258,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 
   const qualifyingArticles = await prisma.article.findMany({
     where: {
-      publishedAt: todayRange,
+      publishedAt: contentRange,
       processed: true,
       included: true,
       aiRewritten: true,

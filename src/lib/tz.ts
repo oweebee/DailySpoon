@@ -24,20 +24,16 @@ export function localMidnightUtc(year: number, month: number, day: number, timeZ
 }
 
 /**
- * Bornes [début, fin[ du jour calendaire EN COURS dans le fuseau donné,
- * exprimées en instants UTC — ex. pour scoper une requête Prisma sur
- * "publishedAt tombe aujourd'hui, heure de Paris" plutôt que sur le jour
- * UTC (qui décale de 1-2h selon l'heure d'été/hiver par rapport à ce que
- * l'utilisateur voit affiché à l'écran).
+ * Bornes [début, fin[ du jour calendaire CONTENANT l'instant "at", dans le
+ * fuseau donné.
  */
-export function todayRangeInTz(timeZone: string): { gte: Date; lt: Date } {
-  const now = new Date();
+export function dayRangeInTz(at: Date, timeZone: string): { gte: Date; lt: Date } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  }).formatToParts(now);
+  }).formatToParts(at);
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
   const year = get("year");
   const month = get("month") - 1;
@@ -46,4 +42,15 @@ export function todayRangeInTz(timeZone: string): { gte: Date; lt: Date } {
     gte: localMidnightUtc(year, month, day, timeZone),
     lt: localMidnightUtc(year, month, day + 1, timeZone)
   };
+}
+
+/**
+ * Bornes [début, fin[ du jour calendaire EN COURS dans le fuseau donné,
+ * exprimées en instants UTC — ex. pour scoper une requête Prisma sur
+ * "publishedAt tombe aujourd'hui, heure de Paris" plutôt que sur le jour
+ * UTC (qui décale de 1-2h selon l'heure d'été/hiver par rapport à ce que
+ * l'utilisateur voit affiché à l'écran).
+ */
+export function todayRangeInTz(timeZone: string): { gte: Date; lt: Date } {
+  return dayRangeInTz(new Date(), timeZone);
 }

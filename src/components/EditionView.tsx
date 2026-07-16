@@ -151,7 +151,7 @@ export function EditionView({
           rubriques (comme avant) — sur mobile, "À la une" redevient une
           simple colonne swipable parmi les autres (voir isHero plus bas). */}
       {heroMain && (
-        <div className="mb-10 hidden border-2 border-ink p-6 md:block md:p-8">
+        <div className="mb-10 hidden border-2 border-ink bg-ink/[0.07] p-6 md:block md:p-8">
           <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">✦ À la une ✦</p>
           <div className={heroGridClass}>
             {heroSideA && <SideHeroBox article={heroSideA} className="md:pr-8" />}

@@ -114,7 +114,7 @@ export function FrontPageView({
           {
             key: "hero",
             content: (
-              <div className="border-2 border-ink p-6">
+              <div className="border-2 border-ink bg-ink/[0.07] p-6">
                 <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
                   ✦ À la une ✦
                 </p>
@@ -142,7 +142,7 @@ export function FrontPageView({
           n'existe pas — ce bloc-ci est masqué en mobile, l'équivalent
           mobile est rendu séparément juste après). */}
       {heroMain && (
-        <div className="mb-10 hidden border-2 border-ink p-6 sm:block md:p-8">
+        <div className="mb-10 hidden border-2 border-ink bg-ink/[0.07] p-6 sm:block md:p-8">
           <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">✦ À la une ✦</p>
           <div className={heroGridClass}>
             {heroSideA && <SideHeroBox article={heroSideA} className="md:pr-8" />}
