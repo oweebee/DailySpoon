@@ -64,12 +64,21 @@ model Article {
   favoritedAt    DateTime? // date de mise en favori, affichée sur /favoris
   medal          Boolean   @default(false) // flux "médaillé" (voir MedalFeed) : badge sur la photo + éligible à la une
 
+  // false si le flux est exclu ou la catégorie décochée dans /admin au
+  // moment de la récupération (ou recalculé immédiatement si l'admin change
+  // le réglage après coup). Ces articles restent en base — pour rester
+  // trouvables par la recherche — mais sont exclus des vues normales
+  // (accueil, En direct). Ils ne passent jamais par l'IA (toujours texte
+  // brut), y compris si une clé Anthropic est configurée.
+  included       Boolean   @default(true)
+
   edition        Edition?  @relation(fields: [editionId], references: [id])
   editionId      String?
 
   @@index([editionId])
   @@index([favorite])
   @@index([medal])
+  @@index([included])
 }
 
 model Edition {

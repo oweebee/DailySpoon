@@ -13,7 +13,7 @@ export default async function DirectPage() {
   const [latestEdition, articles, selectedCategories] = await Promise.all([
     prisma.edition.findFirst({ orderBy: { date: "desc" } }),
     prisma.article.findMany({
-      where: { processed: true },
+      where: { processed: true, included: true },
       orderBy: { publishedAt: "desc" },
       take: 1000
     }),

@@ -72,13 +72,41 @@ export async function POST(req: NextRequest) {
       update: { label },
       create: { freshrssId, label, order: (maxOrder._max.order ?? -1) + 1 }
     });
+
+    // Recoché : les articles déjà stockés de cette catégorie redeviennent
+    // visibles, sauf ceux dont le flux reste explicitement exclu par
+    // ailleurs (ExcludedFeed) — ceux-là doivent rester masqués.
+    const excludedFeeds = await prisma.excludedFeed.findMany({ select: { freshrssId: true, label: true } });
+    const excludedFeedIds = excludedFeeds.map((f) => f.freshrssId);
+    const excludedFeedTitles = excludedFeeds.map((f) => f.label);
+
+    const { count } = await prisma.article.updateMany({
+      where: {
+        categoryLabel: label,
+        NOT: {
+          OR: [
+            { feedId: { in: excludedFeedIds } },
+            { feedId: null, feedTitle: { in: excludedFeedTitles } }
+          ]
+        }
+      },
+      data: { included: true }
+    });
+    if (count > 0) {
+      console.log(`[admin/categories] ${count} article(s) réinclus pour la catégorie "${label}".`);
+    }
   } else {
     await prisma.selectedCategory.deleteMany({ where: { freshrssId } });
-    // "décoché" doit vider la catégorie partout, pas juste bloquer les
-    // futures récupérations — on purge aussi les articles déjà stockés.
-    const { count } = await prisma.article.deleteMany({ where: { categoryLabel: label } });
+    // "décoché" ne purge plus les articles : ils restent en base pour rester
+    // trouvables par la recherche, mais disparaissent des vues normales via
+    // le flag included (jamais réanalysés par l'IA tant que la catégorie
+    // reste décochée).
+    const { count } = await prisma.article.updateMany({
+      where: { categoryLabel: label },
+      data: { included: false }
+    });
     if (count > 0) {
-      console.log(`[admin/categories] Removed ${count} existing article(s) for deselected category "${label}".`);
+      console.log(`[admin/categories] ${count} article(s) exclus pour la catégorie décochée "${label}".`);
     }
   }
 

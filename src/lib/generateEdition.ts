@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback } from "./freshrss";
-import { processArticles } from "./ai";
+import { processArticles, fallbackProcess, type ProcessedArticle } from "./ai";
 import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
 import { getSettings } from "./settings";
 
@@ -42,11 +42,22 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     return { editionId: edition.id, articleCount: 0 };
   }
 
-  const processed = rawItems.length > 0 ? await processArticles(rawItems, options) : [];
+  // Seuls les articles "included" (flux non exclu, catégorie sélectionnée)
+  // passent par l'IA (ou l'heuristique gratuite si pas de clé) — les autres
+  // sont stockés avec un traitement brut systématique, sans jamais
+  // consommer l'API payante, puisqu'ils ne sont de toute façon pas destinés
+  // à être affichés dans l'édition normale (juste trouvables en recherche).
+  const includedItems = rawItems.filter((r) => r.included);
+  const hiddenItems = rawItems.filter((r) => !r.included);
 
-  for (let i = 0; i < rawItems.length; i++) {
-    const raw = rawItems[i];
-    const ai = processed[i];
+  const processedIncluded = includedItems.length > 0 ? await processArticles(includedItems, options) : [];
+
+  const resultByItemId = new Map<string, ProcessedArticle>();
+  includedItems.forEach((raw, i) => resultByItemId.set(raw.freshrssItemId, processedIncluded[i]));
+  hiddenItems.forEach((raw) => resultByItemId.set(raw.freshrssItemId, fallbackProcess(raw)));
+
+  for (const raw of rawItems) {
+    const ai = resultByItemId.get(raw.freshrssItemId)!;
 
     await prisma.article.upsert({
       where: { freshrssItemId: raw.freshrssItemId },
@@ -62,6 +73,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
         imageUrl: raw.imageUrl,
         publishedAt: raw.publishedAt,
         processed: true,
+        included: raw.included,
         headline: ai.headline,
         summary: ai.summary,
         category: ai.category,

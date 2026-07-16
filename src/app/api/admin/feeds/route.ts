@@ -60,6 +60,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (typeof included === "boolean") {
+    const matchArticles = { OR: [{ feedId: freshrssId }, ...(title ? [{ feedId: null, feedTitle: title }] : [])] };
+
     if (included) {
       await prisma.excludedFeed.deleteMany({ where: { freshrssId } });
     } else {
@@ -68,15 +70,20 @@ export async function POST(req: NextRequest) {
         update: { label: title || freshrssId },
         create: { freshrssId, label: title || freshrssId }
       });
-      // "décoché" doit vider le flux partout, pas juste bloquer les futures
-      // récupérations — on purge aussi les articles déjà stockés (par feedId
-      // si connu, sinon par titre pour les articles fetchés avant ce champ).
-      const { count } = await prisma.article.deleteMany({
-        where: { OR: [{ feedId: freshrssId }, ...(title ? [{ feedTitle: title }] : [])] }
-      });
-      if (count > 0) {
-        console.log(`[admin/feeds] Removed ${count} existing article(s) for excluded feed "${title || freshrssId}".`);
-      }
+    }
+
+    // "décoché" ne purge plus les articles : ils restent en base pour rester
+    // trouvables par la recherche, mais disparaissent des vues normales via
+    // le flag included (jamais réanalysés par l'IA tant qu'ils restent
+    // exclus). "recoché" les fait réapparaître avec leur contenu déjà stocké.
+    const { count } = await prisma.article.updateMany({
+      where: matchArticles,
+      data: { included }
+    });
+    if (count > 0) {
+      console.log(
+        `[admin/feeds] ${count} article(s) ${included ? "réinclus" : "exclus"} pour le flux "${title || freshrssId}".`
+      );
     }
   }
 

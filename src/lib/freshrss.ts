@@ -12,6 +12,10 @@ export type RawItem = {
   sourceExcerpt: string | null;
   imageUrl: string | null;
   publishedAt: Date | null;
+  /** false si le flux est exclu ou la catégorie non sélectionnée dans
+   *  /admin/categories — l'article est quand même stocké (recherche), mais
+   *  n'apparaît pas dans les vues normales ni ne passe par l'IA. */
+  included: boolean;
 };
 
 export type FreshRssCategory = {
@@ -225,23 +229,24 @@ export function faviconFallback(pageUrl: string): string | null {
 }
 
 /**
- * Fetch recent items from FreshRSS's global reading list, then keep only
- * the ones tagged with a category the user has selected in DailySpoon's
- * admin, that aren't from a feed the user explicitly excluded, and that we
- * haven't already stored (dedup by FreshRSS item id). Read/unread state in
- * FreshRSS is never modified.
+ * Fetch recent items from FreshRSS's global reading list — TOUS les items,
+ * pas seulement ceux d'une catégorie sélectionnée ou d'un flux non exclu.
+ * Chaque item reçoit un flag "included" qui reflète l'état actuel des
+ * réglages admin : les articles non "included" sont quand même stockés
+ * (pour rester trouvables par la recherche même si leur flux est exclu ou
+ * leur catégorie décochée), mais n'apparaissent pas dans les vues normales
+ * et ne passent jamais par l'IA (voir generateEdition.ts). Dédoublonnage
+ * par id FreshRSS ; le read/unread FreshRSS n'est jamais modifié.
  */
 export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> {
-  const [selected, excludedFeeds] = await Promise.all([
+  const [selected, excludedFeeds, allCategories] = await Promise.all([
     prisma.selectedCategory.findMany(),
-    prisma.excludedFeed.findMany()
+    prisma.excludedFeed.findMany(),
+    listAllCategories()
   ]);
-  if (selected.length === 0) {
-    console.warn("[freshrss] No category selected in admin — nothing to fetch.");
-    return [];
-  }
   const selectedIds = new Set(selected.map((c) => c.freshrssId));
   const excludedFeedIds = new Set(excludedFeeds.map((f) => f.freshrssId));
+  const categoryLabelById = new Map(allCategories.map((c) => [c.freshrssId, c.label]));
 
   const { baseUrl, token } = await login();
   const data = await authedFetch(
@@ -254,12 +259,19 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
 
   for (const item of data.items || []) {
     const categories: string[] = item.categories || [];
-    if (!categories.some((c) => selectedIds.has(c))) continue;
-
     const feedId: string | null = item.origin?.streamId || null;
-    if (feedId && excludedFeedIds.has(feedId)) continue;
 
-    const matchedCategory = selected.find((c) => categories.includes(c.freshrssId));
+    const isSelectedCategory = categories.some((c) => selectedIds.has(c));
+    const isExcludedFeed = Boolean(feedId && excludedFeedIds.has(feedId));
+    const included = isSelectedCategory && !isExcludedFeed;
+
+    // Étiquette de rubrique pour l'affichage/la recherche : la catégorie
+    // sélectionnée correspondante si possible, sinon la première catégorie
+    // FreshRSS reconnue même non sélectionnée (contexte minimal utile dans
+    // les résultats de recherche pour un article normalement masqué).
+    const matchedSelected = selected.find((c) => categories.includes(c.freshrssId));
+    const fallbackLabel = categories.map((c) => categoryLabelById.get(c)).find((l): l is string => Boolean(l));
+    const categoryLabel = matchedSelected?.label ?? fallbackLabel ?? null;
 
     const exists = await prisma.article.findUnique({ where: { freshrssItemId: item.id } });
     if (exists) continue;
@@ -270,13 +282,15 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     const excerpt = rawExcerpt ? stripHtml(rawExcerpt) : null;
 
     let imageUrl = extractImageUrl(item);
-    if (!imageUrl && canonicalUrl) {
-      // Rien dans le flux — on va chercher l'og:image sur la page source.
+    if (!imageUrl && canonicalUrl && included) {
+      // Requête réseau (og:image) — seulement pour les articles "included",
+      // pour ne pas multiplier les appels sortants sur tout le flux
+      // FreshRSS (des centaines d'items) à chaque génération.
       imageUrl = await fetchOgImage(canonicalUrl);
     }
     if (!imageUrl && canonicalUrl) {
-      // Toujours rien — favicon du site en dernier recours, plutôt que pas
-      // d'image du tout.
+      // Favicon : gratuit (juste une URL construite), toujours tenté même
+      // pour les articles non "included".
       imageUrl = faviconFallback(canonicalUrl);
     }
 
@@ -284,12 +298,13 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
       freshrssItemId: item.id,
       feedId,
       feedTitle: item.origin?.title || "FreshRSS",
-      categoryLabel: matchedCategory?.label ?? null,
+      categoryLabel,
       sourceUrl: canonicalUrl,
       sourceTitle: item.title?.trim() || "(sans titre)",
       sourceExcerpt: excerpt,
       imageUrl,
-      publishedAt: item.published ? new Date(item.published * 1000) : null
+      publishedAt: item.published ? new Date(item.published * 1000) : null,
+      included
     });
   }
 

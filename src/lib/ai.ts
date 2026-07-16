@@ -144,7 +144,7 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-function fallbackProcess(item: RawItem): ProcessedArticle {
+export function fallbackProcess(item: RawItem): ProcessedArticle {
   // Pas de troncature : on affiche le texte complet fourni par le flux
   // (nettoyé du HTML), sans le couper à une longueur arbitraire.
   const fullText = item.sourceExcerpt || "";
