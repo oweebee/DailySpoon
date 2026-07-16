@@ -113,23 +113,31 @@ export function FrontPageView({
         </div>
       )}
 
-      {/* ——— Rubriques, encadrées, en colonnes façon vrai journal imprimé
-          (CSS columns plutôt que grid : le contenu s'écoule colonne par
-          colonne sans laisser de gros blancs quand une rubrique est plus
-          courte que sa voisine — un grid classique aligne les rangées et
-          crée ces vides). Chaque encadré alterne un léger fond teinté et un
-          padding différent pour éviter que tout se ressemble. */}
+      {/* ——— Rubriques, encadrées. Mobile : une rubrique par "page", swipe
+          au doigt (scroll-snap natif). Tablette/desktop : colonnes CSS
+          (le contenu s'écoule colonne par colonne sans laisser de gros
+          blancs quand une rubrique est plus courte que sa voisine — un grid
+          classique aligne les rangées et crée ces vides). Chaque encadré
+          alterne un léger fond teinté et un padding différent pour éviter
+          que tout se ressemble. */}
       {categories.length > 0 && (
-        <div className="columns-1 gap-6 sm:columns-2 lg:columns-3">
-          {categories.map((cat, i) => {
-            const arts = byCategory.get(cat)!;
-            return (
-              <div key={cat} className="mb-6 break-inside-avoid">
-                <StaticCategorySection label={cat} articles={arts} tone={i % 3} />
+        <>
+          <div className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2 sm:hidden">
+            {categories.map((cat, i) => (
+              <div key={cat} className="w-[88%] shrink-0 snap-center">
+                <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+
+          <div className="hidden sm:block sm:columns-2 sm:gap-6 lg:columns-3">
+            {categories.map((cat, i) => (
+              <div key={cat} className="mb-6 break-inside-avoid">
+                <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <SpoonDivider />

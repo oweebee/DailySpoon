@@ -67,23 +67,48 @@ export function CategoryGrid({
   }
 
   return (
-    <div className="grid gap-x-0 gap-y-8 md:grid-cols-2 lg:grid-cols-4">
-      {categories.map((cat) => (
-        <CategoryColumn
-          key={cat.label}
-          label={cat.label}
-          articles={cat.articles}
-          draggable={!!cat.freshrssId}
-          isDragging={draggedLabel === cat.label}
-          onDragStart={() => setDraggedLabel(cat.label)}
-          onDragEnd={() => setDraggedLabel(null)}
-          onDropHere={() => handleDrop(cat.label)}
-          clampSummary={clampSummary}
-          showMedal={showMedal}
-          showDateStamp={showDateStamp}
-          showFavorite={showFavorite}
-        />
-      ))}
-    </div>
+    <>
+      {/* ——— Mobile : une rubrique par "page", swipe au doigt (scroll-snap
+          natif, pas de librairie JS) — le glisser-déposer de réorganisation
+          n'a pas de sens ici (conflit avec le swipe horizontal), donc pas de
+          props draggable dans cette branche. Chaque page laisse dépasser un
+          peu la suivante (w-[88%]) pour indiquer qu'il y a autre chose à
+          glisser. */}
+      <div className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2 md:hidden">
+        {categories.map((cat) => (
+          <div key={cat.label} className="w-[88%] shrink-0 snap-center">
+            <CategoryColumn
+              label={cat.label}
+              articles={cat.articles}
+              clampSummary={clampSummary}
+              showMedal={showMedal}
+              showDateStamp={showDateStamp}
+              showFavorite={showFavorite}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* ——— Desktop/tablette : grille classique inchangée, avec
+          glisser-déposer sur le titre de chaque colonne. */}
+      <div className="hidden gap-x-0 gap-y-8 md:grid md:grid-cols-2 lg:grid-cols-4">
+        {categories.map((cat) => (
+          <CategoryColumn
+            key={cat.label}
+            label={cat.label}
+            articles={cat.articles}
+            draggable={!!cat.freshrssId}
+            isDragging={draggedLabel === cat.label}
+            onDragStart={() => setDraggedLabel(cat.label)}
+            onDragEnd={() => setDraggedLabel(null)}
+            onDropHere={() => handleDrop(cat.label)}
+            clampSummary={clampSummary}
+            showMedal={showMedal}
+            showDateStamp={showDateStamp}
+            showFavorite={showFavorite}
+          />
+        ))}
+      </div>
+    </>
   );
 }

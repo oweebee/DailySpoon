@@ -1,10 +1,32 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ArticleModalProvider } from "@/components/ArticleModalContext";
+import { PwaRegister } from "@/components/PwaRegister";
 
 export const metadata: Metadata = {
   title: "DailySpoon — le journal du jour",
-  description: "Votre édition quotidienne personnalisée, générée automatiquement."
+  description: "Votre édition quotidienne personnalisée, générée automatiquement.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" }
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "DailySpoon"
+  }
+};
+
+// Séparé de "metadata" (exigé par Next 14 pour themeColor/viewport, plus
+// accepté dans l'export "metadata" classique).
+export const viewport: Viewport = {
+  themeColor: "#1a1a1a",
+  width: "device-width",
+  initialScale: 1
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -12,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr">
       <body className="min-h-screen bg-paper text-ink font-serif">
         <ArticleModalProvider>{children}</ArticleModalProvider>
+        <PwaRegister />
       </body>
     </html>
   );
