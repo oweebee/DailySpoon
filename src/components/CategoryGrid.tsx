@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CategoryColumn } from "./CategoryColumn";
+import { MobilePagedSection } from "./MobilePagedSection";
 import type { ArticleLike } from "./EditionView";
 
 export type CategoryEntry = {
@@ -27,7 +28,8 @@ export function CategoryGrid({
   clampSummary = false,
   showMedal = true,
   showDateStamp = true,
-  showFavorite = true
+  showFavorite = true,
+  date
 }: {
   initialCategories: CategoryEntry[];
   /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
@@ -36,6 +38,9 @@ export function CategoryGrid({
   showMedal?: boolean;
   showDateStamp?: boolean;
   showFavorite?: boolean;
+  /** Dupliquée en haut de chaque page du carrousel mobile — voir
+   *  MobilePagedSection. */
+  date: Date;
 }) {
   const [categories, setCategories] = useState(initialCategories);
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null);
@@ -68,20 +73,19 @@ export function CategoryGrid({
 
   return (
     <>
-      {/* ——— Mobile : une rubrique par "page", swipe au doigt (scroll-snap
-          natif, pas de librairie JS) — le glisser-déposer de réorganisation
-          n'a pas de sens ici (conflit avec le swipe horizontal), donc pas de
-          props draggable dans cette branche. Chaque page fait exactement
-          100% de la largeur, sans gap : la colonne voisine ne doit jamais
-          être visible pendant la lecture de l'actuelle. Chaque page a sa
-          PROPRE zone de défilement vertical (h-[...] + overflow-y-auto)
-          plutôt que de partager le défilement vertical de toute la page :
-          sinon, swiper vers la rubrique suivante après avoir déjà défilé
-          dans la précédente atterrit au milieu de la suivante au lieu de son
-          sommet. */}
-      <div className="-mx-6 flex snap-x snap-mandatory overflow-x-auto md:hidden">
-        {categories.map((cat) => (
-          <div key={cat.label} className="h-[90dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
+      {/* ——— Mobile : une page par rubrique, swipe horizontal — chaque page
+          emporte sa PROPRE copie du menu du haut (Masthead), donc swiper
+          déplace le menu avec le contenu comme un seul bloc. Plus de zone de
+          défilement à hauteur fixée à l'intérieur d'une page : on descend
+          normalement pour tout explorer, chargement infini compris. Le
+          glisser-déposer de réorganisation n'a pas de sens ici, donc pas de
+          props draggable dans cette branche. Voir MobilePagedSection. */}
+      <MobilePagedSection
+        date={date}
+        className="md:hidden"
+        pages={categories.map((cat) => ({
+          key: cat.label,
+          content: (
             <CategoryColumn
               label={cat.label}
               articles={cat.articles}
@@ -90,11 +94,10 @@ export function CategoryGrid({
               showDateStamp={showDateStamp}
               showFavorite={showFavorite}
               autoInfinite
-              fillMobile
             />
-          </div>
-        ))}
-      </div>
+          )
+        }))}
+      />
 
       {/* ——— Desktop/tablette : grille classique inchangée, avec
           glisser-déposer sur le titre de chaque colonne. "Afficher plus

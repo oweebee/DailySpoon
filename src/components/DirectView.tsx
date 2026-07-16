@@ -7,10 +7,14 @@ import { ArticleLink } from "./ArticleLink";
 
 export function DirectView({
   initialArticles,
-  categoryOrder = []
+  categoryOrder = [],
+  date
 }: {
   initialArticles: ArticleLike[];
   categoryOrder?: CategoryOrderEntry[];
+  /** Dupliquée en haut de chaque page du carrousel mobile — voir
+   *  EditionView/CategoryGrid/MobilePagedSection. */
+  date: Date;
 }) {
   const [pulling, setPulling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -112,7 +116,7 @@ export function DirectView({
           articles.
         </p>
       ) : (
-        <EditionView articles={initialArticles} categoryOrder={categoryOrder} clampSummary />
+        <EditionView articles={initialArticles} categoryOrder={categoryOrder} clampSummary date={date} />
       )}
     </div>
   );

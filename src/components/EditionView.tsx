@@ -32,9 +32,13 @@ export type CategoryOrderEntry = { freshrssId: string; label: string };
 export function EditionView({
   articles,
   categoryOrder = [],
-  clampSummary = false
+  clampSummary = false,
+  date
 }: {
   articles: ArticleLike[];
+  /** Dupliquée en haut de chaque page du carrousel mobile — voir
+   *  CategoryGrid/MobilePagedSection. */
+  date: Date;
   /** Ordre persisté (SelectedCategory.order, réglable en glissant le titre
    *  d'une colonne ici même, ou dans /admin/categories) des catégories
    *  FreshRSS. Les catégories absentes de cette liste (ex. rubriques
@@ -110,76 +114,37 @@ export function EditionView({
     return a.localeCompare(b);
   });
 
+  // "À la une" devient elle-même une colonne (même rendu que les rubriques :
+  // titre encadré, liste d'articles avec photo/source, "afficher plus"/
+  // défilement infini), toujours placée en tête plutôt que dans un bloc à
+  // part avec sa propre mise en page spéciale.
+  const columns = [
+    ...(heroes.length > 0 ? [{ label: "À la une", freshrssId: null, articles: heroes }] : []),
+    ...categories.map((cat) => ({
+      label: cat,
+      freshrssId: idByLabel.get(cat) ?? null,
+      articles: byCategory.get(cat)!
+    }))
+  ];
+
   return (
     <div>
-      {/* ——— À la une ——— : les 3 articles les plus prioritaires côte à
-          côte (en largeur), pas un seul en pleine largeur. */}
-      <div className="mb-10 border-b-2 border-ink pb-10">
-        <p className="mb-5 text-center text-xs uppercase tracking-[0.35em] text-journal">
-          ✦ À la une ✦
-        </p>
-        {/* On saute directement au nombre de colonnes final à "md" (pas de
-            palier à 2 colonnes avant 3) : avec 3 héros, un palier
-            intermédiaire à 2 colonnes ferait passer à la ligne le 3e
-            article seul, et "divide-x" (qui ignore les retours à la ligne)
-            lui poserait à tort un filet à gauche — même bug que réglé plus
-            tôt pour les colonnes de rubriques. */}
-        <div
-          className={`grid gap-x-8 gap-y-8 ${
-            heroes.length === 2
-              ? "md:grid-cols-2 md:divide-x md:divide-ink/30"
-              : heroes.length >= 3
-                ? "md:grid-cols-3 md:divide-x md:divide-ink/30"
-                : ""
-          }`}
-        >
-          {heroes.map((hero) => (
-            <article key={hero.id} className="text-center md:px-5 md:first:pl-0 md:last:pr-0">
-              <h1 className="mx-auto mb-4 max-w-md font-display text-lg font-black leading-tight md:text-xl">
-                {hero.headline}
-              </h1>
-              {/* Choix de style : pas de photo sur "à la une", même quand
-                  l'article en a une — uniquement du texte pour les 3
-                  articles vedettes. Aperçu toujours limité à 10 lignes ici
-                  (peu importe la page) — pour lire la suite, on ouvre
-                  l'article via le lien source. */}
-              <p className="newsprint mx-auto max-w-md line-clamp-[10] text-left text-base leading-snug text-neutral-800">
-                {hero.summary}
-              </p>
-              <div className="mt-3">
-                <SourceLine article={hero} center />
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-
-      {/* ——— Mobile : cuillères placées AU-DESSUS des rubriques, pas en bas
-          de page — chaque rubrique remplit maintenant tout l'écran
-          (fillMobile dans CategoryGrid/CategoryColumn), donc les laisser
-          après tout ce contenu les rendrait invisibles sans défiler bien
-          plus bas. */}
+      {/* ——— Mobile : cuillères placées au-dessus des colonnes plutôt qu'en
+          bas de page, pour marquer la transition avec l'en-tête. */}
       <SpoonDivider className="mb-6 text-center text-sepia md:hidden" />
 
-      {/* ——— Rubriques en colonnes avec filets verticaux ———
-          Note : pas de "divide-x" ici. Cette classe ajoute un filet à
+      {/* ——— Rubriques (dont "À la une") en colonnes avec filets verticaux
+          ——— Note : pas de "divide-x" ici. Cette classe ajoute un filet à
           gauche de chaque colonne sauf la 1ère du DOM, sans tenir compte
           des retours à la ligne de la grille (2 col en md, 4 en lg) — le
           filet réapparaît alors à gauche de la 1ère colonne de la rangée
           suivante au lieu de rester à droite. Les filets sont donc posés
           directement dans CategoryColumn, calculés par position réelle
           dans la rangée (nth-child) pour chaque taille d'écran. */}
-      <CategoryGrid
-        initialCategories={categories.map((cat) => ({
-          label: cat,
-          freshrssId: idByLabel.get(cat) ?? null,
-          articles: byCategory.get(cat)!
-        }))}
-        clampSummary={clampSummary}
-      />
+      <CategoryGrid initialCategories={columns} clampSummary={clampSummary} date={date} />
 
       {/* Cul-de-lampe de fin d'édition — desktop seulement (mobile l'a déjà
-          au-dessus des rubriques, voir plus haut). */}
+          au-dessus des colonnes, voir plus haut). */}
       <SpoonDivider className="mt-14 hidden text-center text-sepia md:block" />
     </div>
   );

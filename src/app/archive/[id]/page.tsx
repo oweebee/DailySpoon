@@ -58,7 +58,12 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
 
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
-      <Masthead date={edition.date} />
+      {/* Masqué en mobile : chaque page du carrousel de FrontPageView y
+          affiche sa propre copie du menu (voir MobilePagedSection), donc ce
+          Masthead unique ne reste utile qu'en desktop/tablette. */}
+      <div className="hidden sm:block">
+        <Masthead date={edition.date} />
+      </div>
       <p className="mb-6 text-center text-xs uppercase tracking-[0.3em] text-sepia">
         <Link href="/archive" className="hover:underline">
           ← Retour aux archives
@@ -66,7 +71,7 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
         {" · "}Édition de {timeLabel}
       </p>
       {articles.length > 0 ? (
-        <FrontPageView articles={articles} categoryOrder={categoryOrder} />
+        <FrontPageView articles={articles} categoryOrder={categoryOrder} date={edition.date} />
       ) : (
         <p className="py-24 text-center italic text-sepia">
           Aucun article IA disponible pour cette édition (rétention expirée ou aucune impression IA

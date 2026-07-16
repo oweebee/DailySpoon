@@ -60,14 +60,21 @@ export default async function HomePage() {
     medal: a.medal
   }));
 
+  const editionDate = latestEdition?.date ?? new Date();
+
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
-      <Masthead date={latestEdition?.date ?? new Date()} />
+      {/* Masqué en mobile : chaque page du carrousel de FrontPageView y
+          affiche sa propre copie du menu (voir MobilePagedSection), donc ce
+          Masthead unique ne reste utile qu'en desktop/tablette. */}
+      <div className="hidden sm:block">
+        <Masthead date={editionDate} />
+      </div>
       {/* Planning désactivé dans /admin/settings : pas de génération auto,
           donc on donne un bouton pour lancer l'impression à la main. */}
       {!settings.editionScheduleEnabled && <PrintStampButton provider={settings.aiProvider} />}
       {articles.length > 0 ? (
-        <FrontPageView articles={articles} categoryOrder={categoryOrder} />
+        <FrontPageView articles={articles} categoryOrder={categoryOrder} date={editionDate} />
       ) : (
         <p className="py-24 text-center italic text-sepia">
           Aucune édition générée pour l’instant. Sélectionne des catégories FreshRSS dans l’admin

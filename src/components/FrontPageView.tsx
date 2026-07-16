@@ -1,6 +1,7 @@
 import { ArticleImage } from "./ArticleImage";
 import { type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { SpoonDivider } from "./SpoonDivider";
+import { MobilePagedSection } from "./MobilePagedSection";
 
 /**
  * Vraie "une" de journal, figée : ce qu'affiche cette page est exactement la
@@ -27,10 +28,16 @@ import { SpoonDivider } from "./SpoonDivider";
  */
 export function FrontPageView({
   articles,
-  categoryOrder = []
+  categoryOrder = [],
+  date
 }: {
   articles: ArticleLike[];
   categoryOrder?: CategoryOrderEntry[];
+  /** Date de l'édition (Masthead) — dupliquée en haut de CHAQUE page du
+   *  carrousel mobile (voir MobilePagedSection), puisque chaque rubrique y
+   *  emporte sa propre copie du menu du haut plutôt que de partager celui
+   *  affiché une seule fois au niveau de la page Next.js. */
+  date: Date;
 }) {
   if (articles.length === 0) {
     return (
@@ -66,8 +73,8 @@ export function FrontPageView({
 
   // Pas de plafond ici : la limite à 5 (desktop, colonnes CSS équilibrées)
   // est appliquée uniquement au rendu desktop de StaticCategorySection (prop
-  // "limit") — sur mobile, chaque rubrique a sa propre page dédiée qu'on
-  // peut faire défiler verticalement à l'infini, donc tous les articles de
+  // "limit") — sur mobile, les rubriques sont empilées dans le flux normal
+  // de la page (pas de page dédiée par rubrique), donc tous les articles de
   // la catégorie sont gardés ici.
   const byCategory = new Map<string, ArticleLike[]>();
   for (const article of rest) {
@@ -99,11 +106,41 @@ export function FrontPageView({
         : ""
   }`;
 
+  // Pages du carrousel mobile : "à la une" en premier (même contenu que le
+  // bloc desktop ci-dessous), puis une page par rubrique.
+  const mobilePages = [
+    ...(heroMain
+      ? [
+          {
+            key: "hero",
+            content: (
+              <div className="border-2 border-ink p-6">
+                <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
+                  ✦ À la une ✦
+                </p>
+                <div className={heroGridClass}>
+                  {heroSideA && <SideHeroBox article={heroSideA} />}
+                  <MainHeroBox article={heroMain} />
+                  {heroSideB && <SideHeroBox article={heroSideB} />}
+                </div>
+              </div>
+            )
+          }
+        ]
+      : []),
+    ...categories.map((cat, i) => ({
+      key: cat,
+      content: <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} />
+    }))
+  ];
+
   return (
     <div>
       {/* ——— Desktop/tablette : "à la une" en bloc fixe au-dessus des
-          rubriques, comme avant. Sur mobile ce même contenu devient la
-          PREMIÈRE page du carrousel swipe ci-dessous, pas un bloc séparé. */}
+          rubriques. Sur mobile, ce même contenu réapparaît en premier bloc
+          de la pile ci-dessous (marqué "sm:hidden" ici, "hidden sm:block"
+          n'existe pas — ce bloc-ci est masqué en mobile, l'équivalent
+          mobile est rendu séparément juste après). */}
       {heroMain && (
         <div className="mb-10 hidden border-2 border-ink p-6 sm:block md:p-8">
           <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">✦ À la une ✦</p>
@@ -115,48 +152,15 @@ export function FrontPageView({
         </div>
       )}
 
-      {/* ——— Mobile : cuillères placées AU-DESSUS du carrousel (pas en bas
-          de page comme sur desktop) — puisque chaque page du carrousel
-          remplit maintenant tout l'écran (min-h ci-dessous), les cuillères
-          resteraient invisibles tout en bas si on les laissait après tout ce
-          contenu ; ici elles restent visibles dès l'arrivée sur la page. */}
-      {(heroMain || categories.length > 0) && <SpoonDivider className="mb-6 text-center text-sepia sm:hidden" />}
-
-      {/* ——— Mobile : UN SEUL carrousel swipe (scroll-snap natif, pas de
-          librairie JS) — "à la une" est sa propre page dédiée en premier,
-          puis une page dédiée par rubrique ensuite. Chaque page fait
-          exactement 100% de la largeur (pas de "peek" du voisin, pas de
-          gap) : on ne doit jamais voir la page suivante en lisant l'actuelle.
-          Chaque page a sa PROPRE zone de défilement vertical (h-[...] +
-          overflow-y-auto) plutôt que de partager le défilement vertical de
-          toute la page : sinon, swiper vers la rubrique suivante alors qu'on
-          a déjà défilé vers le bas de la précédente atterrit au milieu de la
-          suivante au lieu de son sommet. Chaque page garde sa propre
-          position de défilement (remise à zéro tant qu'on ne l'a pas encore
-          parcourue), donc on arrive toujours en haut d'une rubrique qu'on
-          swipe pour la première fois. */}
+      {/* ——— Mobile : une page par rubrique (dont "à la une" en premier),
+          swipe horizontal — chaque page emporte sa PROPRE copie du menu du
+          haut (Masthead), donc swiper déplace le menu avec le contenu comme
+          un seul bloc. Plus de zone de défilement à hauteur fixée à
+          l'intérieur d'une page : on descend normalement (défilement de
+          page classique) pour tout explorer, y compris le chargement infini
+          des rubriques. Voir MobilePagedSection. */}
       {(heroMain || categories.length > 0) && (
-        <div className="-mx-6 mb-10 flex snap-x snap-mandatory overflow-x-auto sm:hidden">
-          {heroMain && (
-            <div className="h-[90dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
-              <div className="flex min-h-full flex-col border-2 border-ink p-6">
-                <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
-                  ✦ À la une ✦
-                </p>
-                <div className={heroGridClass}>
-                  {heroSideA && <SideHeroBox article={heroSideA} />}
-                  <MainHeroBox article={heroMain} />
-                  {heroSideB && <SideHeroBox article={heroSideB} />}
-                </div>
-              </div>
-            </div>
-          )}
-          {categories.map((cat, i) => (
-            <div key={cat} className="h-[90dvh] w-full shrink-0 snap-center overflow-y-auto px-6">
-              <StaticCategorySection label={cat} articles={byCategory.get(cat)!} tone={i % 3} fillMobile />
-            </div>
-          ))}
-        </div>
+        <MobilePagedSection date={date} pages={mobilePages} className="mb-10 sm:hidden" />
       )}
 
       {/* ——— Tablette/desktop : rubriques en colonnes CSS (le contenu
@@ -173,8 +177,9 @@ export function FrontPageView({
         </div>
       )}
 
-      {/* Desktop seulement — mobile a déjà ses cuillères au-dessus du
-          carrousel (voir plus haut). */}
+      {/* Desktop/tablette seulement — le carrousel mobile n'a pas
+          d'équivalent ici, chaque page y est déjà autonome (menu + contenu
+          dupliqués, voir MobilePagedSection). */}
       <SpoonDivider className="mt-14 hidden text-center text-sepia sm:block" />
     </div>
   );
@@ -248,35 +253,28 @@ const CATEGORY_BOX_TONES = [
  *
  * "limit" est optionnel et seulement passé côté desktop (colonnes CSS) : un
  * encadré trop long y déséquilibrerait la colonne qui l'accueille et
- * créerait justement les gros vides que ce format évite. Sur mobile
- * (rubrique = sa propre page dédiée, défilement vertical libre), pas de
- * limite passée : tous les articles de la rubrique sont affichés, jusqu'au
- * bout de la rétention configurée.
+ * créerait justement les gros vides que ce format évite. Sur mobile (blocs
+ * empilés dans le flux normal de la page), pas de limite passée : tous les
+ * articles de la rubrique sont affichés, jusqu'au bout de la rétention
+ * configurée.
  */
 function StaticCategorySection({
   label,
   articles,
   tone,
-  limit,
-  fillMobile = false
+  limit
 }: {
   label: string;
   articles: ArticleLike[];
   tone: number;
   limit?: number;
-  /** Uniquement passé depuis le carrousel mobile : force l'encadré à occuper
-   *  au moins toute la hauteur de sa page (le parent défile déjà lui-même en
-   *  interne, voir FrontPageView), plutôt qu'un petit encadré flottant. */
-  fillMobile?: boolean;
 }) {
   const shown = typeof limit === "number" ? articles.slice(0, limit) : articles;
   const [lead, ...briefs] = shown;
   if (!lead) return null;
 
   return (
-    <section
-      className={`${CATEGORY_BOX_TONES[tone % CATEGORY_BOX_TONES.length]} ${fillMobile ? "min-h-full" : ""}`}
-    >
+    <section className={CATEGORY_BOX_TONES[tone % CATEGORY_BOX_TONES.length]}>
       <h3 className="mb-4 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">{label}</h3>
 
       {/* Photo à gauche ou à droite en alternance d'une rubrique à l'autre

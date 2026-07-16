@@ -22,8 +22,7 @@ export function CategoryColumn({
   showDateStamp = true,
   showFavorite = true,
   scrollExpand = false,
-  autoInfinite = false,
-  fillMobile = false
+  autoInfinite = false
 }: {
   label: string;
   articles: ArticleLike[];
@@ -52,21 +51,17 @@ export function CategoryColumn({
    *  le clic) avec sa propre barre de défilement interne. Les articles
    *  suivants se révèlent au fur et à mesure du défilement à l'intérieur de
    *  cet encart, jusqu'à épuisement de l'historique déjà chargé — la
-   *  colonne elle-même ne bouge plus jamais. Désactivé sur mobile, où
-   *  chaque rubrique a déjà sa page dédiée en plein écran (grandir n'y pose
-   *  aucun problème). */
+   *  colonne elle-même ne bouge plus jamais. Désactivé sur mobile (voir
+   *  autoInfinite). */
   scrollExpand?: boolean;
-  /** Version mobile : pas de bouton du tout — la rubrique a déjà sa propre
-   *  page dédiée en plein écran (défilement vertical libre, pas de hauteur à
-   *  préserver), donc on charge directement le lot suivant dès qu'on
-   *  approche du bas de la liste déjà affichée, sans jamais demander de
-   *  clic. Mutuellement exclusif avec scrollExpand (desktop). */
+  /** Version mobile : pas de bouton du tout — les rubriques sont empilées
+   *  verticalement dans le flux normal de la page (voir CategoryGrid), donc
+   *  on charge directement le lot suivant dès qu'on approche du bas de la
+   *  liste déjà affichée en faisant défiler la page entière, sans jamais
+   *  demander de clic. root=null observe directement la fenêtre plutôt qu'un
+   *  conteneur à hauteur fixe. Mutuellement exclusif avec scrollExpand
+   *  (desktop). */
   autoInfinite?: boolean;
-  /** Uniquement passé depuis le carrousel mobile (/direct) : force la
-   *  colonne à occuper au moins toute la hauteur de sa page (le parent
-   *  défile déjà lui-même en interne, voir CategoryGrid), plutôt que de
-   *  laisser un petit encadré flottant. */
-  fillMobile?: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
   const [expanded, setExpanded] = useState(false);
@@ -131,7 +126,7 @@ export function CategoryColumn({
             }
           : undefined
       }
-      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""} ${fillMobile ? "min-h-full" : ""}`}
+      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""}`}
     >
       <h2
         draggable={draggable}
