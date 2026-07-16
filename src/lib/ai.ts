@@ -37,8 +37,9 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 /**
  * Process every raw RSS item into a rewritten, categorized, prioritized article.
- * Falls back to a naive local heuristic if no ANTHROPIC_API_KEY is configured,
- * so the app still runs end-to-end without an AI provider connected.
+ * Falls back to a naive local heuristic if no API key is configured for the
+ * selected provider, so the app still runs end-to-end without an AI provider
+ * connected.
  */
 export async function processArticles(
   items: RawItem[],
@@ -47,23 +48,39 @@ export async function processArticles(
   if (options.forceNoAi) {
     // Règle du projet : pas de conso de tokens là où ce n'est pas nécessaire.
     // /direct ("Aspirer les news") est un aperçu rapide et brut — jamais d'IA,
-    // même si une clé Anthropic est configurée pour l'édition quotidienne.
+    // même si une IA est configurée pour l'édition quotidienne.
     return items.map(fallbackProcess);
   }
 
-  const { anthropicApiKey: apiKey, anthropicModel } = await getSettings();
-  if (!apiKey) {
+  const settings = await getSettings();
+  const provider = settings.aiProvider === "gemini" ? "gemini" : "anthropic";
+
+  if (provider === "gemini") {
+    if (!settings.geminiApiKey) {
+      console.warn("[ai] Gemini API key not set (env or /admin/settings) — using fallback heuristic processing.");
+      return items.map(fallbackProcess);
+    }
+    return processInBatches(items, (batch) => processBatchGemini(batch, settings.geminiApiKey, settings.geminiModel));
+  }
+
+  if (!settings.anthropicApiKey) {
     console.warn("[ai] Anthropic API key not set (env or /admin/settings) — using fallback heuristic processing.");
     return items.map(fallbackProcess);
   }
+  const client = new Anthropic({ apiKey: settings.anthropicApiKey });
+  return processInBatches(items, (batch) => processBatch(client, batch, settings.anthropicModel));
+}
 
-  const client = new Anthropic({ apiKey });
+async function processInBatches(
+  items: RawItem[],
+  processBatchFn: (batch: RawItem[]) => Promise<ProcessedArticle[]>
+): Promise<ProcessedArticle[]> {
   const batches = chunk(items, BATCH_SIZE);
   const results: ProcessedArticle[] = [];
 
   for (const batch of batches) {
     try {
-      const processed = await processBatch(client, batch, anthropicModel);
+      const processed = await processBatchFn(batch);
       results.push(...processed);
     } catch (err) {
       console.error("[ai] Batch processing failed, falling back for this batch:", err);
@@ -97,6 +114,50 @@ async function processBatch(
 
   if (!Array.isArray(parsed) || parsed.length !== batch.length) {
     throw new Error(`AI returned ${parsed?.length ?? 0} items, expected ${batch.length}`);
+  }
+
+  return parsed.map((p, i) => ({
+    headline: p.headline?.trim() || batch[i].sourceTitle,
+    summary: p.summary?.trim() || batch[i].sourceExcerpt || "",
+    category: p.category?.trim() || "Autre",
+    priorityScore: clamp(Number(p.priorityScore) || 50, 1, 100)
+  }));
+}
+
+// Appel REST direct plutôt qu'un SDK dédié (@google/generative-ai n'est pas
+// une dépendance du projet, et l'ajouter demanderait de régénérer
+// package-lock.json sans pouvoir vérifier le build ici) — l'API Gemini
+// "generateContent" est un simple POST JSON, pas besoin de SDK pour ça.
+async function processBatchGemini(batch: RawItem[], apiKey: string, model: string): Promise<ProcessedArticle[]> {
+  const prompt = buildPrompt(batch);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Gemini API ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data: any = await res.json();
+  const text: string = (data?.candidates?.[0]?.content?.parts || [])
+    .map((p: any) => p?.text || "")
+    .join("");
+
+  const json = extractJson(text);
+  const parsed = JSON.parse(json) as ProcessedArticle[];
+
+  if (!Array.isArray(parsed) || parsed.length !== batch.length) {
+    throw new Error(`Gemini returned ${parsed?.length ?? 0} items, expected ${batch.length}`);
   }
 
   return parsed.map((p, i) => ({

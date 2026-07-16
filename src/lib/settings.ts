@@ -8,6 +8,12 @@ export type AppSettings = {
   freshrssApiPassword: string;
   anthropicApiKey: string;
   anthropicModel: string;
+  /** "anthropic" (défaut) ou "gemini" — fournisseur IA utilisé pour la
+   *  réécriture/résumé/priorisation. Sans effet sur /direct, qui reste
+   *  toujours sans IA quel que soit ce réglage. */
+  aiProvider: string;
+  geminiApiKey: string;
+  geminiModel: string;
   editionHour: number;
   editionMinute: number;
   editionTz: string;
@@ -33,6 +39,9 @@ export async function getSettings(): Promise<AppSettings> {
     freshrssApiPassword: row?.freshrssApiPassword || process.env.FRESHRSS_API_PASSWORD || "",
     anthropicApiKey: row?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || "",
     anthropicModel: row?.anthropicModel || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
+    aiProvider: row?.aiProvider || process.env.AI_PROVIDER || "anthropic",
+    geminiApiKey: row?.geminiApiKey || process.env.GEMINI_API_KEY || "",
+    geminiModel: row?.geminiModel || process.env.GEMINI_MODEL || "gemini-3.5-flash",
     editionHour: row?.editionHour ?? Number(process.env.EDITION_HOUR ?? 6),
     editionMinute: row?.editionMinute ?? Number(process.env.EDITION_MINUTE ?? 0),
     editionTz: row?.editionTz || process.env.EDITION_TZ || "Europe/Paris",
@@ -48,6 +57,9 @@ const STRING_FIELDS = [
   "freshrssApiPassword",
   "anthropicApiKey",
   "anthropicModel",
+  "aiProvider",
+  "geminiApiKey",
+  "geminiModel",
   "editionTz"
 ] as const;
 
@@ -57,6 +69,9 @@ export type SettingsInput = Partial<{
   freshrssApiPassword: string | null;
   anthropicApiKey: string | null;
   anthropicModel: string | null;
+  aiProvider: string | null;
+  geminiApiKey: string | null;
+  geminiModel: string | null;
   editionHour: number | null;
   editionMinute: number | null;
   editionTz: string | null;

@@ -9,6 +9,9 @@ type SettingsForm = {
   freshrssApiPassword: string;
   anthropicApiKey: string;
   anthropicModel: string;
+  aiProvider: string;
+  geminiApiKey: string;
+  geminiModel: string;
   editionHour: string;
   editionMinute: string;
   editionTz: string;
@@ -22,6 +25,9 @@ const EMPTY: SettingsForm = {
   freshrssApiPassword: "",
   anthropicApiKey: "",
   anthropicModel: "",
+  aiProvider: "anthropic",
+  geminiApiKey: "",
+  geminiModel: "",
   editionHour: "",
   editionMinute: "",
   editionTz: "",
@@ -42,6 +48,7 @@ const RETENTION_OPTIONS = [
 ];
 
 type TestResult = { ok: boolean; message: string };
+type GeminiModel = { id: string; displayName: string };
 
 export default function AdminSettingsPage() {
   const [form, setForm] = useState<SettingsForm>(EMPTY);
@@ -49,9 +56,14 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<{ freshrss?: TestResult; anthropic?: TestResult } | null>(
-    null
-  );
+  const [testResults, setTestResults] = useState<{
+    freshrss?: TestResult;
+    anthropic?: TestResult;
+    gemini?: TestResult;
+  } | null>(null);
+  const [geminiModels, setGeminiModels] = useState<GeminiModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/settings")
@@ -64,15 +76,55 @@ export default function AdminSettingsPage() {
           freshrssApiPassword: s.freshrssApiPassword || "",
           anthropicApiKey: s.anthropicApiKey || "",
           anthropicModel: s.anthropicModel || "",
+          aiProvider: s.aiProvider || "anthropic",
+          geminiApiKey: s.geminiApiKey || "",
+          geminiModel: s.geminiModel || "",
           editionHour: s.editionHour?.toString() ?? "",
           editionMinute: s.editionMinute?.toString() ?? "",
           editionTz: s.editionTz || "",
           retentionDays: s.retentionDays !== undefined && s.retentionDays !== null ? s.retentionDays.toString() : "730",
           editionScheduleEnabled: s.editionScheduleEnabled ?? true
         });
+        // Clé déjà enregistrée : charge tout de suite la liste des moteurs
+        // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
+        if (s.geminiApiKey) loadGeminiModels(s.geminiApiKey);
       })
       .finally(() => setLoading(false));
   }, []);
+
+  async function loadGeminiModels(apiKey: string) {
+    if (!apiKey) {
+      setModelsError("Renseigne d'abord une clé API Gemini.");
+      return;
+    }
+    setLoadingModels(true);
+    setModelsError(null);
+    try {
+      const res = await fetch("/api/admin/settings/gemini-models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setModelsError(body.error || "Échec du chargement des moteurs.");
+        setGeminiModels([]);
+      } else {
+        setGeminiModels(body.models || []);
+        // Si aucun moteur n'est encore choisi (première config), on
+        // présélectionne le premier de la liste plutôt que de laisser le
+        // champ vide.
+        if (!form.geminiModel && body.models?.[0]) {
+          set("geminiModel", body.models[0].id);
+        }
+      }
+    } catch {
+      setModelsError("Impossible de joindre l'API Gemini.");
+      setGeminiModels([]);
+    } finally {
+      setLoadingModels(false);
+    }
+  }
 
   function set<K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -85,6 +137,9 @@ export default function AdminSettingsPage() {
       freshrssApiPassword: form.freshrssApiPassword,
       anthropicApiKey: form.anthropicApiKey,
       anthropicModel: form.anthropicModel,
+      aiProvider: form.aiProvider,
+      geminiApiKey: form.geminiApiKey,
+      geminiModel: form.geminiModel,
       editionHour: form.editionHour === "" ? null : Number(form.editionHour),
       editionMinute: form.editionMinute === "" ? null : Number(form.editionMinute),
       editionTz: form.editionTz,
@@ -183,25 +238,103 @@ export default function AdminSettingsPage() {
           </fieldset>
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">
-            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">IA (Anthropic)</legend>
-            <Field
-              label="Clé API"
-              value={form.anthropicApiKey}
-              onChange={(v) => set("anthropicApiKey", v)}
-              type="password"
-            />
-            <Field
-              label="Modèle"
-              value={form.anthropicModel}
-              onChange={(v) => set("anthropicModel", v)}
-              placeholder="claude-sonnet-4-5"
-            />
-            {testResults?.anthropic && (
-              <p className={`text-sm italic ${testResults.anthropic.ok ? "text-sepia" : "text-journal"}`}>
-                {testResults.anthropic.ok ? "✓ " : "✗ "}
-                {testResults.anthropic.message}
-              </p>
-            )}
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">IA</legend>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
+                Fournisseur
+              </span>
+              <select
+                value={form.aiProvider}
+                onChange={(e) => set("aiProvider", e.target.value)}
+                className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
+              >
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </label>
+            <p className="text-xs italic text-sepia">
+              Ne change que le moteur utilisé pour l’édition IA — « Aspirer les news » sur /direct
+              reste toujours sans IA, quel que soit ce choix.
+            </p>
+
+            <div className="space-y-3 border-t border-ink/20 pt-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-600">Anthropic</p>
+              <Field
+                label="Clé API"
+                value={form.anthropicApiKey}
+                onChange={(v) => set("anthropicApiKey", v)}
+                type="password"
+              />
+              <Field
+                label="Modèle"
+                value={form.anthropicModel}
+                onChange={(v) => set("anthropicModel", v)}
+                placeholder="claude-sonnet-4-5"
+              />
+              {testResults?.anthropic && (
+                <p className={`text-sm italic ${testResults.anthropic.ok ? "text-sepia" : "text-journal"}`}>
+                  {testResults.anthropic.ok ? "✓ " : "✗ "}
+                  {testResults.anthropic.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3 border-t border-ink/20 pt-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-600">Google Gemini</p>
+              <Field
+                label="Clé API"
+                value={form.geminiApiKey}
+                onChange={(v) => set("geminiApiKey", v)}
+                type="password"
+              />
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  {geminiModels.length > 0 ? (
+                    <label className="block">
+                      <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
+                        Moteur
+                      </span>
+                      <select
+                        value={form.geminiModel}
+                        onChange={(e) => set("geminiModel", e.target.value)}
+                        className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
+                      >
+                        {!geminiModels.some((m) => m.id === form.geminiModel) && form.geminiModel && (
+                          <option value={form.geminiModel}>{form.geminiModel}</option>
+                        )}
+                        {geminiModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.displayName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <Field
+                      label="Modèle"
+                      value={form.geminiModel}
+                      onChange={(v) => set("geminiModel", v)}
+                      placeholder="gemini-3.5-flash"
+                    />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadGeminiModels(form.geminiApiKey)}
+                  disabled={loadingModels}
+                  className="border border-ink/40 bg-paper px-3 py-2 text-xs uppercase tracking-[0.15em] text-ink transition-colors hover:bg-ink hover:text-paper disabled:opacity-50"
+                >
+                  {loadingModels ? "Chargement..." : geminiModels.length > 0 ? "Actualiser" : "Charger les moteurs"}
+                </button>
+              </div>
+              {modelsError && <p className="text-xs italic text-journal">{modelsError}</p>}
+              {testResults?.gemini && (
+                <p className={`text-sm italic ${testResults.gemini.ok ? "text-sepia" : "text-journal"}`}>
+                  {testResults.gemini.ok ? "✓ " : "✗ "}
+                  {testResults.gemini.message}
+                </p>
+              )}
+            </div>
           </fieldset>
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">

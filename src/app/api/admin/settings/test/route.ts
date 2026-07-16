@@ -19,10 +19,12 @@ export async function POST(req: NextRequest) {
     freshrssUsername,
     freshrssApiPassword,
     anthropicApiKey,
-    anthropicModel
+    anthropicModel,
+    geminiApiKey,
+    geminiModel
   } = body ?? {};
 
-  const results: { freshrss?: TestResult; anthropic?: TestResult } = {};
+  const results: { freshrss?: TestResult; anthropic?: TestResult; gemini?: TestResult } = {};
 
   if (freshrssBaseUrl && freshrssUsername && freshrssApiPassword) {
     results.freshrss = await testFreshRss(freshrssBaseUrl, freshrssUsername, freshrssApiPassword);
@@ -30,8 +32,13 @@ export async function POST(req: NextRequest) {
     results.freshrss = { ok: false, message: "URL, identifiant et mot de passe requis pour tester." };
   }
 
+  // Les deux clés sont testées indépendamment du fournisseur actuellement
+  // sélectionné — pratique pour valider une clé avant de basculer dessus.
   if (anthropicApiKey) {
     results.anthropic = await testAnthropic(anthropicApiKey, anthropicModel);
+  }
+  if (geminiApiKey) {
+    results.gemini = await testGemini(geminiApiKey, geminiModel);
   }
 
   return NextResponse.json(results);
@@ -98,5 +105,36 @@ async function testAnthropic(apiKey: string, model?: string): Promise<TestResult
     return { ok: true, message: "Clé Anthropic valide (vérifiée sans consommer de tokens)." };
   } catch (err: any) {
     return { ok: false, message: `Impossible de joindre l'API Anthropic : ${err?.message || "erreur réseau"}` };
+  }
+}
+
+// Même principe que testAnthropic : /v1beta/models liste les modèles
+// disponibles pour la clé sans lancer de génération, donc coût nul.
+async function testGemini(apiKey: string, model?: string): Promise<TestResult> {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`
+    );
+
+    if (res.status === 400 || res.status === 403) {
+      return { ok: false, message: "Clé Gemini invalide ou refusée." };
+    }
+    if (!res.ok) {
+      return { ok: false, message: `Échec (${res.status} ${res.statusText}) en vérifiant la clé Gemini.` };
+    }
+
+    const data: any = await res.json();
+    const models: string[] = (data.models || []).map((m: any) => (m.name || "").replace(/^models\//, ""));
+
+    if (model && !models.includes(model)) {
+      return {
+        ok: true,
+        message: `Clé Gemini valide, mais le modèle "${model}" n'apparaît pas dans la liste des modèles disponibles pour ce compte — vérifie l'orthographe.`
+      };
+    }
+
+    return { ok: true, message: "Clé Gemini valide (vérifiée sans consommer de tokens)." };
+  } catch (err: any) {
+    return { ok: false, message: `Impossible de joindre l'API Gemini : ${err?.message || "erreur réseau"}` };
   }
 }

@@ -107,6 +107,13 @@ model Settings {
   freshrssApiPassword String?
   anthropicApiKey     String?
   anthropicModel      String?
+  // Fournisseur IA utilisé pour la réécriture/résumé/priorisation des
+  // articles : "anthropic" (défaut) ou "gemini". Change uniquement le
+  // fournisseur utilisé quand une IA est effective — /direct ("Aspirer les
+  // news") reste toujours sans IA quel que soit ce réglage.
+  aiProvider          String?
+  geminiApiKey        String?
+  geminiModel         String?
   editionHour         Int?
   editionMinute       Int?
   editionTz           String?
