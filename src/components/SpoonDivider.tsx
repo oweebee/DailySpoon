@@ -7,10 +7,14 @@
 // (pas de composant React partageable entre les deux contextes de rendu).
 function Spoon({ rotate }: { rotate: number }) {
   return (
+    // Boîte plus étroite que haute + preserveAspectRatio="none" : étire le
+    // bol verticalement (moins rond, on ne veut pas un effet "maracas") —
+    // même technique que les "o" du masthead (Masthead.tsx).
     <svg
       viewBox="0 0 24 24"
-      width="18"
-      height="18"
+      preserveAspectRatio="none"
+      width="13"
+      height="19"
       className="inline-block"
       style={{ transform: `rotate(${rotate}deg)` }}
     >

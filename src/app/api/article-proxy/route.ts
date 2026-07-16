@@ -147,7 +147,10 @@ function favoriteStarHtml(): string {
 // debout au garde-à-vous) — mêmes angles et même silhouette que
 // SpoonDivider.tsx côté app React, pour une cohérence visuelle totale.
 function spoonSvg(rotateDeg: number): string {
-  return `<svg viewBox="0 0 24 24" width="16" height="16" style="transform: rotate(${rotateDeg}deg)"><ellipse cx="12" cy="6.2" rx="5.1" ry="6.2"/><rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4"/></svg>`;
+  // Boîte plus étroite que haute + preserveAspectRatio="none" : étire le bol
+  // verticalement (moins rond, effet "maracas" évité) — même technique que
+  // les "o" du masthead et SpoonDivider.tsx côté app React.
+  return `<svg viewBox="0 0 24 24" preserveAspectRatio="none" width="12" height="17" style="transform: rotate(${rotateDeg}deg)"><ellipse cx="12" cy="6.2" rx="5.1" ry="6.2"/><rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4"/></svg>`;
 }
 
 function renderPage(opts: {

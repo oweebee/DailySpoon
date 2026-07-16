@@ -36,11 +36,25 @@ export function Masthead({ date }: { date: Date }) {
       </div>
 
       {/* Masthead gothique centré */}
-      <div className="py-6 text-center">
+      <div className="relative py-6 text-center">
         <Link href="/" className="font-masthead text-5xl font-black uppercase tracking-tight md:text-7xl">
           DailySp
           <SpoonO />
           <SpoonO />n
+        </Link>
+
+        {/* Timbre "EN DIRECT" — façon tampon encreur posé un peu de travers,
+            comme s'il avait glissé après avoir été collé (rotation + petites
+            taches de colle qui débordent aux coins), même rouge que le lien
+            "En direct" de la nav ci-dessous. */}
+        <Link
+          href="/direct"
+          className="absolute right-[8%] top-1 -rotate-[10deg] select-none rounded-sm border-2 border-journal px-2 py-0.5 font-display text-[0.55rem] font-bold uppercase tracking-[0.25em] text-journal shadow-[1px_2px_0_rgba(139,26,26,0.25)] sm:right-[14%] sm:top-2 sm:px-3 sm:py-1 sm:text-xs"
+        >
+          En direct
+          <span className="absolute -left-1.5 -top-1 h-1.5 w-1.5 rounded-full bg-journal/50" />
+          <span className="absolute -bottom-1.5 -right-1 h-2 w-2 rounded-full bg-journal/40" />
+          <span className="absolute -bottom-1 left-1/3 h-1 w-1 rounded-full bg-journal/30" />
         </Link>
       </div>
 
