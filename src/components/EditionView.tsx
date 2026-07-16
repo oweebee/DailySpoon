@@ -14,6 +14,7 @@ export type ArticleLike = {
   imageUrl: string | null;
   publishedAt: Date | string | null;
   favorite: boolean;
+  medal: boolean;
 };
 
 export type CategoryOrderEntry = { freshrssId: string; label: string };
@@ -43,12 +44,24 @@ export function EditionView({
     );
   }
 
-  const sorted = [...articles].sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
-  // "À la une" affiche les 3 articles les plus prioritaires côte à côte
-  // (au lieu d'un seul en pleine largeur) ; le reste part dans les colonnes
-  // de rubriques comme avant.
-  const [heroA, heroB, heroC, ...rest] = sorted;
+  // "À la une" affiche les 3 dernières news (par date de publication) des
+  // flux "médaillés" (décoration réglée dans /admin/categories, à côté du
+  // flux) — plutôt que les 3 mieux priorisées par l'IA. S'il y a moins de 3
+  // articles médaillés disponibles, on complète avec les mieux priorisés
+  // (comportement précédent) pour ne jamais laisser un emplacement vide.
+  const byRecency = (a: ArticleLike, b: ArticleLike) => {
+    const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return tb - ta;
+  };
+  const medaledArticles = [...articles].filter((a) => a.medal).sort(byRecency);
+  const fallbackArticles = [...articles]
+    .filter((a) => !a.medal)
+    .sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
+  const [heroA, heroB, heroC] = [...medaledArticles, ...fallbackArticles];
   const heroes = [heroA, heroB, heroC].filter((a): a is ArticleLike => Boolean(a));
+  const heroIds = new Set(heroes.map((h) => h.id));
+  const rest = articles.filter((a) => !heroIds.has(a.id));
 
   const MAX_PER_CATEGORY = 20;
 
@@ -119,7 +132,7 @@ export function EditionView({
                 {hero.summary}
               </p>
               <div className="mt-3">
-                <SourceLine article={hero} />
+                <SourceLine article={hero} center />
               </div>
             </article>
           ))}
@@ -196,10 +209,24 @@ export function formatStamp(d: Date | string | null): string | null {
   return `${p.day} ${p.month} ${p.year} ${p.hour}:${p.minute}`.toUpperCase();
 }
 
-export function SourceLine({ article, showDate = true }: { article: ArticleLike; showDate?: boolean }) {
+export function SourceLine({
+  article,
+  showDate = true,
+  center = false
+}: {
+  article: ArticleLike;
+  showDate?: boolean;
+  /** Centre la ligne au lieu de la caler à gauche — utilisé pour les 3
+   *  articles "à la une", dont le reste du bloc est déjà centré. */
+  center?: boolean;
+}) {
   const formatted = showDate ? formatPublished(article.publishedAt) : null;
   return (
-    <p className="mt-1 flex items-center gap-1.5 text-xs italic text-sepia">
+    <p
+      className={`mt-1 flex items-center gap-1.5 text-xs italic text-sepia ${
+        center ? "justify-center" : ""
+      }`}
+    >
       {formatted && <span>{formatted} · </span>}
       <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
         Source : {article.feedTitle || article.sourceTitle}

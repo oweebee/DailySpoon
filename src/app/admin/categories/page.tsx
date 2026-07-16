@@ -14,6 +14,7 @@ type Feed = {
   title: string;
   categoryLabels: string[];
   included: boolean;
+  medal: boolean;
 };
 
 export default function AdminCategoriesPage() {
@@ -121,6 +122,17 @@ export default function AdminCategoriesPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ freshrssId: feed.freshrssId, title: feed.title, included: !feed.included })
+    });
+  }
+
+  async function toggleMedal(feed: Feed) {
+    setFeeds((prev) =>
+      prev.map((f) => (f.freshrssId === feed.freshrssId ? { ...f, medal: !f.medal } : f))
+    );
+    await fetch("/api/admin/feeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: feed.freshrssId, title: feed.title, medal: !feed.medal })
     });
   }
 
@@ -260,15 +272,26 @@ export default function AdminCategoriesPage() {
                           className="flex items-center justify-between gap-4 py-1.5"
                         >
                           <span className="text-sm">{feed.title}</span>
-                          <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
-                            <input
-                              type="checkbox"
-                              checked={feed.included}
-                              onChange={() => toggleFeed(feed)}
-                              className="accent-ink"
-                            />
-                            inclure le flux
-                          </label>
+                          <div className="flex shrink-0 items-center gap-4">
+                            <label className="flex items-center gap-2 text-xs italic text-sepia">
+                              <input
+                                type="checkbox"
+                                checked={feed.medal}
+                                onChange={() => toggleMedal(feed)}
+                                className="accent-journal"
+                              />
+                              médaille
+                            </label>
+                            <label className="flex items-center gap-2 text-xs italic text-sepia">
+                              <input
+                                type="checkbox"
+                                checked={feed.included}
+                                onChange={() => toggleFeed(feed)}
+                                className="accent-ink"
+                              />
+                              inclure le flux
+                            </label>
+                          </div>
                         </li>
                       ))}
                       {childFeeds.length === 0 && (
@@ -311,15 +334,26 @@ export default function AdminCategoriesPage() {
                         className="flex items-center justify-between gap-4 py-1.5"
                       >
                         <span className="text-sm">{feed.title}</span>
-                        <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
-                          <input
-                            type="checkbox"
-                            checked={feed.included}
-                            onChange={() => toggleFeed(feed)}
-                            className="accent-ink"
-                          />
-                          inclure le flux
-                        </label>
+                        <div className="flex shrink-0 items-center gap-4">
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={feed.medal}
+                              onChange={() => toggleMedal(feed)}
+                              className="accent-journal"
+                            />
+                            médaille
+                          </label>
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={feed.included}
+                              onChange={() => toggleFeed(feed)}
+                              className="accent-ink"
+                            />
+                            inclure le flux
+                          </label>
+                        </div>
                       </li>
                     ))}
                   </ul>

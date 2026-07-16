@@ -69,6 +69,8 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     });
   }
 
+  await syncMedalFlags();
+
   const heroArticle = await prisma.article.findFirst({
     where: { editionId: edition.id },
     orderBy: { priorityScore: "desc" }
@@ -87,6 +89,28 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   console.log(`[edition] Edition ${date.toISOString().slice(0, 10)} ready with ${articleCount} articles.`);
 
   return { editionId: edition.id, articleCount };
+}
+
+/**
+ * Réconcilie Article.medal avec la liste des flux "médaillés" réglée dans
+ * /admin/categories. Recalculé à chaque génération (pas seulement au moment
+ * du toggle admin, qui le fait déjà pour les articles déjà en base) pour
+ * couvrir aussi les articles insérés juste avant dans cette même run.
+ */
+async function syncMedalFlags(): Promise<void> {
+  const medalFeeds = await prisma.medalFeed.findMany({ select: { freshrssId: true } });
+  const medalFeedIds = medalFeeds.map((f) => f.freshrssId);
+
+  if (medalFeedIds.length > 0) {
+    await prisma.article.updateMany({
+      where: { feedId: { in: medalFeedIds }, medal: false },
+      data: { medal: true }
+    });
+  }
+  await prisma.article.updateMany({
+    where: { medal: true, ...(medalFeedIds.length > 0 ? { feedId: { notIn: medalFeedIds } } : {}) },
+    data: { medal: false }
+  });
 }
 
 /**

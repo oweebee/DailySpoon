@@ -1,23 +1,24 @@
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  background-color: #f6f1e3;
+  background-color: #f0f0f0;
   color: #1a1a1a;
-  /* Papier jauni : vignette + grain de papier journal (bruit SVG) */
+  /* Papier en niveaux de gris : vignette + grain de papier journal (bruit
+     SVG), sans teinte sépia/beige — tout est gris neutre. */
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E"),
-    radial-gradient(ellipse at center, #faf6ea 0%, #f3ecda 70%, #e9dfc4 100%);
+    radial-gradient(ellipse at center, #f5f5f5 0%, #ececec 70%, #dcdcdc 100%);
   background-attachment: fixed;
 }
 
 /* Lettrine de une, comme dans les vieux quotidiens */
 .drop-cap::first-letter {
   float: left;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Bodoni Moda", Georgia, serif;
   font-weight: 900;
   font-size: 3.4em;
   line-height: 0.85;

@@ -14,14 +14,20 @@ export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
-    const [freshrssFeeds, excluded] = await Promise.all([listAllFeeds(), prisma.excludedFeed.findMany()]);
+    const [freshrssFeeds, excluded, medaled] = await Promise.all([
+      listAllFeeds(),
+      prisma.excludedFeed.findMany(),
+      prisma.medalFeed.findMany()
+    ]);
     const excludedIds = new Set(excluded.map((e) => e.freshrssId));
+    const medaledIds = new Set(medaled.map((m) => m.freshrssId));
 
     const feeds = freshrssFeeds.map((f) => ({
       freshrssId: f.freshrssId,
       title: f.title,
       categoryLabels: f.categoryLabels,
-      included: !excludedIds.has(f.freshrssId)
+      included: !excludedIds.has(f.freshrssId),
+      medal: medaledIds.has(f.freshrssId)
     }));
 
     return NextResponse.json({ feeds });
@@ -34,38 +40,59 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Toggle whether a specific feed is included, regardless of its category.
+// Toggle whether a specific feed is included, regardless of its category,
+// and/or whether it carries la "médaille" (badge sur les photos + éligible
+// aux 3 emplacements "à la une"). Les deux réglages sont indépendants : une
+// requête peut ne toucher que l'un des deux.
 export async function POST(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { freshrssId, title, included } = body as {
+  const { freshrssId, title, included, medal } = body as {
     freshrssId?: string;
     title?: string;
     included?: boolean;
+    medal?: boolean;
   };
 
-  if (!freshrssId || typeof included !== "boolean") {
-    return NextResponse.json({ error: "freshrssId et included sont requis" }, { status: 400 });
+  if (!freshrssId || (typeof included !== "boolean" && typeof medal !== "boolean")) {
+    return NextResponse.json({ error: "freshrssId et (included ou medal) sont requis" }, { status: 400 });
   }
 
-  if (included) {
-    await prisma.excludedFeed.deleteMany({ where: { freshrssId } });
-  } else {
-    await prisma.excludedFeed.upsert({
-      where: { freshrssId },
-      update: { label: title || freshrssId },
-      create: { freshrssId, label: title || freshrssId }
-    });
-    // "décoché" doit vider le flux partout, pas juste bloquer les futures
-    // récupérations — on purge aussi les articles déjà stockés (par feedId
-    // si connu, sinon par titre pour les articles fetchés avant ce champ).
-    const { count } = await prisma.article.deleteMany({
-      where: { OR: [{ feedId: freshrssId }, ...(title ? [{ feedTitle: title }] : [])] }
-    });
-    if (count > 0) {
-      console.log(`[admin/feeds] Removed ${count} existing article(s) for excluded feed "${title || freshrssId}".`);
+  if (typeof included === "boolean") {
+    if (included) {
+      await prisma.excludedFeed.deleteMany({ where: { freshrssId } });
+    } else {
+      await prisma.excludedFeed.upsert({
+        where: { freshrssId },
+        update: { label: title || freshrssId },
+        create: { freshrssId, label: title || freshrssId }
+      });
+      // "décoché" doit vider le flux partout, pas juste bloquer les futures
+      // récupérations — on purge aussi les articles déjà stockés (par feedId
+      // si connu, sinon par titre pour les articles fetchés avant ce champ).
+      const { count } = await prisma.article.deleteMany({
+        where: { OR: [{ feedId: freshrssId }, ...(title ? [{ feedTitle: title }] : [])] }
+      });
+      if (count > 0) {
+        console.log(`[admin/feeds] Removed ${count} existing article(s) for excluded feed "${title || freshrssId}".`);
+      }
     }
+  }
+
+  if (typeof medal === "boolean") {
+    if (medal) {
+      await prisma.medalFeed.upsert({
+        where: { freshrssId },
+        update: { label: title || freshrssId },
+        create: { freshrssId, label: title || freshrssId }
+      });
+    } else {
+      await prisma.medalFeed.deleteMany({ where: { freshrssId } });
+    }
+    // Reflète immédiatement le réglage sur les articles déjà en base de ce
+    // flux, sans attendre la prochaine génération.
+    await prisma.article.updateMany({ where: { feedId: freshrssId }, data: { medal } });
   }
 
   return NextResponse.json({ ok: true });

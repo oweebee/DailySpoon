@@ -83,6 +83,7 @@ export function CategoryColumn({
                   src={article.imageUrl}
                   alt={article.headline || article.sourceTitle}
                   dateLabel={formatStamp(article.publishedAt)}
+                  medal={article.medal}
                   className="h-full w-full"
                 />
               </ArticleLink>

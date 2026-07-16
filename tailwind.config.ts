@@ -6,15 +6,21 @@ const config: Config = {
     extend: {
       fontFamily: {
         serif: ["Georgia", "Cambria", "Times New Roman", "Times", "serif"],
-        display: ['"Playfair Display"', "Georgia", "serif"],
-        masthead: ['"Playfair Display"', "Georgia", "serif"],
+        // Bodoni Moda : Didone à fort contraste, dans l'esprit des mastheads
+        // de vieilles gazettes (cf. maquette "La Petite Gazette").
+        display: ['"Bodoni Moda"', "Georgia", "serif"],
+        masthead: ['"Bodoni Moda"', "Georgia", "serif"],
         sans: ["-apple-system", "Segoe UI", "Helvetica", "Arial", "sans-serif"]
       },
       colors: {
-        paper: "#f6f1e3",
+        // Thème en niveaux de gris : seul le rouge ("journal") reste en
+        // couleur, comme accent unique (menu, tampon, étoile favori,
+        // ruban de médaille...). Le reste (papier, filets, texte discret)
+        // est du gris neutre pur (R=G=B), plus de teinte sépia/beige.
+        paper: "#f0f0f0",
         ink: "#1a1a1a",
         rule: "#1a1a1a",
-        sepia: "#6b5b3e",
+        sepia: "#5c5c5c",
         journal: "#8b1a1a"
       }
     }

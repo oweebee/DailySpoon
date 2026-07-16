@@ -21,6 +21,67 @@ function proxyImageUrl(absoluteUrl: string): string {
   return `/api/image-proxy?url=${encodeURIComponent(absoluteUrl)}`;
 }
 
+// Beaucoup de sites glissent, après le vrai texte de l'article mais toujours
+// à l'intérieur du bloc que Readability extrait, un rebus de fin d'article :
+// pub pour l'appli mobile, bandeau newsletter, liste "à lire aussi" — pas du
+// contenu de l'article. On repère le dernier paragraphe qui ressemble à du
+// vrai texte, et on supprime tout ce qui vient après (photo publicitaire,
+// listes de liens, etc.), plutôt que d'essayer de reconnaître chaque site.
+const TRAILING_JUNK_PHRASES = [
+  "inscrivez-vous",
+  "abonnez-vous",
+  "newsletter",
+  "téléchargez notre application",
+  "téléchargez l'application",
+  "app store",
+  "google play",
+  "écran d'accueil",
+  "toute l'actu",
+  "en un clin d'œil",
+  "restez connecté",
+  "restez informé",
+  "dans l'internet d'",
+  "sur le même sujet",
+  "à lire aussi",
+  "cet article vous a plu",
+  "partager cet article"
+];
+
+function isSubstantiveParagraph(el: Element): boolean {
+  if (el.tagName !== "P") return false;
+  const text = (el.textContent || "").trim();
+  if (text.length < 40) return false;
+
+  const lower = text.toLowerCase();
+  if (TRAILING_JUNK_PHRASES.some((p) => lower.includes(p))) return false;
+
+  // Un paragraphe qui n'est en fait qu'un lien/bouton habillé (CTA) plutôt
+  // que de la prose — on l'ignore même s'il est assez long.
+  const links = el.querySelectorAll("a");
+  if (links.length > 0) {
+    const linkText = Array.from(links)
+      .map((a) => (a.textContent || "").trim())
+      .join(" ");
+    if (linkText.length >= text.length - 5) return false;
+  }
+
+  return true;
+}
+
+/** Coupe le contenu juste après le dernier paragraphe "réel" : tout ce qui
+ *  suit (photo, liste de liens, bandeau newsletter...) est retiré. */
+function trimTrailingJunk(root: Element): void {
+  const children = Array.from(root.children);
+  let lastRealIdx = -1;
+  children.forEach((el, i) => {
+    if (isSubstantiveParagraph(el)) lastRealIdx = i;
+  });
+  if (lastRealIdx === -1) return; // rien d'identifiable, on ne touche à rien par sécurité
+  for (let i = children.length - 1; i > lastRealIdx; i--) {
+    children[i].remove();
+  }
+}
+
 // `Response.text()` du fetch natif décode toujours en UTF-8, quel que soit
 // l'encodage réel de la page — ce qui bousille les accents (é -> �) sur tout
 // site qui sert du HTML en ISO-8859-1/Windows-1252 (encore fréquent). On lit
@@ -68,10 +129,10 @@ function renderPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap" rel="stylesheet" />
 <style>
   * { box-sizing: border-box; }
-  html { background: #e9dfc4; }
+  html { background: #dcdcdc; }
   body {
     margin: 0;
     padding: 40px 28px 70px;
@@ -79,13 +140,15 @@ function renderPage(opts: {
     color: #1a1a1a;
     line-height: 1.7;
     font-size: 17.5px;
-    /* Papier jauni : même grain de bruit + vignette que le reste du site,
+    /* Papier gris : même grain de bruit + vignette que le reste du site,
        pour que la page proxifiée fasse illusion de vieux papier journal. */
-    background-color: #f6f1e3;
+    background-color: #f0f0f0;
     background-image:
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E"),
-      radial-gradient(ellipse at center, #faf6ea 0%, #f3ecda 70%, #e9dfc4 100%);
-    background-attachment: fixed;
+      radial-gradient(ellipse at center, #f5f5f5 0%, #ececec 70%, #dcdcdc 100%);
+    /* Pas de "background-attachment: fixed" ici : dans un iframe, ça fait
+       défiler le texte tout seul au-dessus d'un fond qui semble figé/vide.
+       Le fond doit défiler avec le contenu, comme une vraie page de papier. */
   }
   .page {
     max-width: 660px;
@@ -99,7 +162,7 @@ function renderPage(opts: {
     font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.2em;
-    color: #6b5b3e;
+    color: #5c5c5c;
     padding-bottom: 6px;
     border-bottom: 1px solid rgba(26, 26, 26, 0.6);
     margin-bottom: 4px;
@@ -116,7 +179,7 @@ function renderPage(opts: {
     margin: 22px 0 6px;
   }
   h1 {
-    font-family: "Playfair Display", Georgia, serif;
+    font-family: "Bodoni Moda", Georgia, serif;
     font-weight: 900;
     font-size: 2.15rem;
     line-height: 1.15;
@@ -127,13 +190,13 @@ function renderPage(opts: {
     text-align: center;
     font-size: 0.78rem;
     font-style: italic;
-    color: #6b5b3e;
+    color: #5c5c5c;
     margin-bottom: 28px;
   }
   .article-body { text-align: justify; hyphens: auto; }
   .article-body > p:first-of-type::first-letter {
     float: left;
-    font-family: "Playfair Display", Georgia, serif;
+    font-family: "Bodoni Moda", Georgia, serif;
     font-weight: 900;
     font-size: 3.6em;
     line-height: 0.82;
@@ -147,12 +210,12 @@ function renderPage(opts: {
     height: auto;
     display: block;
     margin: 1.4em auto;
-    filter: grayscale(1) sepia(0.25) contrast(1.1);
+    filter: grayscale(1) contrast(1.1);
     border: 1px solid #1a1a1a;
     box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.15);
   }
   .article-body figure { margin: 1.4em 0; }
-  .article-body figcaption { font-size: 0.75rem; color: #6b5b3e; font-style: italic; text-align: center; margin-top: 0.4em; }
+  .article-body figcaption { font-size: 0.75rem; color: #5c5c5c; font-style: italic; text-align: center; margin-top: 0.4em; }
   .article-body a { color: #8b1a1a; }
   .article-body blockquote {
     border-left: 3px solid #1a1a1a;
@@ -162,11 +225,11 @@ function renderPage(opts: {
     font-style: italic;
   }
   .article-body h2, .article-body h3 {
-    font-family: "Playfair Display", Georgia, serif;
+    font-family: "Bodoni Moda", Georgia, serif;
     font-weight: 800;
     margin: 1.4em 0 0.5em;
   }
-  .colophon { text-align: center; font-size: 1.3rem; letter-spacing: 0.5em; color: #6b5b3e; margin-top: 3.2em; }
+  .colophon { text-align: center; font-size: 1.3rem; letter-spacing: 0.5em; color: #5c5c5c; margin-top: 3.2em; }
 </style>
 </head>
 <body>
@@ -266,7 +329,10 @@ export async function GET(req: NextRequest) {
     });
     contentDom.window.document.querySelectorAll("script, style, iframe").forEach((el) => el.remove());
 
-    const cleanedContent = contentDom.window.document.getElementById("root")?.innerHTML || "";
+    const rootEl = contentDom.window.document.getElementById("root");
+    if (rootEl) trimTrailingJunk(rootEl);
+
+    const cleanedContent = rootEl?.innerHTML || "";
 
     return htmlResponse(
       renderPage({
