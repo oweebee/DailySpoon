@@ -7,11 +7,15 @@ const config: Config = {
       fontFamily: {
         serif: ["Georgia", "Cambria", "Times New Roman", "Times", "serif"],
         // Rye et Anton (essayés d'après des mockups) étaient jugés trop
-        // massifs/gras à l'usage — retour à Playfair Display, un Didone
-        // élégant à empattements fins-épais plutôt qu'une police "noire"
-        // pleine, pour le masthead comme pour les titres.
+        // massifs/gras à l'usage sur les titres courants (font-display,
+        // utilisée partout : rubriques, article, nav...) — reste sur
+        // Playfair Display pour ceux-là. Le masthead ("DailySpoon" en
+        // très grand en haut de chaque page) est un cas à part : un seul
+        // gros logotype, pas du texte courant — Rye (western/far-west,
+        // façon affiche de saloon) y est repris ici sans ce problème de
+        // lisibilité.
         display: ['"Playfair Display"', "Georgia", "serif"],
-        masthead: ['"Playfair Display"', "Georgia", "serif"],
+        masthead: ['"Rye"', "Georgia", "serif"],
         sans: ["-apple-system", "Segoe UI", "Helvetica", "Arial", "sans-serif"]
       },
       colors: {
