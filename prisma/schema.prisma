@@ -67,6 +67,13 @@ model Article {
   summary        String?   @db.Text
   category       String? // final rubrique assigned by AI for the edition
   priorityScore  Int? // higher = more important, used to pick hero + ordering
+  // Résumé court et percutant, spécifique à la une IA de la page d'accueil
+  // (distinct de `summary`, plus développé, utilisé partout ailleurs — En
+  // direct, favoris, archive). Produit par curateFrontPage (une passe par
+  // génération, pas de coût supplémentaire) en même temps que priorityScore.
+  // Null si la curation échoue ou si aucune clé IA n'est configurée : la une
+  // retombe alors sur `summary` (voir FrontPageView).
+  frontPageSummary String? @db.Text
 
   favorite       Boolean   @default(false) // marqué favori depuis l'étoile shérif, page /favoris
   favoritedAt    DateTime? // date de mise en favori, affichée sur /favoris

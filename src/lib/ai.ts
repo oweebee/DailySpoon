@@ -218,6 +218,7 @@ export function fallbackProcess(item: RawItem): ProcessedArticle {
 }
 
 export type CurationItem = { id: string; headline: string; summary: string; category: string };
+export type CurationResult = { priorityScore: number; frontPageSummary: string };
 
 // Passe de curation de la "une" : contrairement à processArticles (qui note
 // chaque article par lots indépendants de 12 — un article isolé dans un lot
@@ -228,10 +229,14 @@ export type CurationItem = { id: string; headline: string; summary: string; cate
 // hiérarchie cohérente sur l'ensemble de la journée — c'est ce score qui
 // détermine ensuite les 3 articles "à la une" de FrontPageView.
 //
+// Produit aussi, dans le même appel, un "frontPageSummary" bien plus concis
+// que `summary` : la une doit aller à l'essentiel (contrairement à En
+// direct/favoris/archive, qui gardent le résumé complet).
+//
 // Un seul appel IA par génération (pas un par lot), sur des textes déjà
 // réécrits et courts (titre + résumé, pas le texte source brut) : coût
 // marginal, même avec une centaine d'articles dans la journée.
-export async function curateFrontPage(items: CurationItem[]): Promise<Map<string, number>> {
+export async function curateFrontPage(items: CurationItem[]): Promise<Map<string, CurationResult>> {
   if (items.length === 0) return new Map();
 
   const settings = await getSettings();
@@ -249,16 +254,25 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
 
     if (!text) return new Map(); // pas de clé configurée pour ce fournisseur
 
-    const parsed = JSON.parse(extractJson(text)) as { id: string; priorityScore: number }[];
+    const parsed = JSON.parse(extractJson(text)) as {
+      id: string;
+      priorityScore: number;
+      frontPageSummary?: string;
+    }[];
     if (!Array.isArray(parsed)) throw new Error("réponse IA non conforme (pas un tableau)");
 
-    const map = new Map<string, number>();
+    const map = new Map<string, CurationResult>();
     for (const p of parsed) {
-      if (p?.id) map.set(p.id, clamp(Number(p.priorityScore) || 40, 1, 100));
+      if (!p?.id) continue;
+      const original = items.find((it) => it.id === p.id);
+      map.set(p.id, {
+        priorityScore: clamp(Number(p.priorityScore) || 40, 1, 100),
+        frontPageSummary: p.frontPageSummary?.trim() || original?.summary || ""
+      });
     }
     return map;
   } catch (err) {
-    console.error("[ai] Curation de la une échouée, scores existants conservés :", err);
+    console.error("[ai] Curation de la une échouée, scores/résumés existants conservés :", err);
     return new Map();
   }
 }
@@ -273,13 +287,15 @@ function buildCurationPrompt(items: CurationItem[]): string {
 
   return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". Voici TOUS les articles retenus pour l'édition d'aujourd'hui, déjà réécrits.
 
-Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne un score d'importance de 1 à 100 (100 = doit faire la une du jour, 1 = anecdotique). Les scores doivent réellement discriminer : seuls 1 à 3 articles au grand maximum doivent approcher 100, le reste doit s'étaler selon l'importance réelle.
+Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne :
+- "priorityScore" : un score d'importance de 1 à 100 (100 = doit faire la une du jour, 1 = anecdotique). Les scores doivent réellement discriminer : seuls 1 à 3 articles au grand maximum doivent approcher 100, le reste doit s'étaler selon l'importance réelle.
+- "frontPageSummary" : une réécriture TRÈS concise du résumé fourni, 1 à 2 phrases maximum, qui va droit à l'essentiel (l'info principale, pas le contexte ou les détails secondaires) — c'est ce texte qui sera affiché sur la une du journal, pas le résumé complet.
 
 Articles :
 ${JSON.stringify(list, null, 2)}
 
 Réponds UNIQUEMENT avec un tableau JSON de ${items.length} objets, dans le même ordre, sans texte avant ou après, format :
-[{"id": "...", "priorityScore": 0}, ...]`;
+[{"id": "...", "priorityScore": 0, "frontPageSummary": "..."}, ...]`;
 }
 
 async function callAnthropicRaw(prompt: string, apiKey: string, model: string): Promise<string> {

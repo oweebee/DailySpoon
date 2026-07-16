@@ -131,6 +131,13 @@ export function FrontPageView({
   );
 }
 
+// La une doit aller à l'essentiel : frontPageSummary (produit par
+// curateFrontPage, 1-2 phrases) prime sur summary partout sur cette page ;
+// repli sur summary si la curation n'a pas tourné (pas de clé IA, échec...).
+function frontText(article: ArticleLike): string {
+  return article.frontPageSummary || article.summary || "";
+}
+
 function MainHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
   return (
     <article className={`flex flex-col text-center ${className}`}>
@@ -147,7 +154,7 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
         </div>
       )}
       <p className="newsprint mx-auto max-w-xl text-left text-sm leading-snug text-neutral-800">
-        {article.summary}
+        {frontText(article)}
       </p>
     </article>
   );
@@ -166,26 +173,50 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </div>
       )}
-      <p className="newsprint text-xs leading-snug text-neutral-700">{article.summary}</p>
+      <p className="newsprint text-xs leading-snug text-neutral-700">{frontText(article)}</p>
     </article>
   );
 }
 
+/**
+ * Rubrique en deux temps, façon vraie page de journal : un article vedette
+ * en tête (illustré si une photo est disponible, en ligne image+texte plutôt
+ * qu'empilés) puis le reste en "brèves" — juste titre + résumé concis, sans
+ * photo, pour garder la colonne lisible et éviter un mur de vignettes.
+ */
 function StaticCategorySection({ label, articles, big }: { label: string; articles: ArticleLike[]; big: boolean }) {
   const shown = articles.slice(0, big ? 6 : 3);
+  const [lead, ...briefs] = shown;
+  if (!lead) return null;
+
   return (
     <section className={big ? "sm:col-span-2" : ""}>
       <h3 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
         {label}
       </h3>
-      <div className="divide-y divide-ink/20">
-        {shown.map((a) => (
-          <div key={a.id} className="py-3 first:pt-0 last:pb-0">
-            <h4 className="font-display text-sm font-bold leading-snug">{a.headline}</h4>
-            <p className="newsprint mt-1 text-xs leading-snug text-neutral-700">{a.summary}</p>
+
+      <article className={`mb-3 pb-3 border-b border-ink/20 ${lead.imageUrl ? "flex gap-4" : ""}`}>
+        {lead.imageUrl && (
+          <div className="aspect-square w-24 shrink-0 sm:w-28">
+            <ArticleImage src={lead.imageUrl} alt={lead.headline || lead.sourceTitle} className="h-full w-full" />
           </div>
-        ))}
-      </div>
+        )}
+        <div className="min-w-0">
+          <h4 className="font-display text-base font-bold leading-snug">{lead.headline}</h4>
+          <p className="newsprint mt-1 text-xs leading-snug text-neutral-700">{frontText(lead)}</p>
+        </div>
+      </article>
+
+      {briefs.length > 0 && (
+        <div className="divide-y divide-ink/20">
+          {briefs.map((a) => (
+            <div key={a.id} className="py-2.5 first:pt-0 last:pb-0">
+              <h4 className="font-display text-sm font-bold leading-snug">{a.headline}</h4>
+              <p className="newsprint mt-1 text-xs leading-snug text-neutral-700">{frontText(a)}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

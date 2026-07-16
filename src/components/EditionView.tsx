@@ -7,6 +7,9 @@ export type ArticleLike = {
   id: string;
   headline: string | null;
   summary: string | null;
+  // Résumé concis dédié à la une IA (voir FrontPageView) — absent/inutilisé
+  // partout ailleurs (En direct, favoris, archive gardent `summary`).
+  frontPageSummary?: string | null;
   category: string | null;
   priorityScore: number | null;
   sourceUrl: string;

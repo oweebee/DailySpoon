@@ -255,8 +255,11 @@ async function curateFrontPageScores(editionId: string): Promise<void> {
   if (scores.size === 0) return;
 
   await prisma.$transaction(
-    [...scores.entries()].map(([id, priorityScore]) =>
-      prisma.article.update({ where: { id }, data: { priorityScore } })
+    [...scores.entries()].map(([id, result]) =>
+      prisma.article.update({
+        where: { id },
+        data: { priorityScore: result.priorityScore, frontPageSummary: result.frontPageSummary }
+      })
     )
   );
   console.log(`[edition] Une du jour recalculée par l'IA pour ${scores.size} article(s).`);

@@ -11,8 +11,9 @@ import { useRouter } from "next/navigation";
  * bouton). L'avertissement sur la conso de tokens reste inline, dans le
  * thème (italique, sépia) — pas de popup.
  */
-export function PrintStampButton() {
+export function PrintStampButton({ provider }: { provider?: string }) {
   const router = useRouter();
+  const providerLabel = provider === "gemini" ? "Gemini" : "Anthropic";
   const [printing, setPrinting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -49,7 +50,7 @@ export function PrintStampButton() {
         {printing ? "Impression en cours..." : "Lancer l'impression du journal"}
       </button>
       <p className="max-w-xs text-center text-[0.7rem] italic text-sepia">
-        ⚠ Consomme des tokens de l’API Anthropic à chaque impression (réécriture IA des articles).
+        ⚠ Consomme des tokens de l’API {providerLabel} à chaque impression (réécriture IA des articles).
       </p>
       {message && <p className="text-sm italic text-sepia">{message}</p>}
     </div>

@@ -44,7 +44,7 @@ export default async function HomePage() {
       <Masthead date={latestEdition?.date ?? new Date()} />
       {/* Planning désactivé dans /admin/settings : pas de génération auto,
           donc on donne un bouton pour lancer l'impression à la main. */}
-      {!settings.editionScheduleEnabled && <PrintStampButton />}
+      {!settings.editionScheduleEnabled && <PrintStampButton provider={settings.aiProvider} />}
       {articles.length > 0 ? (
         <FrontPageView articles={articles} categoryOrder={categoryOrder} />
       ) : (
