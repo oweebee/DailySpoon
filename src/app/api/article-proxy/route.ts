@@ -254,18 +254,75 @@ function htmlResponse(html: string): NextResponse {
   return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
-// Reddit sert son HTML complet côté serveur sur l'ancienne interface
-// (old.reddit.com) mais son contenu est chargé en JavaScript sur la
-// nouvelle (www.reddit.com/reddit.com) — un fetch serveur classique n'y
-// récupère qu'une coquille vide. On réécrit vers old.reddit.com, qui reste
-// en service et rend le texte du post directement dans le HTML.
-function toScrapableUrl(u: URL): string {
-  if (/(^|\.)reddit\.com$/i.test(u.hostname) && u.hostname !== "old.reddit.com") {
-    const rewritten = new URL(u.toString());
-    rewritten.hostname = "old.reddit.com";
-    return rewritten.toString();
+// Reddit (y compris old.reddit.com) bloque désormais la plupart des
+// requêtes serveur-à-serveur avec un 403, quel que soit le User-Agent —
+// blocage réseau/IP, pas seulement JS. La seule voie qui reste fiable est
+// l'API JSON publique (pas d'auth requise pour un post public) : on la
+// préfère pour les URLs de post ("/comments/...").
+function isRedditUrl(hostname: string): boolean {
+  return /(^|\.)reddit\.com$/i.test(hostname);
+}
+
+function isRedditPostUrl(u: URL): boolean {
+  return isRedditUrl(u.hostname) && /\/comments\//.test(u.pathname);
+}
+
+// Reddit renvoie le corps d'un self-post déjà en HTML (sain, rendu depuis
+// le markdown) mais échappé une fois de trop dans le JSON (ex. "&lt;p&gt;").
+// On le fait décoder par un parseur HTML : en assignant la chaîne comme
+// innerHTML d'un nœud temporaire, les entités sont décodées en vrais
+// caractères "<"/">" dans le texte — qu'on relit via textContent pour
+// récupérer du HTML valide, réutilisable comme markup.
+function decodeRedditHtml(encoded: string): string {
+  const dom = new JSDOM(`<!doctype html><body><div id="tmp">${encoded}</div></body>`);
+  return dom.window.document.getElementById("tmp")?.textContent || "";
+}
+
+type RedditPost = { title: string; author: string; subreddit: string; bodyHtml: string };
+
+async function fetchRedditPost(parsed: URL): Promise<RedditPost | null> {
+  const cleanPath = parsed.pathname.replace(/\/+$/, "");
+  const jsonUrl = `https://www.reddit.com${cleanPath}.json?raw_json=1`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(jsonUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "application/json"
+      }
+    });
+    if (!res.ok) return null;
+
+    const json: any = await res.json();
+    const post = json?.[0]?.data?.children?.[0]?.data;
+    if (!post) return null;
+
+    let bodyHtml: string;
+    if (post.is_self && post.selftext_html) {
+      bodyHtml = decodeRedditHtml(post.selftext_html);
+    } else if (post.url) {
+      bodyHtml = `<p><em>Ce post pointe vers un lien externe :</em></p><p><a href="${escapeHtml(
+        post.url
+      )}">${escapeHtml(post.url)}</a></p>`;
+    } else {
+      bodyHtml = "<p><em>Post sans contenu textuel.</em></p>";
+    }
+
+    return {
+      title: post.title || "Post Reddit",
+      author: post.author || "inconnu",
+      subreddit: post.subreddit_name_prefixed || "reddit.com",
+      bodyHtml
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
   }
-  return u.toString();
 }
 
 export async function GET(req: NextRequest) {
@@ -280,7 +337,41 @@ export async function GET(req: NextRequest) {
     return new NextResponse("URL invalide", { status: 400 });
   }
   const originalUrl = parsed.toString();
-  const fetchUrl = toScrapableUrl(parsed);
+  const fetchUrl = originalUrl;
+
+  if (isRedditPostUrl(parsed)) {
+    const redditPost = await fetchRedditPost(parsed);
+    if (redditPost) {
+      // Même traitement des images que le chemin générique : passage par
+      // le proxy d'images pour les éventuelles illustrations du self-post.
+      const contentDom = new JSDOM(`<div id="root">${redditPost.bodyHtml}</div>`);
+      contentDom.window.document.querySelectorAll("img, source").forEach((el) => {
+        const src = el.getAttribute("src");
+        if (src) {
+          try {
+            el.setAttribute("src", proxyImageUrl(new URL(src, "https://www.reddit.com").toString()));
+          } catch {
+            // ignore
+          }
+        }
+        el.removeAttribute("srcset");
+      });
+      const cleanedContent = contentDom.window.document.getElementById("root")?.innerHTML || "";
+
+      return htmlResponse(
+        renderPage({
+          title: redditPost.title,
+          byline: `Posté par u/${redditPost.author}`,
+          siteName: redditPost.subreddit,
+          bodyHtml: cleanedContent,
+          originalUrl
+        })
+      );
+    }
+    // L'API JSON a échoué (post supprimé, subreddit privé...) — on retombe
+    // sur le chemin générique ci-dessous (qui échouera probablement aussi
+    // sur reddit.com, mais affichera au moins la page de repli propre).
+  }
 
   try {
     const controller = new AbortController();
