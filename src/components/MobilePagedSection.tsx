@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Masthead } from "./Masthead";
 
 /**
@@ -78,7 +78,13 @@ export function MobilePagedSection({
   // articles au fur et à mesure qu'on approche du bas. Doit s'exécuter avant
   // la restauration de position ci-dessous, sinon le conteneur peut ne pas
   // encore être assez haut pour atteindre la position mémorisée.
-  useEffect(() => {
+  //
+  // useLayoutEffect (pas useEffect) pour les deux effets ci-dessous : ils
+  // s'appliquent alors de façon SYNCHRONE juste après le rendu, avant que le
+  // navigateur ne peigne la frame suivante — sinon (useEffect classique) la
+  // frame se peint une fois avec l'ancienne hauteur/position, puis "saute"
+  // visiblement à la bonne valeur juste après, d'où le petit à-coup au swipe.
+  useLayoutEffect(() => {
     const el = pageRefs.current[activeIndex];
     const container = containerRef.current;
     if (!el || !container) return;
@@ -95,7 +101,7 @@ export function MobilePagedSection({
   // jamais été défilée, ou restaure sa position exacte si on y était déjà
   // allé et qu'on y avait défilé. On ignore le tout premier rendu (arrivée
   // sur la page), pour ne pas faire sauter la fenêtre au chargement.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;

@@ -21,7 +21,12 @@ const MAX_OG_BACKFILL_PER_RUN = 25;
 // par l'IA ce jour-là.
 const MAX_AI_ITEMS_PER_CATEGORY = 5;
 
-function todayDateOnly(): Date {
+// Exporté pour le worker (voir worker/index.ts) : sert à vérifier si une
+// édition existe déjà pour aujourd'hui avant de déclencher une génération de
+// secours à midi, avec exactement le même calcul de "date" que celui utilisé
+// ici pour créer une nouvelle édition — pas de risque de décalage de fuseau
+// entre les deux.
+export function todayDateOnly(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
