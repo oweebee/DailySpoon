@@ -43,7 +43,14 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className="min-h-screen bg-paper text-ink font-serif">
+      {/* Texture papier froissé (public/textures/journal.png) en fond fixe :
+          "cover" + "fixed" plutôt qu'une répétition en pavé, pour ne jamais
+          voir de raccord — l'image entière couvre toujours tout l'écran, se
+          recadre simplement selon sa taille, et reste immobile au défilement. */}
+      <body
+        className="min-h-screen bg-paper bg-cover bg-center bg-no-repeat bg-fixed text-ink font-serif"
+        style={{ backgroundImage: "url(/textures/journal.png)" }}
+      >
         <ArticleModalProvider>{children}</ArticleModalProvider>
         <PwaRegister />
       </body>
