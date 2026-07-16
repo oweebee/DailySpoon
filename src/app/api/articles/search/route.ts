@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { localMidnightUtc } from "@/lib/tz";
 
 // Recherche live pour la page "En direct" (et réutilisée telle quelle par
 // ArchiveSearch) : contrairement à la liste affichée (plafonnée aux ~1000
@@ -36,24 +37,6 @@ function stripAccents(s: string): string {
 // mais matchait "14 juillet" côté recherche — d'où le décalage observé.
 const SEARCH_TZ = "Europe/Paris";
 
-/** Décalage (en minutes) du fuseau "timeZone" par rapport à UTC, au moment "date". */
-function tzOffsetMinutes(date: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset" }).formatToParts(date);
-  const raw = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
-  const match = raw.match(/GMT([+-]\d+)(?::(\d+))?/);
-  if (!match) return 0;
-  const hours = Number(match[1]);
-  const minutes = match[2] ? Number(match[2]) : 0;
-  return hours * 60 + (hours < 0 ? -minutes : minutes);
-}
-
-/** Instant UTC correspondant à "année-mois-jour 00:00" en heure d'Europe/Paris. */
-function localMidnightUtc(year: number, month: number, day: number): Date {
-  const naiveUtc = Date.UTC(year, month, day);
-  const offset = tzOffsetMinutes(new Date(naiveUtc), SEARCH_TZ);
-  return new Date(naiveUtc - offset * 60_000);
-}
-
 /**
  * Reconnaît une recherche du style "15 juillet" ou "15 juillet 2026" (accents
  * et casse ignorés, "1er" toléré) et la convertit en plage [début, fin[ du
@@ -75,8 +58,8 @@ function parseFrenchDateQuery(raw: string): { start: Date; end: Date } | null {
   const checkDay = new Date(Date.UTC(year, month, day));
   if (checkDay.getUTCMonth() !== month || checkDay.getUTCDate() !== day) return null; // ex. "31 avril"
 
-  const start = localMidnightUtc(year, month, day);
-  const end = localMidnightUtc(year, month, day + 1);
+  const start = localMidnightUtc(year, month, day, SEARCH_TZ);
+  const end = localMidnightUtc(year, month, day + 1, SEARCH_TZ);
   return { start, end };
 }
 

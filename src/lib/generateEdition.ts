@@ -2,7 +2,8 @@ import { createHash } from "crypto";
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
 import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
-import { stripHtml, looksLikeHtml, extractFirstImageSrc } from "./text";
+import { stripHtml, looksLikeHtml } from "./text";
+import { todayRangeInTz } from "./tz";
 import { getSettings } from "./settings";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
@@ -112,15 +113,20 @@ function snapshotContentHash(a: {
  */
 export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}) {
   const date = todayDateOnly();
-  // Bornes du jour calendaire en cours — sert à regrouper TOUS les articles
-  // récupérés aujourd'hui (à travers plusieurs régénérations), pas
-  // seulement ceux touchés par CETTE régénération précise. Nécessaire
-  // depuis que chaque régénération crée sa propre édition (editionId n'est
-  // donc plus un identifiant stable pour "les articles du jour" comme
-  // avant) : sans ça, une régénération qui ne trouve que 1-2 items
-  // vraiment nouveaux depuis la dernière fois se retrouverait avec une une
-  // quasi vide, perdant tout le reste des articles du jour déjà récupérés.
-  const todayRange = { gte: date, lt: new Date(date.getTime() + 24 * 60 * 60 * 1000) };
+  // Bornes du jour calendaire en cours, en heure d'Europe/Paris (comme
+  // l'affichage et la recherche par date — voir DISPLAY_TZ dans
+  // EditionView.tsx et SEARCH_TZ dans api/articles/search) — PAS le jour UTC
+  // brut, qui décale de 1-2h par rapport à ce que l'utilisateur voit à
+  // l'écran. Scope désormais sur publishedAt (date de publication réelle de
+  // l'article), pas fetchedAt (date de récupération en base) : un article
+  // publié hier mais seulement découvert aujourd'hui par un flux lent ne
+  // doit pas compter comme "de l'édition du jour". Sert à regrouper TOUS les
+  // articles du jour (à travers plusieurs régénérations), pas seulement ceux
+  // touchés par CETTE régénération précise — sans ça, une régénération qui
+  // ne trouve que 1-2 items vraiment nouveaux depuis la dernière fois se
+  // retrouverait avec une une quasi vide, perdant tout le reste des articles
+  // du jour déjà récupérés.
+  const todayRange = todayRangeInTz("Europe/Paris");
 
   const edition = await prisma.edition.create({
     data: { date, status: "draft" }
@@ -133,7 +139,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   console.log(`[edition] Fetched ${rawItems.length} new items from FreshRSS.`);
 
   if (rawItems.length === 0) {
-    const existingToday = await prisma.article.count({ where: { fetchedAt: todayRange, included: true } });
+    const existingToday = await prisma.article.count({ where: { publishedAt: todayRange, included: true } });
     if (existingToday === 0) {
       console.log("[edition] No new items and nothing fetched today yet — leaving edition as draft.");
       return { editionId: edition.id, articleCount: 0 };
@@ -201,11 +207,11 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   }
 
   const heroArticle = await prisma.article.findFirst({
-    where: { fetchedAt: todayRange, included: true },
+    where: { publishedAt: todayRange, included: true },
     orderBy: { priorityScore: "desc" }
   });
 
-  const articleCount = await prisma.article.count({ where: { fetchedAt: todayRange, included: true } });
+  const articleCount = await prisma.article.count({ where: { publishedAt: todayRange, included: true } });
 
   await prisma.edition.update({
     where: { id: edition.id },
@@ -230,7 +236,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 
   const qualifyingArticles = await prisma.article.findMany({
     where: {
-      fetchedAt: todayRange,
+      publishedAt: todayRange,
       processed: true,
       included: true,
       aiRewritten: true,
@@ -354,7 +360,7 @@ async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }): Promi
 
   const todaysArticles = await prisma.article.findMany({
     where: {
-      fetchedAt: todayRange,
+      publishedAt: todayRange,
       included: true,
       processed: true,
       // La une doit être une vraie "impression IA" : les articles tombés en
@@ -397,12 +403,20 @@ async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }): Promi
  * just the edition being generated today) since the site now shows recent
  * articles across all editions, not just today's.
  *
- * Sert aussi de rattrapage pour l'illustration : les articles stockés avant
- * que l'extraction d'image existe (ou dont le flux n'en fournissait aucune
- * à l'époque) sont maintenant retentés — d'abord depuis le HTML déjà en
- * base, puis via og:image sur la page source si besoin (plafonné par
- * MAX_OG_BACKFILL_PER_RUN pour ne pas déclencher une rafale de requêtes).
+ * Sert aussi de rattrapage pour l'illustration : les articles dont
+ * l'image manque encore, OU qui n'ont qu'un favicon posé en dernier
+ * recours (voir isFaviconFallback ci-dessous — ex. un og:image qui avait
+ * échoué/timeout au tout premier passage), sont retentés via og:image sur
+ * la page source (plafonné par MAX_OG_BACKFILL_PER_RUN pour ne pas
+ * déclencher une rafale de requêtes). Sans ce second essai, un simple
+ * échec réseau ponctuel au premier fetch condamnait l'article à garder son
+ * favicon générique pour toujours, alors que la vraie image existe bel et
+ * bien sur la page (og:image fonctionne, juste pas retenté une fois posé).
  */
+function isFaviconFallback(url: string | null): boolean {
+  return !!url && url.includes("google.com/s2/favicons");
+}
+
 async function cleanExistingHtmlArtifacts(): Promise<void> {
   const candidates = await prisma.article.findMany({
     select: {
@@ -425,21 +439,21 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
       looksLikeHtml(article.headline) ||
       looksLikeHtml(article.summary);
 
-    // Backfill the illustration for articles fetched before imageUrl
-    // existed, extracted from the still-dirty excerpt before it gets
-    // stripped below.
-    let backfilledImage = !article.imageUrl ? extractFirstImageSrc(article.sourceExcerpt) : null;
+    // Pas d'image du tout, ou juste un favicon posé en dernier recours à
+    // un run précédent (voir isFaviconFallback) : dans les deux cas, on
+    // retente d'obtenir la vraie illustration.
+    const needsRealImage = !article.imageUrl || isFaviconFallback(article.imageUrl);
 
-    // Toujours rien trouvé dans le HTML déjà stocké — og:image sur la page
-    // source, avec un plafond par run (vraie requête réseau sortante).
-    if (!article.imageUrl && !backfilledImage && article.sourceUrl && ogBackfillsUsed < MAX_OG_BACKFILL_PER_RUN) {
+    let backfilledImage: string | null = null;
+    if (needsRealImage && article.sourceUrl && ogBackfillsUsed < MAX_OG_BACKFILL_PER_RUN) {
       ogBackfillsUsed++;
       backfilledImage = await fetchOgImage(article.sourceUrl);
     }
 
     // Toujours rien — favicon du site en dernier recours (pas de requête
-    // réseau de notre côté, juste une URL construite, donc pas de plafond
-    // nécessaire ici : tous les articles restants sont couverts d'un coup).
+    // réseau de notre côté, juste une URL construite), seulement si
+    // l'article n'a vraiment aucune image (ne pas remplacer une image déjà
+    // correcte, ni reposer un favicon déjà en place).
     if (!article.imageUrl && !backfilledImage && article.sourceUrl) {
       backfilledImage = faviconFallback(article.sourceUrl);
     }
@@ -453,7 +467,10 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
         sourceExcerpt: article.sourceExcerpt ? stripHtml(article.sourceExcerpt) : article.sourceExcerpt,
         headline: article.headline ? stripHtml(article.headline) : article.headline,
         summary: article.summary ? stripHtml(article.summary) : article.summary,
-        imageUrl: article.imageUrl ?? backfilledImage ?? undefined
+        // backfilledImage prime sur l'ancienne valeur : c'est justement ce
+        // qui permet de remplacer un favicon générique par la vraie image
+        // une fois qu'on l'a enfin obtenue.
+        imageUrl: backfilledImage ?? article.imageUrl ?? undefined
       }
     });
   }
