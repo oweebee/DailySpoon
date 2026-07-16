@@ -188,11 +188,12 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
 // d'un unique style répété partout) — bordure simple/double et padding
 // différents, mais toujours à plat, sans ombre ni coin arrondi, pour rester
 // dans le langage papier déjà établi plutôt que de repartir sur des cartes
-// modernes.
+// modernes. Fond assombri (teinte d'encre) plutôt que bg-paper : ça détache
+// nettement chaque encadré du fond de page, qui reste lui en bg-paper/70.
 const CATEGORY_BOX_TONES = [
-  "border-2 border-ink bg-paper p-5",
-  "border border-ink/70 bg-ink/[0.035] p-6",
-  "border-4 border-double border-ink bg-paper p-5"
+  "border-2 border-ink bg-ink/[0.07] p-5",
+  "border border-ink/70 bg-ink/[0.1] p-6",
+  "border-4 border-double border-ink bg-ink/[0.07] p-5"
 ];
 
 /**

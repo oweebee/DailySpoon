@@ -189,7 +189,7 @@ function buildPrompt(batch: RawItem[]): string {
   return `Tu es le rédacteur en chef d'un journal quotidien personnel appelé "DailySpoon". \
 Voici une liste d'articles bruts issus de FreshRSS. Pour CHAQUE article, dans l'ordre, produis :
 - "headline": un titre court et accrocheur, réécrit dans un style journalistique clair (en français), pas juste copié.
-- "summary": un résumé fidèle, réécrit dans tes propres mots (ne pas copier le texte source mot pour mot). Longueur adaptée à l'article : 2-4 phrases si "long" est false, mais si "long" est true (article source substantiel), rédige un résumé deux fois plus développé qu'à l'habitude (environ 6-8 phrases) pour refléter le contenu réel de l'article.
+- "summary": un résumé fidèle, réécrit dans tes propres mots (ne pas copier le texte source mot pour mot). Longueur adaptée à l'article : 2-4 phrases si "long" est false, mais si "long" est true (article source substantiel), rédige un résumé deux fois plus développé qu'à l'habitude (environ 6-8 phrases) pour refléter le contenu réel de l'article. Cite intelligemment la provenance de l'info directement dans le texte, sans lien ni URL : selon le sujet, mentionne soit le média fourni dans "source" (ex : "selon Presse-citron", "rapporte Le Monde"), soit une personne ou un porte-parole cité dans l'article si l'info vient clairement de sa bouche (ex : "selon Elon Musk", "d'après le maire de Paris") — choisis ce qui est le plus naturel pour CET article précis, ne force pas la citation si elle alourdit une phrase courte.
 - "category": une rubrique parmi ${JSON.stringify(DEFAULT_CATEGORIES)} (choisis la plus pertinente ; utilise "Une" seulement pour l'article vraiment le plus important du lot).
 - "priorityScore": un entier de 1 à 100 indiquant l'importance de la nouvelle pour l'édition du jour (100 = à la une, 1 = anecdotique).
 
@@ -213,11 +213,14 @@ function clamp(n: number, min: number, max: number): number {
 
 export function fallbackProcess(item: RawItem): ProcessedArticle {
   // Pas de troncature : on affiche le texte complet fourni par le flux
-  // (nettoyé du HTML), sans le couper à une longueur arbitraire.
-  const fullText = item.sourceExcerpt || "";
+  // (nettoyé du HTML), sans le couper à une longueur arbitraire. Filet de
+  // sécurité : si le flux ne fournit vraiment aucun texte exploitable (ex.
+  // un extrait qui n'était que du balisage/une image), on ne laisse jamais
+  // l'article sans aucun aperçu — mieux vaut ce message que rien du tout.
+  const fullText = (item.sourceExcerpt || "").trim();
   return {
     headline: item.sourceTitle,
-    summary: fullText,
+    summary: fullText || "Aucun aperçu fourni par le flux — consulte la source pour lire l'article complet.",
     category: item.categoryLabel || "Autre",
     priorityScore: 40,
     aiRewritten: false

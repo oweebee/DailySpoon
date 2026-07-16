@@ -278,8 +278,15 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
 
     const canonicalUrl = item.canonical?.[0]?.href || item.alternate?.[0]?.href || "";
 
-    const rawExcerpt: string | null = item.summary?.content || item.content?.content || null;
-    const excerpt = rawExcerpt ? stripHtml(rawExcerpt) : null;
+    // Certains flux (ex. Korben) fournissent un "summary.content" qui n'est
+    // que balisage (image, encart) sans texte réel — stripHtml renverrait
+    // alors une chaîne vide alors que "content.content" contient, lui, du
+    // vrai texte. On tente les deux et on garde le premier qui donne
+    // effectivement du texte, plutôt que de figer le choix sur "summary"
+    // et se retrouver avec un article totalement vide.
+    const summaryText = item.summary?.content ? stripHtml(item.summary.content).trim() : "";
+    const contentText = item.content?.content ? stripHtml(item.content.content).trim() : "";
+    const excerpt = summaryText.length > 0 ? summaryText : contentText.length > 0 ? contentText : null;
 
     let imageUrl = extractImageUrl(item);
     if (!imageUrl && canonicalUrl && included) {
