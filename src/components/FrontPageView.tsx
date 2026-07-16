@@ -1,6 +1,6 @@
 import { ArticleLink } from "./ArticleLink";
 import { ArticleImage } from "./ArticleImage";
-import { SourceLine, formatStamp, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
+import { SourceLine, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { SpoonDivider } from "./SpoonDivider";
 
 /**
@@ -134,8 +134,6 @@ function MainHeroBox({ article }: { article: ArticleLike }) {
           <ArticleImage
             src={article.imageUrl}
             alt={article.headline || article.sourceTitle}
-            dateLabel={formatStamp(article.publishedAt)}
-            medal={article.medal}
             className="h-full w-full"
           />
         </ArticleLink>
@@ -144,7 +142,7 @@ function MainHeroBox({ article }: { article: ArticleLike }) {
         {article.summary}
       </p>
       <div className="mt-3 border-t border-ink/30 pt-2">
-        <SourceLine article={article} center />
+        <SourceLine article={article} center showFavorite={false} />
       </div>
     </article>
   );
@@ -163,15 +161,13 @@ function SideHeroBox({ article }: { article: ArticleLike }) {
           <ArticleImage
             src={article.imageUrl}
             alt={article.headline || article.sourceTitle}
-            dateLabel={formatStamp(article.publishedAt)}
-            medal={article.medal}
             className="h-full w-full"
           />
         </ArticleLink>
       )}
       <p className="newsprint line-clamp-[8] text-xs leading-snug text-neutral-700">{article.summary}</p>
       <div className="mt-2">
-        <SourceLine article={article} />
+        <SourceLine article={article} showFavorite={false} />
       </div>
     </article>
   );
@@ -195,7 +191,7 @@ function CategoryBox({ label, articles, big }: { label: string; articles: Articl
               {a.headline}
             </ArticleLink>
             <p className="newsprint mt-1 line-clamp-3 text-xs leading-snug text-neutral-700">{a.summary}</p>
-            <SourceLine article={a} />
+            <SourceLine article={a} showFavorite={false} />
           </div>
         ))}
       </div>

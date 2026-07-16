@@ -211,13 +211,17 @@ export function formatStamp(d: Date | string | null): string | null {
 export function SourceLine({
   article,
   showDate = true,
-  center = false
+  center = false,
+  showFavorite = true
 }: {
   article: ArticleLike;
   showDate?: boolean;
   /** Centre la ligne au lieu de la caler à gauche — utilisé pour les 3
    *  articles "à la une", dont le reste du bloc est déjà centré. */
   center?: boolean;
+  /** Masque l'étoile favori — la page d'accueil (FrontPageView) n'a pas
+   *  cette notion, seuls /direct et /favoris l'utilisent. */
+  showFavorite?: boolean;
 }) {
   const formatted = showDate ? formatPublished(article.publishedAt) : null;
   return (
@@ -230,7 +234,7 @@ export function SourceLine({
       <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
         Source : {article.feedTitle || article.sourceTitle}
       </ArticleLink>
-      <FavoriteStar articleId={article.id} initialFavorite={article.favorite} />
+      {showFavorite && <FavoriteStar articleId={article.id} initialFavorite={article.favorite} />}
     </p>
   );
 }
