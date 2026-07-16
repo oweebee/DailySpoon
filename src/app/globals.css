@@ -7,6 +7,15 @@
 body {
   background-color: #f0f0f0;
   color: #1a1a1a;
+  /* En PWA plein écran (display: "fullscreen"), le contenu peut s'étendre
+     sous l'encoche/la barre de statut et l'indicateur d'accueil (iOS) —
+     on réserve cet espace ici plutôt que de laisser le masthead ou le bas
+     de page se faire manger, "env(...)" valant 0px sur tout ce qui n'est
+     pas concerné (navigateur classique, Android, desktop). */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   /* Papier en niveaux de gris : vignette + grain de papier journal (bruit
      SVG), sans teinte sépia/beige — tout est gris neutre. */
   background-image:

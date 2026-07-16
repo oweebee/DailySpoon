@@ -26,7 +26,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: "#1a1a1a",
   width: "device-width",
-  initialScale: 1
+  initialScale: 1,
+  // Autorise le contenu à s'étendre sous l'encoche/la barre de statut en
+  // mode plein écran (display: "fullscreen" dans le manifest) — sans ça,
+  // iOS laisse une bande noire au lieu de vraiment passer bord à bord.
+  viewportFit: "cover"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
