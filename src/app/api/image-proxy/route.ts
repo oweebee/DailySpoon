@@ -30,9 +30,16 @@ export async function GET(req: NextRequest) {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
-          // Volontairement pas de Referer : c'est justement ce qui fait
-          // échouer la requête quand le navigateur l'envoie directement.
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          // Referer = le site source lui-même (pas dailyspoon) : certaines
+          // protections anti-hotlink (Apache/Nginx par règle de referer)
+          // bloquent justement les requêtes SANS referer ou avec un referer
+          // étranger — en envoyer un qui pointe vers le site d'origine est
+          // ce qui ressemble le plus à une vraie navigation sur ce site.
+          // Sans effet en revanche sur un blocage "bot" au niveau CDN
+          // (Cloudflare Bot Fight Mode et cie), qui ne se contourne pas par
+          // un simple en-tête — voir le repli favicon dans ArticleImage.
+          Referer: `${parsed.protocol}//${parsed.hostname}/`
         }
       });
     } finally {

@@ -25,6 +25,15 @@ import { useState } from "react";
  * bord gauche de la photo ; verticalement, seul le haut du RUBAN dépasse de
  * quelques pixels au-dessus de la photo — le médaillon (rond) lui reste
  * toujours sous le bord supérieur, jamais lui qui dépasse.
+ *
+ * Repli favicon : certains sites (protégés par Cloudflare ou une protection
+ * anti-hotlink un peu trop stricte, ex. Geekzone) bloquent la requête
+ * serveur qui va chercher l'image réelle même quand og:image est bien
+ * trouvé — un blocage "bot" au niveau du CDN, pas quelque chose qu'un simple
+ * en-tête peut contourner de façon fiable. Plutôt que de masquer purement et
+ * simplement la photo dans ce cas (régression par rapport à l'ancien
+ * comportement, qui affichait au moins le favicon du site), on retente une
+ * fois avec le favicon avant d'abandonner.
  */
 export function ArticleImage({
   src,
@@ -40,9 +49,18 @@ export function ArticleImage({
   className?: string;
 }) {
   const [broken, setBroken] = useState(false);
+  const [useFaviconFallback, setUseFaviconFallback] = useState(false);
   if (broken) return null;
 
-  const proxiedSrc = `/api/image-proxy?url=${encodeURIComponent(src)}`;
+  let effectiveSrc = src;
+  if (useFaviconFallback) {
+    try {
+      effectiveSrc = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(src).hostname)}&sz=128`;
+    } catch {
+      setBroken(true);
+    }
+  }
+  const proxiedSrc = `/api/image-proxy?url=${encodeURIComponent(effectiveSrc)}`;
 
   return (
     <div className={`relative ${className || ""}`}>
@@ -50,7 +68,13 @@ export function ArticleImage({
         src={proxiedSrc}
         alt={alt}
         loading="lazy"
-        onError={() => setBroken(true)}
+        onError={() => {
+          if (useFaviconFallback) {
+            setBroken(true);
+          } else {
+            setUseFaviconFallback(true);
+          }
+        }}
         className="h-full w-full border border-ink object-cover grayscale contrast-125"
       />
       {dateLabel && (
@@ -67,7 +91,7 @@ export function ArticleImage({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-10 w-10 select-none"
-          style={{ left: "-5px", top: "-3px" }}
+          style={{ left: "2px", top: "-3px" }}
         />
       )}
     </div>
