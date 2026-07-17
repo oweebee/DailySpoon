@@ -141,14 +141,17 @@ export function CategoryColumn({
         }`}
       >
         {/* Trace de surligneur en fond, sous le titre — hauteur fixe (le
-            ratio d'origine, très large et plat, n'est jamais déformé :
-            seule la hauteur est contrainte, la largeur suit) assez petite
-            pour ne jamais toucher les filets du haut/bas du bandeau. */}
+            ratio d'origine, très large et plat, n'est jamais déformé : seule
+            la hauteur est contrainte, la largeur suit), calée pour occuper
+            exactement l'espace intérieur du bandeau (py-1.5 + hauteur de
+            ligne du texte = 2rem) : son pixel le plus haut/bas touche
+            pile le filet du haut/bas, sans déborder dessus (overflow-hidden
+            sur le <h2>). */}
         <img
           src={CATEGORY_HIGHLIGHTS[highlightIndex % CATEGORY_HIGHLIGHTS.length]}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 h-5 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
         />
         <span className="relative">{label}</span>
       </h2>

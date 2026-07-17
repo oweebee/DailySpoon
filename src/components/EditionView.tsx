@@ -169,17 +169,18 @@ export function EditionView({
       {heroMain && (
         <div className="mb-10 hidden border-2 border-ink bg-ink/[0.07] p-6 md:block md:p-8">
           {/* Même trace de surligneur que les titres de rubrique (voir
-              CategoryColumn), mais plus grande, teintée en noir (filtre CSS
-              brightness-0 — met les pixels non-transparents à noir, garde
-              l'alpha intact, pas besoin d'un jeu d'images séparé) et tirée au
-              hasard à chaque rendu plutôt qu'alternée (un seul bandeau ici,
-              pas une liste de rubriques). */}
-          <p className="relative mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
+              CategoryColumn), gardée dans sa couleur rouge d'origine (pas de
+              filtre), plus grande, tirée au hasard à chaque rendu plutôt
+              qu'alternée (un seul bandeau ici, pas une liste de rubriques).
+              Le texte lui-même passe en noir (text-ink), un peu plus gros et
+              en gras plutôt que la couleur "journal" (rouge) utilisée
+              ailleurs pour ce genre d'intitulé. */}
+          <p className="relative mb-6 text-center text-sm font-bold uppercase tracking-[0.35em] text-ink">
             <img
               src={CATEGORY_HIGHLIGHTS[Math.floor(Math.random() * CATEGORY_HIGHLIGHTS.length)]}
               alt=""
               aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-1/2 h-7 w-auto -translate-x-1/2 -translate-y-1/2 select-none brightness-0"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-7 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
             />
             <span className="relative">✦ À la une ✦</span>
           </p>
