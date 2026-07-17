@@ -85,16 +85,55 @@ function isSubstantiveParagraph(el: Element): boolean {
   return true;
 }
 
-/** Coupe le contenu juste après le dernier paragraphe "réel" : tout ce qui
- *  suit (photo, liste de liens, bandeau newsletter...) est retiré. */
+// Titres qui annoncent quasi-systématiquement une section "articles
+// similaires/récents" en toute fin de page (widget Jetpack Related Posts et
+// équivalents WordPress) — un signal beaucoup plus fiable que "dernier
+// paragraphe substantiel", car ce bloc suit souvent un vrai paragraphe (ex.
+// un disclaimer d'auteur) qui, lui, passe la détection de contenu réel et
+// empêchait jusqu'ici de couper ce qui vient après.
+const RELATED_POSTS_HEADING_PHRASES = [
+  "articles récents",
+  "articles similaires",
+  "à lire aussi",
+  "lire aussi",
+  "sur le même sujet",
+  "vous devriez également aimer",
+  "pourrait aussi vous intéresser",
+  "posts similaires",
+  "related posts",
+  "you might also like",
+  "on vous recommande"
+];
+
+function isRelatedPostsHeading(el: Element): boolean {
+  if (!/^H[1-4]$/.test(el.tagName)) return false;
+  const text = (el.textContent || "").trim().toLowerCase();
+  return RELATED_POSTS_HEADING_PHRASES.some((p) => text.includes(p));
+}
+
+/** Coupe le contenu juste après le dernier paragraphe "réel" — ou dès un
+ *  titre de type "Articles récents"/"À lire aussi" si celui-ci apparaît
+ *  plus tôt, quel que soit le paragraphe qui le précède. Tout ce qui suit
+ *  le point de coupe retenu (photo, liste de liens, bandeau newsletter,
+ *  articles suggérés...) est retiré. */
 function trimTrailingJunk(root: Element): void {
   const children = Array.from(root.children);
   let lastRealIdx = -1;
+  let firstRelatedHeadingIdx = -1;
   children.forEach((el, i) => {
     if (isSubstantiveParagraph(el)) lastRealIdx = i;
+    if (firstRelatedHeadingIdx === -1 && isRelatedPostsHeading(el)) firstRelatedHeadingIdx = i;
   });
-  if (lastRealIdx === -1) return; // rien d'identifiable, on ne touche à rien par sécurité
-  for (let i = children.length - 1; i > lastRealIdx; i--) {
+
+  if (lastRealIdx === -1 && firstRelatedHeadingIdx === -1) return; // rien d'identifiable, on ne touche à rien par sécurité
+
+  let cutFrom = lastRealIdx + 1;
+  if (firstRelatedHeadingIdx !== -1) {
+    cutFrom = lastRealIdx === -1 ? firstRelatedHeadingIdx : Math.min(cutFrom, firstRelatedHeadingIdx);
+  }
+  if (cutFrom >= children.length) return; // rien à couper
+
+  for (let i = children.length - 1; i >= cutFrom; i--) {
     children[i].remove();
   }
 }
