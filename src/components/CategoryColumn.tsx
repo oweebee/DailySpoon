@@ -144,13 +144,11 @@ export function CategoryColumn({
         className={`flex flex-col gap-4 ${expanded ? "pr-4" : ""}`}
       >
         {visible.map((article) => (
-          // Chaque article dans son propre encadré (bordure + fond gris
-          // clair) — même esprit que les encadrés de rubrique de la page IA
-          // (CATEGORY_BOX_TONES dans FrontPageView), mais un ton plus clair
-          // puisqu'ici c'est CHAQUE article qui est encadré, pas juste la
-          // rubrique entière. Remplace l'ancien filet horizontal
-          // (divide-y) entre articles.
-          <article key={article.id} className="border border-ink/25 bg-ink/[0.035] p-4">
+          // Chaque article dans son propre encadré (bordure + fond gris) —
+          // même teinte que les encadrés de rubrique de la page IA
+          // (CATEGORY_BOX_TONES dans FrontPageView, bg-ink/[0.07]). Remplace
+          // l'ancien filet horizontal (divide-y) entre articles.
+          <article key={article.id} className="border-2 border-ink bg-ink/[0.07] p-4">
             {article.imageUrl && (
               <ArticleLink
                 href={article.sourceUrl}
