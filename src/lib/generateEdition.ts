@@ -35,6 +35,43 @@ export function todayDateOnly(): Date {
 }
 
 /**
+ * Condition Prisma réutilisable définissant quels articles sont éligibles à
+ * l'impression IA — INDÉPENDANTE d'« En direct » (SelectedCategory /
+ * Article.included) : l'IA travaille directement sur tout le vivier récupéré
+ * depuis FreshRSS, qu'une catégorie soit cochée pour En direct ou non (voir
+ * fetchNewItemsFromSelectedCategories, qui récupère déjà TOUS les items).
+ * Seuls deux réglages restent respectés ici : la case "Impression IA" propre
+ * à chaque catégorie (AiPrintCategory, absence de ligne = activée par
+ * défaut), et les flux explicitement blacklistés (ExcludedFeed) — un flux
+ * exclu reste exclu partout, y compris de l'impression IA.
+ */
+async function getAiPrintEligibilityWhere() {
+  const [disabled, excludedFeeds] = await Promise.all([
+    prisma.aiPrintCategory.findMany({ where: { enabled: false }, select: { label: true } }),
+    prisma.excludedFeed.findMany({ select: { freshrssId: true, label: true } })
+  ]);
+  const disabledLabels = disabled.map((c) => c.label);
+  const excludedFeedIds = excludedFeeds.map((f) => f.freshrssId);
+  const excludedFeedLabels = excludedFeeds.map((f) => f.label);
+
+  const clauses: Record<string, unknown>[] = [];
+  if (disabledLabels.length > 0) {
+    clauses.push({ NOT: { categoryLabel: { in: disabledLabels } } });
+  }
+  if (excludedFeedIds.length > 0 || excludedFeedLabels.length > 0) {
+    clauses.push({
+      NOT: {
+        OR: [
+          { feedId: { in: excludedFeedIds } },
+          { feedId: null, feedTitle: { in: excludedFeedLabels } }
+        ]
+      }
+    });
+  }
+  return clauses.length > 0 ? { AND: clauses } : {};
+}
+
+/**
  * Répartit les items inclus par catégorie FreshRSS (categoryLabel — connue
  * avant tout appel IA, indépendante de la rubrique que l'IA attribuera
  * ensuite) et ne garde que les `max` plus récents de chaque catégorie pour le
@@ -149,11 +186,13 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // pas même une image corrigée entre-temps par cleanExistingHtmlArtifacts
   // ci-dessus, puisque cette correction ne peut atteindre l'affichage qu'à
   // travers une NOUVELLE photo figée (EditionArticle).
+  const aiPrintWhere = await getAiPrintEligibilityWhere();
+
   let contentRange = todayRange;
-  const hasToday = await prisma.article.count({ where: { publishedAt: todayRange, included: true } });
+  const hasToday = await prisma.article.count({ where: { publishedAt: todayRange, ...aiPrintWhere } });
   if (hasToday === 0) {
     const mostRecent = await prisma.article.findFirst({
-      where: { included: true, publishedAt: { not: null } },
+      where: { publishedAt: { not: null }, ...aiPrintWhere },
       orderBy: { publishedAt: "desc" },
       select: { publishedAt: true }
     });
@@ -163,7 +202,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   }
 
   if (rawItems.length === 0) {
-    const existingForContent = await prisma.article.count({ where: { publishedAt: contentRange, included: true } });
+    const existingForContent = await prisma.article.count({ where: { publishedAt: contentRange, ...aiPrintWhere } });
     if (existingForContent === 0) {
       console.log("[edition] No new items and nothing to show yet — leaving edition as draft.");
       return { editionId: edition.id, articleCount: 0 };
@@ -216,7 +255,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // news" (forceNoAi).
   if (!options.forceNoAi) {
     const pending = await prisma.article.findMany({
-      where: { publishedAt: contentRange, included: true, aiRewritten: false },
+      where: { publishedAt: contentRange, aiRewritten: false, ...aiPrintWhere },
       orderBy: { publishedAt: "desc" }
     });
 
@@ -274,32 +313,25 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   }
 
   const heroArticle = await prisma.article.findFirst({
-    where: { publishedAt: contentRange, included: true },
+    where: { publishedAt: contentRange, ...aiPrintWhere },
     orderBy: { priorityScore: "desc" }
   });
 
-  const articleCount = await prisma.article.count({ where: { publishedAt: contentRange, included: true } });
+  const articleCount = await prisma.article.count({ where: { publishedAt: contentRange, ...aiPrintWhere } });
 
   // Photo figée (EditionArticle) de la une IA telle qu'elle est À CET
   // INSTANT précis — mêmes critères de qualification que la page d'accueil
-  // et /archive (included + aiRewritten + catégorie toujours activée pour
-  // "Impression IA"). Copiée une fois pour toutes ici : contrairement à
-  // Article, ces lignes ne seront plus jamais modifiées ni réattribuées à
+  // et /archive (aiRewritten + éligibilité impression IA, voir
+  // getAiPrintEligibilityWhere). Copiée une fois pour toutes ici : contrairement
+  // à Article, ces lignes ne seront plus jamais modifiées ni réattribuées à
   // une autre édition, donc cette génération reste consultable telle quelle
   // dans les archives même après d'autres régénérations le même jour.
-  const disabledCategories = await prisma.selectedCategory.findMany({
-    where: { frontPageEnabled: false },
-    select: { label: true }
-  });
-  const disabledLabels = disabledCategories.map((c) => c.label);
-
   const qualifyingArticles = await prisma.article.findMany({
     where: {
       publishedAt: contentRange,
       processed: true,
-      included: true,
       aiRewritten: true,
-      ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
+      ...aiPrintWhere
     }
   });
 
@@ -430,25 +462,21 @@ async function syncMedalFlags(): Promise<void> {
  * renvoie alors une Map vide) — les scores existants restent tels quels.
  */
 async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }): Promise<void> {
-  // Carte "Impression IA" de /admin/categories : les catégories décochées là
-  // ne doivent même pas être soumises à cette passe (ni affichées sur la une,
-  // ni comparées aux autres) — inutile de dépenser des tokens dessus.
-  const disabledCategories = await prisma.selectedCategory.findMany({
-    where: { frontPageEnabled: false },
-    select: { label: true }
-  });
-  const disabledLabels = disabledCategories.map((c) => c.label);
+  // Carte "Impression IA" de /admin/categories (AiPrintCategory, indépendante
+  // d'En Direct) : les catégories décochées là ne doivent même pas être
+  // soumises à cette passe (ni affichées sur la une, ni comparées aux
+  // autres) — inutile de dépenser des tokens dessus.
+  const aiPrintWhere = await getAiPrintEligibilityWhere();
 
   const todaysArticles = await prisma.article.findMany({
     where: {
       publishedAt: todayRange,
-      included: true,
       processed: true,
       // La une doit être une vraie "impression IA" : les articles tombés en
       // fallback (plafond par catégorie, pas de clé IA...) ne sont ni notés
       // ni affichés sur la une, même s'ils restent visibles ailleurs.
       aiRewritten: true,
-      ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
+      ...aiPrintWhere
     },
     select: { id: true, headline: true, summary: true, category: true, feedTitle: true }
   });

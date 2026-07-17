@@ -188,6 +188,41 @@ export default function AdminCategoriesPage() {
         (partout, articles déjà récupérés compris), pas seulement des futures récupérations.
       </p>
 
+      {!loading && !error && categories.length > 0 && (
+        <>
+          <h2 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
+            Impression IA
+          </h2>
+          <p className="newsprint mb-4 text-sm text-neutral-700">
+            L’impression IA (la une générée sur la page d’accueil, uniquement les news du jour) est
+            indépendante d’« En direct » : elle liste ici TOUTES les catégories FreshRSS, cochées ou
+            non pour En direct, et travaille directement sur les news récupérées à la source. Décocher
+            une catégorie ci-dessous la retire uniquement de l’impression IA — elle reste inchangée
+            partout ailleurs (En direct, recherche, archive). Un flux explicitement exclu (ci-dessous)
+            reste exclu même ici.
+          </p>
+          <ul className="mb-10 border-t-2 border-ink">
+            {categories.map((cat) => (
+              <li
+                key={cat.freshrssId}
+                className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
+              >
+                <span className="font-display font-bold">{cat.label}</span>
+                <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
+                  <input
+                    type="checkbox"
+                    checked={cat.frontPageEnabled}
+                    onChange={() => toggleFrontPage(cat)}
+                    className="accent-ink"
+                  />
+                  inclure dans l’impression IA
+                </label>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <h2 className="mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
         Catégories & flux
       </h2>
@@ -353,40 +388,6 @@ export default function AdminCategoriesPage() {
                 </div>
               );
             })()}
-        </>
-      )}
-
-      {!loading && !error && categories.some((c) => c.selected) && (
-        <>
-          <h2 className="mb-3 mt-10 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-            Impression IA
-          </h2>
-          <p className="newsprint mb-4 text-sm text-neutral-700">
-            La une générée par l’IA (page d’accueil, uniquement les news du jour) ne prend en compte
-            que les catégories cochées ci-dessous. Décocher une catégorie ici ne la retire pas d’« En
-            direct » ni de la recherche — elle disparaît seulement de la première page.
-          </p>
-          <ul className="border-t-2 border-ink">
-            {categories
-              .filter((c) => c.selected)
-              .map((cat) => (
-                <li
-                  key={cat.freshrssId}
-                  className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
-                >
-                  <span className="font-display font-bold">{cat.label}</span>
-                  <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
-                    <input
-                      type="checkbox"
-                      checked={cat.frontPageEnabled}
-                      onChange={() => toggleFrontPage(cat)}
-                      className="accent-ink"
-                    />
-                    inclure dans l’impression IA
-                  </label>
-                </li>
-              ))}
-          </ul>
         </>
       )}
 

@@ -9,18 +9,22 @@ async function assertAuthed(req: NextRequest) {
 }
 
 // Returns every category/label found in FreshRSS, merged with which ones
-// are currently selected in DailySpoon.
+// are currently selected in DailySpoon (En Direct) ET avec le réglage
+// "Impression IA" (AiPrintCategory) — les deux sont désormais des flags
+// totalement indépendants : une catégorie peut être décochée pour En Direct
+// et quand même incluse dans l'impression IA, ou l'inverse.
 export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
-    const [freshrssCategories, selected] = await Promise.all([
+    const [freshrssCategories, selected, aiPrintCategories] = await Promise.all([
       listAllCategories(),
-      prisma.selectedCategory.findMany()
+      prisma.selectedCategory.findMany(),
+      prisma.aiPrintCategory.findMany()
     ]);
     const selectedIds = new Set(selected.map((s) => s.freshrssId));
     const orderById = new Map(selected.map((s) => [s.freshrssId, s.order]));
-    const frontPageEnabledById = new Map(selected.map((s) => [s.freshrssId, s.frontPageEnabled]));
+    const frontPageEnabledById = new Map(aiPrintCategories.map((c) => [c.freshrssId, c.enabled]));
 
     // Catégories sélectionnées d'abord, dans l'ordre choisi dans
     // /admin/categories (persisté en base) ; le reste ensuite, par ordre
@@ -66,14 +70,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "freshrssId et label sont requis" }, { status: 400 });
   }
 
-  // Bascule dédiée à la carte "Impression IA" : ne touche ni à la sélection
-  // ni à l'ordre, juste au flag frontPageEnabled de la ligne déjà existante
-  // (une catégorie doit déjà être sélectionnée pour apparaître dans cette
-  // carte, donc la ligne existe forcément à ce stade).
+  // Bascule dédiée à la carte "Impression IA" : totalement indépendante de
+  // la sélection En Direct — upsert dans AiPrintCategory, qui fonctionne
+  // pour N'IMPORTE QUELLE catégorie FreshRSS, sélectionnée ou non.
   if (typeof frontPageEnabled === "boolean" && typeof selected !== "boolean") {
-    await prisma.selectedCategory.update({
+    await prisma.aiPrintCategory.upsert({
       where: { freshrssId },
-      data: { frontPageEnabled }
+      update: { label, enabled: frontPageEnabled },
+      create: { freshrssId, label, enabled: frontPageEnabled }
     });
     return NextResponse.json({ ok: true });
   }
