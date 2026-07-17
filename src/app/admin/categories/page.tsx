@@ -284,7 +284,7 @@ export default function AdminCategoriesPage() {
                 </div>
               </>
             ) : (
-              <div className="text-xs italic text-neutral-600">Aucune impression pour l'instant.</div>
+              <div className="text-xs italic text-neutral-600">Aucune impression pour l’instant.</div>
             )}
           </div>
         </div>
