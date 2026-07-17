@@ -83,12 +83,13 @@ export function EditionView({
     const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
     return tb - ta;
   };
+  // Uniquement des flux médaillés — pas de repli sur les mieux priorisés :
+  // si moins de 3 (voire aucun) article médaillé n'est paru aujourd'hui, le
+  // bloc "à la une" affiche moins de 3 héros, voire disparaît entièrement
+  // (voir heroes.length > 0 plus bas), plutôt que de compléter avec un
+  // article non médaillé.
   const medaledArticles = [...articles].filter((a) => a.medal && isToday(a)).sort(byRecency);
-  const fallbackArticles = [...articles]
-    .filter((a) => !a.medal && isToday(a))
-    .sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
-  const [heroA, heroB, heroC] = [...medaledArticles, ...fallbackArticles];
-  const heroes = [heroA, heroB, heroC].filter((a): a is ArticleLike => Boolean(a));
+  const heroes = medaledArticles.slice(0, 3);
   const heroIds = new Set(heroes.map((h) => h.id));
   const rest = articles.filter((a) => !heroIds.has(a.id));
 
@@ -293,7 +294,9 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </ArticleLink>
       )}
-      <p className="newsprint mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">{article.summary}</p>
+      <p className="newsprint mx-auto max-w-xl line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
+        {article.summary}
+      </p>
       <SourceLine article={article} center />
     </article>
   );
@@ -302,7 +305,7 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
 function SideHeroBox({ article, className = "" }: { article: ArticleLike; className?: string }) {
   return (
     <article className={className}>
-      <h3 className="mb-2 font-display text-sm font-bold leading-snug">
+      <h3 className="mb-2 max-w-2xl font-display text-xl font-black leading-tight md:text-2xl">
         <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
           {article.headline}
         </ArticleLink>
@@ -318,7 +321,7 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </ArticleLink>
       )}
-      <p className="newsprint text-sm leading-snug text-neutral-700">{article.summary}</p>
+      <p className="newsprint line-clamp-[10] text-sm leading-snug text-neutral-700">{article.summary}</p>
       <SourceLine article={article} />
     </article>
   );
