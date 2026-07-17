@@ -172,10 +172,10 @@ export function EditionView({
               CategoryColumn), gardée dans sa couleur rouge d'origine (pas de
               filtre), plus grande, tirée au hasard à chaque rendu plutôt
               qu'alternée (un seul bandeau ici, pas une liste de rubriques).
-              Le texte lui-même passe en noir (text-ink), un peu plus gros et
-              en gras plutôt que la couleur "journal" (rouge) utilisée
-              ailleurs pour ce genre d'intitulé. */}
-          <p className="relative mb-6 text-center text-sm font-bold uppercase tracking-[0.35em] text-ink">
+              Texte dans la même couleur que les titres de rubrique
+              maintenant (#e5e3df, échantillonnée sur le fond du site), un
+              peu plus gros et en gras. */}
+          <p className="relative mb-6 text-center text-sm font-bold uppercase tracking-[0.35em] text-[#e5e3df]">
             <img
               src={CATEGORY_HIGHLIGHTS[Math.floor(Math.random() * CATEGORY_HIGHLIGHTS.length)]}
               alt=""
