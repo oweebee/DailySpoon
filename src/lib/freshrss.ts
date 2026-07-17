@@ -188,18 +188,24 @@ export async function fetchOgImage(url: string): Promise<string | null> {
     }
     if (!res.ok) return null;
 
+    // On ne s'arrête plus à la fin du <head> : certains sites (ex.
+    // Geekzone/WordPress sans plugin SEO configuré sur tous les articles)
+    // n'ont tout simplement PAS de balise og:image, même quand une image
+    // est bien présente dans le corps de l'article — s'arrêter au <head>
+    // ne laissait alors aucune chance au filet de secours ci-dessous.
+    // MAX_BYTES relevé en conséquence pour couvrir une partie du corps de
+    // page (têtes de thème WordPress comprises), tout en restant borné.
     const reader = res.body?.getReader();
     let html = "";
     if (reader) {
       const decoder = new TextDecoder();
-      const MAX_BYTES = 200_000;
+      const MAX_BYTES = 350_000;
       let bytesRead = 0;
       while (bytesRead < MAX_BYTES) {
         const { done, value } = await reader.read();
         if (done) break;
         html += decoder.decode(value, { stream: true });
         bytesRead += value.length;
-        if (/<\/head>/i.test(html)) break;
       }
       reader.cancel().catch(() => {});
     } else {
@@ -212,10 +218,26 @@ export async function fetchOgImage(url: string): Promise<string | null> {
       html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
       html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
 
-    if (!match) return null;
-    let imageUrl = match[1].trim();
-    if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
-    return imageUrl || null;
+    if (match) {
+      let imageUrl = match[1].trim();
+      if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
+      return imageUrl || null;
+    }
+
+    // Filet de secours WordPress : pas de balise og:image, mais l'image de
+    // l'article est presque toujours servie depuis /wp-content/uploads/
+    // (contenu réellement uploadé pour ce post), contrairement aux images de
+    // thème/logo/icônes qui viennent de /wp-content/themes/ ou /plugins/ —
+    // heuristique fiable pour cibler la vraie image d'illustration sans
+    // risquer d'attraper un logo ou une icône de navigation.
+    const wpMatch = html.match(/<img[^>]+src=["']([^"']*\/wp-content\/uploads\/[^"']+)["']/i);
+    if (wpMatch) {
+      let imageUrl = wpMatch[1].trim();
+      if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
+      return imageUrl || null;
+    }
+
+    return null;
   } catch (err) {
     console.warn(`[freshrss] og:image indisponible pour ${url}:`, (err as Error)?.message);
     return null;
