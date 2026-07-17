@@ -21,8 +21,10 @@ import { useState } from "react";
  * medal, if true, pins a wax-seal badge on the top-left corner of the photo
  * (feed decorated as "médaillé" in /admin/categories) — vraie image
  * (public/badges/wax-seal.png, fond détouré à partir du visuel fourni par
- * l'utilisateur). Hauteur totale fixée à 71px (= même hauteur que l'ancien
- * badge médaille), largeur automatique (ratio d'origine conservé).
+ * l'utilisateur — érosion + décontamination des pixels de bord pour éliminer
+ * le liseré blanchâtre résiduel d'un premier détourage trop naïf). Hauteur
+ * totale fixée à 53px (= hauteur de l'ancien badge médaille [71px] réduite de
+ * 25%), largeur automatique (ratio d'origine conservé).
  * Entièrement À L'INTÉRIEUR de la photo (ne la chevauche plus) : 5px de
  * marge avec le bord haut, 5px avec le bord gauche.
  *
@@ -91,7 +93,7 @@ export function ArticleImage({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-10 select-none"
-          style={{ left: "5px", top: "5px", height: "71px", width: "auto" }}
+          style={{ left: "5px", top: "5px", height: "53px", width: "auto" }}
         />
       )}
     </div>
