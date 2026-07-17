@@ -136,7 +136,12 @@ export function CategoryColumn({
         draggable={draggable}
         onDragStart={draggable ? onDragStart : undefined}
         onDragEnd={draggable ? onDragEnd : undefined}
-        className={`relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] ${
+        // Titre en text-paper (couleur de fond du site, pas noir) UNIQUEMENT
+        // en mobile — restauré en text-ink (comme avant, hérité par défaut)
+        // dès md. Même <h2> utilisé aussi bien dans le carrousel mobile que
+        // dans la grille desktop (voir CategoryGrid) : une classe
+        // responsive suffit, pas besoin de prop séparée.
+        className={`relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] text-paper md:text-ink ${
           draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
         }`}
       >
