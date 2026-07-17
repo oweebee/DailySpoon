@@ -25,9 +25,14 @@ import { useState } from "react";
  * traitement de couleur/transparence). Hauteur totale fixée à 53px (= hauteur
  * de l'ancien badge médaille [71px] réduite de 25%), largeur automatique
  * (ratio d'origine conservé).
- * Recouvre le coin haut-gauche de la photo, en débordant d'1px pile au
- * niveau du coin (haut et gauche) plutôt que de rester entièrement à
- * l'intérieur.
+ * Recouvre le coin haut-gauche de la photo, matière (cire) comprise — pas
+ * juste la boîte englobante transparente de l'image. Le cachet étant une
+ * forme ronde/ondulée, son coin haut-gauche À LUI est presque entièrement
+ * transparent (un simple décalage de quelques px ne faisait donc rien
+ * apparaître de visible) : la position ci-dessous vise le pixel de cire
+ * opaque le plus proche du coin (mesuré programmatiquement) pour qu'il
+ * déborde d'environ 1px du coin de la photo, pendant que le reste du
+ * cachet recouvre bien le coin.
  *
  * Repli favicon : certains sites (protégés par Cloudflare ou une protection
  * anti-hotlink un peu trop stricte, ex. Geekzone) bloquent la requête
@@ -94,7 +99,7 @@ export function ArticleImage({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-10 select-none"
-          style={{ left: "-1px", top: "-1px", height: "53px", width: "auto" }}
+          style={{ left: "-7px", top: "-10px", height: "53px", width: "auto" }}
         />
       )}
     </div>
