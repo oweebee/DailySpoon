@@ -180,7 +180,7 @@ export function EditionView({
               src={CATEGORY_HIGHLIGHTS[Math.floor(Math.random() * CATEGORY_HIGHLIGHTS.length)]}
               alt=""
               aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-1/2 h-7 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[34px] w-auto -translate-x-1/2 -translate-y-1/2 select-none"
             />
             <span className="relative">✦ À la une ✦</span>
           </p>
