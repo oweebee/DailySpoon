@@ -18,13 +18,13 @@ import { useState } from "react";
  * press-photo date stamp: rotated, blood-red, transparent background — just
  * the ink sitting directly over the photo, no solid chip behind it.
  *
- * medal, if true, pins a war-honor-medal-style badge on the top-left corner
- * of the photo (feed decorated as "médaillé" in /admin/categories) — vraie
- * image (public/badges/war-medal.png, fond détouré à partir du visuel fourni
- * par l'utilisateur), droite (pas inclinée). Positionnée 5px à l'extérieur du
- * bord gauche de la photo ; verticalement, seul le haut du RUBAN dépasse de
- * quelques pixels au-dessus de la photo — le médaillon (rond) lui reste
- * toujours sous le bord supérieur, jamais lui qui dépasse.
+ * medal, if true, pins a wax-seal badge on the top-left corner of the photo
+ * (feed decorated as "médaillé" in /admin/categories) — vraie image
+ * (public/badges/wax-seal.png, fond détouré à partir du visuel fourni par
+ * l'utilisateur). Hauteur totale fixée à 71px (= même hauteur que l'ancien
+ * badge médaille), largeur automatique (ratio d'origine conservé).
+ * Entièrement À L'INTÉRIEUR de la photo (ne la chevauche plus) : 5px de
+ * marge avec le bord haut, 5px avec le bord gauche.
  *
  * Repli favicon : certains sites (protégés par Cloudflare ou une protection
  * anti-hotlink un peu trop stricte, ex. Geekzone) bloquent la requête
@@ -87,11 +87,11 @@ export function ArticleImage({
       )}
       {medal && (
         <img
-          src="/badges/war-medal.png"
+          src="/badges/wax-seal.png"
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute z-10 w-10 select-none"
-          style={{ left: "7px", top: "-3px" }}
+          className="pointer-events-none absolute z-10 select-none"
+          style={{ left: "5px", top: "5px", height: "71px", width: "auto" }}
         />
       )}
     </div>
