@@ -25,8 +25,9 @@ import { useState } from "react";
  * traitement de couleur/transparence). Hauteur totale fixée à 53px (= hauteur
  * de l'ancien badge médaille [71px] réduite de 25%), largeur automatique
  * (ratio d'origine conservé).
- * Entièrement À L'INTÉRIEUR de la photo (ne la chevauche plus) : 5px de
- * marge avec le bord haut, 5px avec le bord gauche.
+ * Recouvre le coin haut-gauche de la photo, en débordant d'1px pile au
+ * niveau du coin (haut et gauche) plutôt que de rester entièrement à
+ * l'intérieur.
  *
  * Repli favicon : certains sites (protégés par Cloudflare ou une protection
  * anti-hotlink un peu trop stricte, ex. Geekzone) bloquent la requête
@@ -93,7 +94,7 @@ export function ArticleImage({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-10 select-none"
-          style={{ left: "5px", top: "5px", height: "53px", width: "auto" }}
+          style={{ left: "-1px", top: "-1px", height: "53px", width: "auto" }}
         />
       )}
     </div>
