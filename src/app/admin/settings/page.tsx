@@ -18,6 +18,7 @@ type SettingsForm = {
   retentionDays: string;
   editionScheduleEnabled: boolean;
   writingStyle: string;
+  morssBaseUrl: string;
 };
 
 const EMPTY: SettingsForm = {
@@ -34,7 +35,8 @@ const EMPTY: SettingsForm = {
   editionTz: "",
   retentionDays: "730",
   editionScheduleEnabled: true,
-  writingStyle: "normal"
+  writingStyle: "normal",
+  morssBaseUrl: ""
 };
 
 // Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
@@ -94,7 +96,8 @@ export default function AdminSettingsPage() {
           editionTz: s.editionTz || "",
           retentionDays: s.retentionDays !== undefined && s.retentionDays !== null ? s.retentionDays.toString() : "730",
           editionScheduleEnabled: s.editionScheduleEnabled ?? true,
-          writingStyle: s.writingStyle || "normal"
+          writingStyle: s.writingStyle || "normal",
+          morssBaseUrl: s.morssBaseUrl || ""
         });
         // Clé déjà enregistrée : charge tout de suite la liste des moteurs
         // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
@@ -166,7 +169,8 @@ export default function AdminSettingsPage() {
       editionTz: form.editionTz,
       retentionDays: form.retentionDays === "" ? null : Number(form.retentionDays),
       editionScheduleEnabled: form.editionScheduleEnabled,
-      writingStyle: form.writingStyle
+      writingStyle: form.writingStyle,
+      morssBaseUrl: form.morssBaseUrl
     };
   }
 
@@ -445,6 +449,24 @@ export default function AdminSettingsPage() {
             <p className="text-xs italic text-sepia">
               Passé ce délai, les articles sont supprimés automatiquement à chaque génération —
               sauf ceux marqués favoris, jamais purgés.
+            </p>
+          </fieldset>
+
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">
+              Lecture d’article (morss)
+            </legend>
+            <Field
+              label="Base de l’instance morss"
+              value={form.morssBaseUrl}
+              onChange={(v) => set("morssBaseUrl", v)}
+              placeholder="https://morss.exemple.com"
+            />
+            <p className="text-xs italic text-sepia">
+              Utilisée en repli quand la lecture directe d’un article échoue (403, blocage anti-bot —
+              ex. NYTimes, Cloudflare) : la requête repart depuis morss plutôt que directement depuis
+              ce serveur. Laisse vide pour désactiver ce repli. Sans lien avec un flux déjà proxifié
+              via morss côté FreshRSS, réglage indépendant.
             </p>
           </fieldset>
 

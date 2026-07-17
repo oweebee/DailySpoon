@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/settings";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -208,8 +209,18 @@ function renderPage(opts: {
    *  en base, ex. lien externe non aspiré). */
   articleId?: string | null;
   favorite?: boolean;
+  /** Le fetch serveur a échoué (403, anti-bot...) même via le repli morss :
+   *  au lieu du texte d'erreur habituel, affiche directement la page source
+   *  dans une iframe — la requête part alors du navigateur du visiteur, pas
+   *  de ce serveur, ce qui contourne un blocage ciblant spécifiquement les
+   *  requêtes serveur-à-serveur. Pas de garantie : certains sites refusent
+   *  aussi l'affichage en iframe (X-Frame-Options/CSP frame-ancestors), la
+   *  zone reste alors vide — "Voir l'original"/"Ouvrir dans un nouvel
+   *  onglet" restent le recours dans ce cas. */
+  embedFallback?: boolean;
 }): string {
-  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite } = opts;
+  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite, embedFallback } =
+    opts;
   const kickerRaw = siteName || new URL(originalUrl).hostname.replace(/^www\./, "");
   const kicker = escapeHtml(kickerRaw);
   // La ligne "source" sous le titre reste toujours affichée (repli sur le
@@ -386,6 +397,19 @@ function renderPage(opts: {
   }
   .colophon { text-align: center; margin-top: 3.2em; color: #5c5c5c; }
   .colophon svg { display: inline-block; vertical-align: middle; margin: 0 9px; fill: currentColor; }
+  /* Repli iframe (fetch serveur bloqué) : occupe la hauteur visible de la
+     fenêtre plutôt qu'une hauteur fixe arbitraire, pour rester utilisable
+     sur mobile comme desktop. */
+  .embed-frame {
+    display: block;
+    width: 100%;
+    height: 78vh;
+    min-height: 420px;
+    border: 1px solid #1a1a1a;
+    box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.15);
+    background: #fff;
+  }
+  .embed-note { text-align: center; font-size: 0.75rem; font-style: italic; color: #5c5c5c; margin: 0.8em 0 1.6em; }
 </style>
 </head>
 <body>
@@ -401,10 +425,15 @@ function renderPage(opts: {
     </p>
     <div class="double-rule"></div>
     <p class="kicker">✦ ${kicker} ✦</p>
-    <h1>${escapeHtml(title)}</h1>
+    ${
+      embedFallback
+        ? `<p class="embed-note">Lecture directe indisponible sur ce serveur — affichage de la page source ci-dessous.</p>
+    <iframe class="embed-frame" src="${escapeHtml(originalUrl)}" title="${escapeHtml(title)}" referrerpolicy="no-referrer" loading="lazy"></iframe>`
+        : `<h1>${escapeHtml(title)}</h1>
     <p class="byline">${metaBits}${starHtml}</p>
     <div class="article-body">${bodyHtml}</div>
-    <p class="source-bottom">Source : ${kicker}${starHtml}</p>
+    <p class="source-bottom">Source : ${kicker}${starHtml}</p>`
+    }
     <p class="colophon">${spoonSvg(-18)}${spoonSvg(14)}${spoonSvg(-18)}</p>
   </div>
   <div class="lightbox-overlay" id="lightbox"><img id="lightbox-img" src="" alt="" /></div>
@@ -643,6 +672,58 @@ async function fetchRedditPost(parsed: URL): Promise<RedditPost | null> {
   }
 }
 
+/**
+ * Va chercher le HTML d'une page, en tentant d'abord une requête directe
+ * depuis ce serveur puis, si elle échoue (403, timeout...) et qu'une
+ * instance morss est configurée (/admin/settings), une seconde tentative en
+ * relayant via morss — dont l'IP n'est pas forcément bloquée là où celle de
+ * ce serveur l'est (cas fréquent : NYTimes, Cloudflare...). "morss.it/:html/
+ * <url sans schéma>" est l'option officielle de morss pour obtenir une page
+ * HTML unique déjà nettoyée plutôt qu'un flux RSS — best-effort : si morss
+ * répond autre chose qu'un vrai article (échec, page de blocage...),
+ * Readability ne trouvera simplement rien d'exploitable et on retombe sur
+ * le message d'erreur habituel.
+ */
+async function fetchArticleHtml(
+  targetUrl: string,
+  morssBaseUrl: string
+): Promise<{ html: string; baseUrl: string } | { error: string } | null> {
+  async function attempt(url: string, timeoutMs: number): Promise<{ html: string; baseUrl: string } | { error: string } | null> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+      });
+      if (!res.ok) return { error: `${res.status}` };
+      const rawBuffer = await res.arrayBuffer();
+      const html = decodeHtml(rawBuffer, res.headers.get("content-type"));
+      return { html, baseUrl: url };
+    } catch (err: any) {
+      return { error: err?.message || "échec réseau" };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const direct = await attempt(targetUrl, 10000);
+  if (direct && "html" in direct) return direct;
+
+  if (!morssBaseUrl) return direct; // pas de repli configuré : renvoie l'erreur directe telle quelle
+
+  const strippedUrl = targetUrl.replace(/^https?:\/\//, "");
+  const morssUrl = `${morssBaseUrl}/:html/${strippedUrl}`;
+  const viaMorss = await attempt(morssUrl, 12000);
+  if (viaMorss && "html" in viaMorss) return viaMorss;
+
+  return direct; // les deux ont échoué : on renvoie l'erreur de la tentative directe (plus parlante)
+}
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   if (!url) return new NextResponse("URL manquante", { status: 400 });
@@ -774,37 +855,34 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    let res: Response;
-    try {
-      res = await fetch(fetchUrl, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        }
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const { morssBaseUrl } = await getSettings();
+    const fetched = await fetchArticleHtml(fetchUrl, morssBaseUrl);
 
-    if (!res.ok) {
+    if (!fetched || "error" in fetched) {
+      // Fetch serveur bloqué (403, anti-bot...) même après repli morss :
+      // plutôt qu'un message d'erreur, on tente d'afficher directement la
+      // page source dans une iframe — la requête part alors du NAVIGATEUR
+      // du visiteur, pas de ce serveur, donc contourne un blocage qui ne
+      // visait QUE les requêtes serveur-à-serveur (cas fréquent : anti-bot
+      // basé sur l'IP/réputation plutôt qu'un vrai blocage d'affichage).
+      // Sans garantie non plus : certains sites (X-Frame-Options/CSP
+      // frame-ancestors) refusent aussi l'affichage en iframe, auquel cas
+      // la zone reste vide — "Ouvrir dans un nouvel onglet" (déjà en haut
+      // de page) reste alors le seul recours.
       return htmlResponse(
         renderPage({
-          title: "Article indisponible",
-          bodyHtml: `<p>Le site source a répondu ${res.status}. Utilise « Ouvrir dans un nouvel onglet » pour lire l'article directement.</p>`,
+          title: new URL(originalUrl).hostname.replace(/^www\./, ""),
+          bodyHtml: "",
           originalUrl,
           articleId,
-          favorite
+          favorite,
+          embedFallback: true
         })
       );
     }
 
-    const rawBuffer = await res.arrayBuffer();
-    const rawHtml = decodeHtml(rawBuffer, res.headers.get("content-type"));
-    const dom = new JSDOM(rawHtml, { url: fetchUrl });
+    const { html: rawHtml, baseUrl: resolvedBaseUrl } = fetched;
+    const dom = new JSDOM(rawHtml, { url: resolvedBaseUrl });
     // Cast : le type Document de jsdom et celui de lib.dom (attendu par
     // Readability) ne s'unifient pas toujours parfaitement en TS, alors
     // qu'ils sont compatibles à l'exécution (usage standard recommandé par

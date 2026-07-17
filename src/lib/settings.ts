@@ -27,6 +27,15 @@ export type AppSettings = {
    *  (ton sarcastique/passif-agressif façon Ackboo, Canard PC). Sans effet
    *  sur /direct, toujours sans IA quel que soit ce réglage. */
   writingStyle: string;
+  /** Base d'une instance morss (ex. "https://morss.obsidianspoon.com"),
+   *  utilisée en repli par /api/article-proxy quand le fetch direct d'un
+   *  article échoue (403, blocage anti-bot type NYTimes/Cloudflare...) —
+   *  morss fait la requête depuis SA propre IP, qui n'est pas forcément
+   *  bloquée là où celle de ce serveur l'est. Vide = pas de repli, on garde
+   *  juste le message "Article indisponible" comme avant. Sans effet sur les
+   *  flux déjà proxifiés via morss côté FreshRSS (réglage indépendant, fait
+   *  directement dans l'URL du flux). */
+  morssBaseUrl: string;
 };
 
 /**
@@ -53,7 +62,8 @@ export async function getSettings(): Promise<AppSettings> {
     retentionDays: row?.retentionDays ?? Number(process.env.RETENTION_DAYS ?? 730),
     editionScheduleEnabled:
       row?.editionScheduleEnabled ?? process.env.EDITION_SCHEDULE_ENABLED !== "false",
-    writingStyle: row?.writingStyle || process.env.WRITING_STYLE || "normal"
+    writingStyle: row?.writingStyle || process.env.WRITING_STYLE || "normal",
+    morssBaseUrl: (row?.morssBaseUrl || process.env.MORSS_BASE_URL || "").replace(/\/+$/, "")
   };
 }
 
@@ -67,7 +77,8 @@ const STRING_FIELDS = [
   "geminiApiKey",
   "geminiModel",
   "editionTz",
-  "writingStyle"
+  "writingStyle",
+  "morssBaseUrl"
 ] as const;
 
 export type SettingsInput = Partial<{
@@ -85,6 +96,7 @@ export type SettingsInput = Partial<{
   retentionDays: number | null;
   editionScheduleEnabled: boolean | null;
   writingStyle: string | null;
+  morssBaseUrl: string | null;
 }>;
 
 /**

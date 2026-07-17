@@ -1,0 +1,3 @@
+-- (vide intentionnellement — voir conversation : la purge a été faite en
+-- SQL manuel directement en base, pas via une migration commitée au code.
+-- Ce dossier peut être supprimé.)
