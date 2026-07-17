@@ -18,7 +18,24 @@ export function tzOffsetMinutes(date: Date, timeZone: string): number {
 
 /** Instant UTC correspondant à "année-mois-jour 00:00" dans le fuseau donné. */
 export function localMidnightUtc(year: number, month: number, day: number, timeZone: string): Date {
-  const naiveUtc = Date.UTC(year, month, day);
+  return localTimeUtc(year, month, day, 0, 0, timeZone);
+}
+
+/**
+ * Instant UTC correspondant à "année-mois-jour heure:minute" dans le fuseau
+ * donné — généralisation de localMidnightUtc, utilisée pour calculer le
+ * prochain déclenchement planifié (génération quotidienne, aspiration de
+ * secours) affiché dans les statistiques admin.
+ */
+export function localTimeUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timeZone: string
+): Date {
+  const naiveUtc = Date.UTC(year, month, day, hour, minute);
   const offset = tzOffsetMinutes(new Date(naiveUtc), timeZone);
   return new Date(naiveUtc - offset * 60_000);
 }

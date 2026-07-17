@@ -2,6 +2,21 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { RawItem } from "./freshrss";
 import { getSettings } from "./settings";
 
+// Accumulateur de tokens réellement consommés, passé EN OPTION à travers
+// tout appel IA de cette génération (processArticles, curateFrontPage) —
+// voir generateEdition.ts, qui le lit à la fin pour figer inputTokens/
+// outputTokens/estimatedCostUsd sur l'Edition (affiché dans les
+// statistiques admin). Objet explicitement threadé plutôt qu'un état
+// partagé au niveau du module : deux générations ne doivent jamais se
+// mélanger si elles tournent en parallèle (worker + déclenchement manuel).
+export type TokenUsage = { inputTokens: number; outputTokens: number };
+
+function addUsage(usage: TokenUsage | undefined, delta: { inputTokens?: number; outputTokens?: number }): void {
+  if (!usage) return;
+  usage.inputTokens += delta.inputTokens || 0;
+  usage.outputTokens += delta.outputTokens || 0;
+}
+
 export type ProcessedArticle = {
   headline: string;
   summary: string;
@@ -82,7 +97,8 @@ function chunk<T>(arr: T[], size: number): T[][] {
  */
 export async function processArticles(
   items: RawItem[],
-  options: { forceNoAi?: boolean } = {}
+  options: { forceNoAi?: boolean } = {},
+  usage?: TokenUsage
 ): Promise<ProcessedArticle[]> {
   if (options.forceNoAi) {
     // Règle du projet : pas de conso de tokens là où ce n'est pas nécessaire.
@@ -100,7 +116,7 @@ export async function processArticles(
       return items.map(fallbackProcess);
     }
     return processInBatches(items, (batch) =>
-      processBatchGemini(batch, settings.geminiApiKey, settings.geminiModel, settings.writingStyle)
+      processBatchGemini(batch, settings.geminiApiKey, settings.geminiModel, settings.writingStyle, usage)
     );
   }
 
@@ -109,7 +125,9 @@ export async function processArticles(
     return items.map(fallbackProcess);
   }
   const client = new Anthropic({ apiKey: settings.anthropicApiKey });
-  return processInBatches(items, (batch) => processBatch(client, batch, settings.anthropicModel, settings.writingStyle));
+  return processInBatches(items, (batch) =>
+    processBatch(client, batch, settings.anthropicModel, settings.writingStyle, usage)
+  );
 }
 
 async function processInBatches(
@@ -136,7 +154,8 @@ async function processBatch(
   client: Anthropic,
   batch: RawItem[],
   model: string,
-  writingStyle: string
+  writingStyle: string,
+  usage?: TokenUsage
 ): Promise<ProcessedArticle[]> {
   const prompt = buildPrompt(batch, writingStyle);
 
@@ -145,6 +164,7 @@ async function processBatch(
     max_tokens: 4096,
     messages: [{ role: "user", content: prompt }]
   });
+  addUsage(usage, { inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens });
 
   const text = response.content
     .filter((block: any) => block.type === "text")
@@ -175,7 +195,8 @@ async function processBatchGemini(
   batch: RawItem[],
   apiKey: string,
   model: string,
-  writingStyle: string
+  writingStyle: string,
+  usage?: TokenUsage
 ): Promise<ProcessedArticle[]> {
   const prompt = buildPrompt(batch, writingStyle);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -197,6 +218,10 @@ async function processBatchGemini(
   }
 
   const data: any = await res.json();
+  addUsage(usage, {
+    inputTokens: data?.usageMetadata?.promptTokenCount,
+    outputTokens: data?.usageMetadata?.candidatesTokenCount
+  });
   const text: string = (data?.candidates?.[0]?.content?.parts || [])
     .map((p: any) => p?.text || "")
     .join("");
@@ -295,7 +320,10 @@ export type CurationResult = { priorityScore: number; frontPageSummary: string }
 // Un seul appel IA par génération (pas un par lot), sur des textes déjà
 // réécrits et courts (titre + résumé, pas le texte source brut) : coût
 // marginal, même avec une centaine d'articles dans la journée.
-export async function curateFrontPage(items: CurationItem[]): Promise<Map<string, CurationResult>> {
+export async function curateFrontPage(
+  items: CurationItem[],
+  usage?: TokenUsage
+): Promise<Map<string, CurationResult>> {
   if (items.length === 0) return new Map();
 
   const settings = await getSettings();
@@ -310,7 +338,7 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
     // jamais la curation elle-même (juste moins de contexte).
     const trendingTopics =
       provider === "gemini" && settings.geminiApiKey
-        ? await fetchTrendingTopicsGemini(settings.geminiApiKey, settings.geminiModel, items).catch((err) => {
+        ? await fetchTrendingTopicsGemini(settings.geminiApiKey, settings.geminiModel, items, usage).catch((err) => {
             console.warn("[ai] Recherche des news marquantes du jour indisponible :", (err as Error)?.message);
             return null;
           })
@@ -320,10 +348,10 @@ export async function curateFrontPage(items: CurationItem[]): Promise<Map<string
     const text =
       provider === "gemini"
         ? settings.geminiApiKey
-          ? await callGeminiRaw(curationPrompt, settings.geminiApiKey, settings.geminiModel)
+          ? await callGeminiRaw(curationPrompt, settings.geminiApiKey, settings.geminiModel, usage)
           : null
         : settings.anthropicApiKey
-          ? await callAnthropicRaw(curationPrompt, settings.anthropicApiKey, settings.anthropicModel)
+          ? await callAnthropicRaw(curationPrompt, settings.anthropicApiKey, settings.anthropicModel, usage)
           : null;
 
     if (!text) return new Map(); // pas de clé configurée pour ce fournisseur
@@ -407,7 +435,8 @@ Réponds UNIQUEMENT avec un tableau JSON de ${items.length} objets, dans le mêm
 async function fetchTrendingTopicsGemini(
   apiKey: string,
   model: string,
-  items: CurationItem[]
+  items: CurationItem[],
+  usage?: TokenUsage
 ): Promise<string | null> {
   const categories = [...new Set(items.map((it) => it.category).filter(Boolean))];
   const todayLabel = new Intl.DateTimeFormat("fr-FR", {
@@ -449,24 +478,29 @@ Sujet 2
   }
 
   const data: any = await res.json();
+  addUsage(usage, {
+    inputTokens: data?.usageMetadata?.promptTokenCount,
+    outputTokens: data?.usageMetadata?.candidatesTokenCount
+  });
   const text: string = (data?.candidates?.[0]?.content?.parts || []).map((p: any) => p?.text || "").join("");
   return text.trim() || null;
 }
 
-async function callAnthropicRaw(prompt: string, apiKey: string, model: string): Promise<string> {
+async function callAnthropicRaw(prompt: string, apiKey: string, model: string, usage?: TokenUsage): Promise<string> {
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: model as any,
     max_tokens: 8192,
     messages: [{ role: "user", content: prompt }]
   });
+  addUsage(usage, { inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens });
   return response.content
     .filter((block: any) => block.type === "text")
     .map((block: any) => block.text as string)
     .join("");
 }
 
-async function callGeminiRaw(prompt: string, apiKey: string, model: string): Promise<string> {
+async function callGeminiRaw(prompt: string, apiKey: string, model: string, usage?: TokenUsage): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -486,6 +520,10 @@ async function callGeminiRaw(prompt: string, apiKey: string, model: string): Pro
   }
 
   const data: any = await res.json();
+  addUsage(usage, {
+    inputTokens: data?.usageMetadata?.promptTokenCount,
+    outputTokens: data?.usageMetadata?.candidatesTokenCount
+  });
   return (data?.candidates?.[0]?.content?.parts || []).map((p: any) => p?.text || "").join("");
 }
 

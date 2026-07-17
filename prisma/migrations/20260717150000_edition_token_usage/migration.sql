@@ -1,0 +1,3 @@
+ALTER TABLE "Edition" ADD COLUMN "inputTokens" INTEGER;
+ALTER TABLE "Edition" ADD COLUMN "outputTokens" INTEGER;
+ALTER TABLE "Edition" ADD COLUMN "estimatedCostUsd" DOUBLE PRECISION;

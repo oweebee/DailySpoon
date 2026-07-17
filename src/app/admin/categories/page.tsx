@@ -19,6 +19,37 @@ type Feed = {
   medal: boolean;
 };
 
+type Stats = {
+  totalArticles: number;
+  favoriteCount: number;
+  publishedEditionCount: number;
+  totalEditionCount: number;
+  dbSizeBytes: number | null;
+  dbSizePretty: string | null;
+  nextAutoFetch: { mode: "auto" | "manual"; nextRunAt: string };
+  lastEdition: {
+    date: string;
+    generatedAt: string;
+    status: string;
+    sourcePoolCount: number | null;
+    snapshotCount: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    estimatedCostUsd: number | null;
+    estimatedCostEur: number | null;
+  } | null;
+  aiProvider: string;
+  aiModel: string;
+};
+
+function formatCost(n: number): string {
+  return n < 0.01 ? n.toFixed(4) : n.toFixed(2);
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+}
+
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +58,9 @@ export default function AdminCategoriesPage() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [feedsLoading, setFeedsLoading] = useState(true);
   const [feedsError, setFeedsError] = useState<string | null>(null);
+
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   // Catégories repliées dans l'arborescence (par défaut tout est déplié).
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -68,9 +102,18 @@ export default function AdminCategoriesPage() {
     setFeedsLoading(false);
   }
 
+  async function loadStats() {
+    setStatsLoading(true);
+    const res = await fetch("/api/admin/stats");
+    const body = await res.json().catch(() => ({}));
+    setStats(res.ok ? body : null);
+    setStatsLoading(false);
+  }
+
   useEffect(() => {
     loadCategories();
     loadFeeds();
+    loadStats();
   }, []);
 
   async function toggle(cat: Category) {
@@ -176,6 +219,76 @@ export default function AdminCategoriesPage() {
         </div>
         <div className="double-rule rotate-180" />
       </div>
+
+      {/* Statistiques de l'app — vue d'ensemble rapide en haut du menu admin.
+          Chargé à part (loadStats) : ne bloque jamais l'affichage des
+          catégories/flux si /api/admin/stats est lent ou en erreur. */}
+      <h2 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
+        Statistiques
+      </h2>
+      {statsLoading ? (
+        <p className="mb-10 text-center italic text-sepia">Calcul en cours...</p>
+      ) : !stats ? (
+        <p className="mb-10 text-center italic text-sepia">Statistiques indisponibles.</p>
+      ) : (
+        <div className="mb-10 grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div className="border border-ink/30 p-3 text-center">
+            <div className="font-display text-2xl font-black">{stats.totalArticles.toLocaleString("fr-FR")}</div>
+            <div className="text-[0.65rem] uppercase tracking-[0.2em] text-sepia">Articles en base</div>
+            <div className="mt-1 text-xs italic text-neutral-600">{stats.favoriteCount} favori(s)</div>
+          </div>
+
+          <div className="border border-ink/30 p-3 text-center">
+            <div className="font-display text-2xl font-black">{stats.publishedEditionCount}</div>
+            <div className="text-[0.65rem] uppercase tracking-[0.2em] text-sepia">Impressions réussies</div>
+            <div className="mt-1 text-xs italic text-neutral-600">{stats.totalEditionCount} tentative(s) au total</div>
+          </div>
+
+          <div className="border border-ink/30 p-3 text-center">
+            <div className="font-display text-2xl font-black">{stats.dbSizePretty ?? "—"}</div>
+            <div className="text-[0.65rem] uppercase tracking-[0.2em] text-sepia">Taille de la base</div>
+          </div>
+
+          <div className="border border-ink/30 p-3 text-center">
+            <div className="font-display text-lg font-black">{formatDateTime(stats.nextAutoFetch.nextRunAt)}</div>
+            <div className="text-[0.65rem] uppercase tracking-[0.2em] text-sepia">Prochaine aspiration auto</div>
+            <div className="mt-1 text-xs italic text-neutral-600">
+              {stats.nextAutoFetch.mode === "auto"
+                ? "impression IA complète (planning actif)"
+                : "aspiration RSS de secours, sans IA (mode manuel)"}
+            </div>
+          </div>
+
+          <div className="col-span-2 border border-ink/30 p-3 text-center md:col-span-1">
+            {stats.lastEdition ? (
+              <>
+                <div className="font-display text-lg font-black">
+                  {stats.lastEdition.inputTokens !== null && stats.lastEdition.outputTokens !== null ? (
+                    <>
+                      {(stats.lastEdition.inputTokens + stats.lastEdition.outputTokens).toLocaleString("fr-FR")}{" "}
+                      tokens
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+                <div className="text-[0.65rem] uppercase tracking-[0.2em] text-sepia">Dernière impression</div>
+                <div className="mt-1 text-xs italic text-neutral-600">
+                  {stats.lastEdition.estimatedCostUsd !== null && stats.lastEdition.estimatedCostEur !== null
+                    ? `≈ ${formatCost(stats.lastEdition.estimatedCostUsd)} $ (~${formatCost(
+                        stats.lastEdition.estimatedCostEur
+                      )} €)`
+                    : "aucune conso IA enregistrée"}
+                  {" · "}
+                  {formatDateTime(stats.lastEdition.generatedAt)}
+                </div>
+              </>
+            ) : (
+              <div className="text-xs italic text-neutral-600">Aucune impression pour l'instant.</div>
+            )}
+          </div>
+        </div>
+      )}
 
       <h1 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-[0.15em]">
         Catégories & flux FreshRSS

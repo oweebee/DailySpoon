@@ -108,7 +108,7 @@ export function CategoryGrid({
           glisser-déposer sur le titre de chaque colonne. "Afficher plus
           d'articles" bascule ici en encart à défilement interne (hauteur
           figée) plutôt que de faire grandir la colonne — scrollExpand. */}
-      <div className="hidden gap-x-0 gap-y-8 md:grid md:grid-cols-2 lg:grid-cols-4">
+      <div className="hidden gap-x-0 gap-y-1 md:grid md:grid-cols-2 lg:grid-cols-4">
         {categories.filter((cat) => !cat.isHero).map((cat) => (
           <CategoryColumn
             key={cat.label}

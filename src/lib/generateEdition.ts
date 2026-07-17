@@ -1,10 +1,11 @@
 import { createHash } from "crypto";
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
-import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
+import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle, type TokenUsage } from "./ai";
 import { stripHtml, looksLikeHtml, stripLeadingChrome } from "./text";
 import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
+import { estimateCostUsd } from "./aiPricing";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
 // og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
@@ -168,6 +169,11 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   const PARIS_TZ = "Europe/Paris";
   const todayRange = todayRangeInTz(PARIS_TZ);
 
+  // Tokens réellement consommés par CETTE génération (tous appels IA
+  // confondus) — figé sur l'Edition à la fin, affiché dans les statistiques
+  // admin. Reste à 0 en mode "Aspirer les news" (forceNoAi) ou sans clé IA.
+  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+
   const edition = await prisma.edition.create({
     data: { date, status: "draft" }
   });
@@ -275,7 +281,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     const { aiItems } = capPerCategory(pendingAsRawItems, MAX_AI_ITEMS_PER_CATEGORY);
 
     if (aiItems.length > 0) {
-      const processedAi: ProcessedArticle[] = await processArticles(aiItems, options);
+      const processedAi: ProcessedArticle[] = await processArticles(aiItems, options, usage);
       const idByFreshrssId = new Map(pending.map((a) => [a.freshrssItemId, a.id]));
 
       await Promise.all(
@@ -309,7 +315,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // plutôt que par lots isolés de 12 comme processArticles — c'est ce score
   // qui détermine ensuite les articles "à la une" sur la page d'accueil.
   if (!options.forceNoAi) {
-    await curateFrontPageScores(contentRange);
+    await curateFrontPageScores(contentRange, usage);
   }
 
   const heroArticle = await prisma.article.findFirst({
@@ -346,6 +352,18 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // vide qui devient la plus récente "published".
   const status = qualifyingArticles.length > 0 ? "published" : "draft";
 
+  // Coût estimé à partir des tokens réellement consommés (usage, rempli au
+  // fil des appels IA ci-dessus) et du modèle réglé pour CETTE génération —
+  // voir aiPricing.ts. 0/0/0 en mode "Aspirer les news" ou sans clé IA.
+  const { aiProvider, anthropicModel, geminiModel } = await getSettings();
+  const provider = aiProvider === "gemini" ? "gemini" : "anthropic";
+  const estimatedCostUsd = estimateCostUsd(
+    provider,
+    provider === "gemini" ? geminiModel : anthropicModel,
+    usage.inputTokens,
+    usage.outputTokens
+  );
+
   await prisma.edition.update({
     where: { id: edition.id },
     data: {
@@ -353,7 +371,10 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
       status,
       // Vivier total (avant plafond IA par catégorie) — voir schema.prisma,
       // affiché à côté du compte final retenu sur la une (snapshot.length).
-      sourcePoolCount: articleCount
+      sourcePoolCount: articleCount,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      estimatedCostUsd
     }
   });
 
@@ -461,7 +482,7 @@ async function syncMedalFlags(): Promise<void> {
  * si aucune clé IA n'est configurée pour le fournisseur choisi (curateFrontPage
  * renvoie alors une Map vide) — les scores existants restent tels quels.
  */
-async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }): Promise<void> {
+async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }, usage?: TokenUsage): Promise<void> {
   // Carte "Impression IA" de /admin/categories (AiPrintCategory, indépendante
   // d'En Direct) : les catégories décochées là ne doivent même pas être
   // soumises à cette passe (ni affichées sur la une, ni comparées aux
@@ -489,7 +510,8 @@ async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }): Promi
       summary: a.summary || "",
       category: a.category || "Autre",
       source: a.feedTitle || ""
-    }))
+    })),
+    usage
   );
   if (scores.size === 0) return;
 

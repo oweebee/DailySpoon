@@ -136,6 +136,16 @@ model Edition {
   // réellement réécrits par l'IA et retenus sur la une (voir generateEdition.ts).
   // null pour les éditions générées avant ce champ.
   sourcePoolCount Int?
+  // Tokens IA réellement consommés par CETTE génération précise (tous appels
+  // confondus : réécriture par lots + curation de la une + recherche des
+  // sujets tendance) — remontés depuis la réponse de l'API (usage côté
+  // Anthropic, usageMetadata côté Gemini), pas une estimation. 0 en mode
+  // "Aspirer les news" (forceNoAi) ou si aucune clé IA n'est configurée ;
+  // null pour les éditions générées avant ce champ. Voir src/lib/aiPricing.ts
+  // pour la conversion en coût — affiché dans /admin (statistiques).
+  inputTokens      Int?
+  outputTokens     Int?
+  estimatedCostUsd Float?
   articles    Article[]
   snapshot    EditionArticle[]
 }
