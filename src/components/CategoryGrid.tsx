@@ -5,6 +5,23 @@ import { CategoryColumn } from "./CategoryColumn";
 import { MobilePagedSection } from "./MobilePagedSection";
 import type { ArticleLike } from "./EditionView";
 
+/**
+ * Répartit "items" en "columns" piles indépendantes, round-robin (item 0 ->
+ * colonne 0, item 1 -> colonne 1, ..., item "columns" -> colonne 0...) — la
+ * même position qu'une grille CSS row-major classique à "columns" colonnes,
+ * mais SANS le défaut d'une grille : ici chaque colonne est un simple bloc
+ * empilé (flex-col) dont la hauteur ne dépend que de SON PROPRE contenu, pas
+ * de celui de ses voisines. Avec une vraie grille CSS, toutes les catégories
+ * d'une même "rangée" sont forcées à la même hauteur (celle de la plus
+ * longue) par align-items:stretch, laissant un grand vide sous les
+ * catégories plus courtes avant que la rangée suivante ne commence.
+ */
+function bucketize<T>(items: T[], columns: number): T[][] {
+  const buckets: T[][] = Array.from({ length: columns }, () => []);
+  items.forEach((item, i) => buckets[i % columns].push(item));
+  return buckets;
+}
+
 export type CategoryEntry = {
   label: string;
   // null si cette catégorie n'a pas d'équivalent dans /admin/categories
@@ -104,29 +121,59 @@ export function CategoryGrid({
         }))}
       />
 
-      {/* ——— Desktop/tablette : grille classique inchangée, avec
-          glisser-déposer sur le titre de chaque colonne. "Afficher plus
-          d'articles" bascule ici en encart à défilement interne (hauteur
-          figée) plutôt que de faire grandir la colonne — scrollExpand. */}
-      <div className="hidden gap-x-0 gap-y-1 md:grid md:grid-cols-2 lg:grid-cols-4">
-        {categories.filter((cat) => !cat.isHero).map((cat) => (
-          <CategoryColumn
-            key={cat.label}
-            label={cat.label}
-            articles={cat.articles}
-            draggable={!!cat.freshrssId}
-            isDragging={draggedLabel === cat.label}
-            onDragStart={() => setDraggedLabel(cat.label)}
-            onDragEnd={() => setDraggedLabel(null)}
-            onDropHere={() => handleDrop(cat.label)}
-            clampSummary={clampSummary}
-            showMedal={showMedal}
-            showDateStamp={showDateStamp}
-            showFavorite={showFavorite}
-            scrollExpand
-          />
-        ))}
-      </div>
+      {/* ——— Desktop/tablette : chaque colonne visuelle est une pile
+          indépendante (voir bucketize) plutôt qu'une grille CSS classique —
+          une grille forcerait toutes les catégories d'une même "rangée" à
+          partager la hauteur de la plus longue. Glisser-déposer sur le
+          titre de chaque colonne inchangé. "Afficher plus d'articles"
+          bascule ici en encart à défilement interne (hauteur figée) plutôt
+          que de faire grandir la colonne — scrollExpand. Deux jeux de piles
+          (2 colonnes en md, 4 en lg) rendus en parallèle, un seul visible à
+          la fois via Tailwind — la répartition round-robin reproduit
+          exactement la même position par catégorie qu'avant. */}
+      {(() => {
+        const nonHero = categories.filter((cat) => !cat.isHero);
+        const renderColumn = (bucket: CategoryEntry[], colIndex: number, lastIndex: number) => (
+          <div
+            key={colIndex}
+            className={`flex flex-col gap-1 ${colIndex > 0 ? "border-l border-ink/30 pl-6" : ""} ${
+              colIndex < lastIndex ? "pr-6" : ""
+            }`}
+          >
+            {bucket.map((cat) => (
+              <CategoryColumn
+                key={cat.label}
+                label={cat.label}
+                articles={cat.articles}
+                draggable={!!cat.freshrssId}
+                isDragging={draggedLabel === cat.label}
+                onDragStart={() => setDraggedLabel(cat.label)}
+                onDragEnd={() => setDraggedLabel(null)}
+                onDropHere={() => handleDrop(cat.label)}
+                clampSummary={clampSummary}
+                showMedal={showMedal}
+                showDateStamp={showDateStamp}
+                showFavorite={showFavorite}
+                scrollExpand
+              />
+            ))}
+          </div>
+        );
+
+        const bucketsMd = bucketize(nonHero, 2);
+        const bucketsLg = bucketize(nonHero, 4);
+
+        return (
+          <>
+            <div className="hidden md:grid md:grid-cols-2 lg:hidden">
+              {bucketsMd.map((bucket, i) => renderColumn(bucket, i, bucketsMd.length - 1))}
+            </div>
+            <div className="hidden lg:grid lg:grid-cols-4">
+              {bucketsLg.map((bucket, i) => renderColumn(bucket, i, bucketsLg.length - 1))}
+            </div>
+          </>
+        );
+      })()}
     </>
   );
 }

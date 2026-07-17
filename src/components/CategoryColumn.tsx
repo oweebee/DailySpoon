@@ -107,15 +107,12 @@ export function CategoryColumn({
   }, [watching, scrollExpand, articles.length]);
 
   return (
-    // Filets et paddings calculés par position réelle dans la rangée
-    // (nth-child), pas par "divide-x" (qui ignore les retours à la ligne
-    // de la grille et faisait apparaître le filet à gauche de la 1ère
-    // colonne de chaque nouvelle rangée au lieu de rester à droite).
-    // md = grille à 2 colonnes (rangées : 1-2, 3-4, ...) : filet retiré
-    // sur les positions impaires (1er de chaque rangée).
-    // lg = grille à 4 colonnes (rangées : 1-4, 5-8, ...) : on restaure le
-    // filet sur les positions 3/7/11 (retiré à tort par la règle "impair"
-    // du md) et on restaure le padding droit sur les positions 2/6/10.
+    // Le filet/padding séparant les colonnes visuelles est désormais posé sur
+    // le conteneur de colonne dans CategoryGrid (une colonne = un bloc
+    // flex-col indépendant empilant SES catégories, plus une grille CSS où
+    // toutes les catégories d'une même "rangée" seraient forcées à la même
+    // hauteur) — plus besoin ici de calculer un filet par position
+    // (nth-child) dans une grille plate.
     <section
       onDragOver={draggable ? (e) => e.preventDefault() : undefined}
       onDrop={
@@ -126,7 +123,7 @@ export function CategoryColumn({
             }
           : undefined
       }
-      className={`md:border-l md:border-ink/30 md:px-6 md:[&:nth-child(2n+1)]:border-l-0 md:[&:nth-child(2n+1)]:pl-0 md:[&:nth-child(2n)]:pr-0 lg:[&:nth-child(4n+3)]:border-l lg:[&:nth-child(4n+3)]:pl-6 lg:[&:nth-child(4n+2)]:pr-6 ${isDragging ? "opacity-40" : ""}`}
+      className={isDragging ? "opacity-40" : ""}
     >
       <h2
         draggable={draggable}

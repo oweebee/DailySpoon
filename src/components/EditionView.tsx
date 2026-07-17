@@ -176,14 +176,17 @@ export function EditionView({
         </div>
       )}
 
-      {/* ——— Rubriques (dont "À la une" sur mobile) en colonnes avec filets verticaux
-          ——— Note : pas de "divide-x" ici. Cette classe ajoute un filet à
-          gauche de chaque colonne sauf la 1ère du DOM, sans tenir compte
-          des retours à la ligne de la grille (2 col en md, 4 en lg) — le
-          filet réapparaît alors à gauche de la 1ère colonne de la rangée
-          suivante au lieu de rester à droite. Les filets sont donc posés
-          directement dans CategoryColumn, calculés par position réelle
-          dans la rangée (nth-child) pour chaque taille d'écran. */}
+      {/* ——— Rubriques (dont "À la une" sur mobile) en colonnes avec filets
+          verticaux ——— Note : pas de "divide-x" ni de grille CSS classique
+          ici. CategoryGrid répartit les catégories en piles indépendantes
+          (une par colonne visuelle, voir bucketize dans CategoryGrid.tsx) :
+          chaque colonne ne dépend que de la hauteur de SON PROPRE contenu,
+          pas de celle de ses voisines — une grille CSS classique forcerait
+          au contraire toutes les catégories d'une même "rangée" à partager
+          la hauteur de la plus longue (align-items:stretch), laissant un
+          grand vide sous les colonnes plus courtes. Les filets/paddings
+          entre colonnes sont posés sur chaque pile (colIndex), pas sur
+          CategoryColumn. */}
       <CategoryGrid initialCategories={columns} clampSummary={clampSummary} date={date} />
 
       {/* Cul-de-lampe de fin d'édition — desktop seulement (mobile l'a déjà
