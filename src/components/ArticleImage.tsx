@@ -91,7 +91,7 @@ export function ArticleImage({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-10 w-10 select-none"
-          style={{ left: "2px", top: "-3px" }}
+          style={{ left: "7px", top: "-3px" }}
         />
       )}
     </div>
