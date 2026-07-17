@@ -5,6 +5,7 @@ import type { ArticleLike } from "./EditionView";
 import { SourceLine, formatStamp } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
+import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
 
 const INITIAL_COUNT = 5;
 const STEP = 5;
@@ -22,7 +23,8 @@ export function CategoryColumn({
   showDateStamp = true,
   showFavorite = true,
   scrollExpand = false,
-  autoInfinite = false
+  autoInfinite = false,
+  highlightIndex = 0
 }: {
   label: string;
   articles: ArticleLike[];
@@ -62,6 +64,11 @@ export function CategoryColumn({
    *  conteneur à hauteur fixe. Mutuellement exclusif avec scrollExpand
    *  (desktop). */
   autoInfinite?: boolean;
+  /** Cyclé % 3 pour choisir une des 3 traces de surligneur (voir
+   *  CATEGORY_HIGHLIGHTS) affichée en fond du titre — index stable calculé
+   *  par CategoryGrid à partir de la position de la catégorie, pour ne
+   *  jamais répéter deux fois la même trace d'affilée. */
+  highlightIndex?: number;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
   const [expanded, setExpanded] = useState(false);
@@ -129,11 +136,21 @@ export function CategoryColumn({
         draggable={draggable}
         onDragStart={draggable ? onDragStart : undefined}
         onDragEnd={draggable ? onDragEnd : undefined}
-        className={`mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] ${
+        className={`relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] ${
           draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
         }`}
       >
-        {label}
+        {/* Trace de surligneur en fond, sous le titre — hauteur fixe (le
+            ratio d'origine, très large et plat, n'est jamais déformé :
+            seule la hauteur est contrainte, la largeur suit) assez petite
+            pour ne jamais toucher les filets du haut/bas du bandeau. */}
+        <img
+          src={CATEGORY_HIGHLIGHTS[highlightIndex % CATEGORY_HIGHLIGHTS.length]}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-5 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
+        />
+        <span className="relative">{label}</span>
       </h2>
       <div
         ref={listRef}

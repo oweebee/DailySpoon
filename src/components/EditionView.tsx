@@ -1,4 +1,5 @@
 import { CategoryGrid } from "./CategoryGrid";
+import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
 import { ArticleLink } from "./ArticleLink";
 import { ArticleImage } from "./ArticleImage";
 import { FavoriteStar } from "./FavoriteStar";
@@ -167,7 +168,21 @@ export function EditionView({
           simple colonne swipable parmi les autres (voir isHero plus bas). */}
       {heroMain && (
         <div className="mb-10 hidden border-2 border-ink bg-ink/[0.07] p-6 md:block md:p-8">
-          <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">✦ À la une ✦</p>
+          {/* Même trace de surligneur que les titres de rubrique (voir
+              CategoryColumn), mais plus grande, teintée en noir (filtre CSS
+              brightness-0 — met les pixels non-transparents à noir, garde
+              l'alpha intact, pas besoin d'un jeu d'images séparé) et tirée au
+              hasard à chaque rendu plutôt qu'alternée (un seul bandeau ici,
+              pas une liste de rubriques). */}
+          <p className="relative mb-6 text-center text-xs uppercase tracking-[0.35em] text-journal">
+            <img
+              src={CATEGORY_HIGHLIGHTS[Math.floor(Math.random() * CATEGORY_HIGHLIGHTS.length)]}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-7 w-auto -translate-x-1/2 -translate-y-1/2 select-none brightness-0"
+            />
+            <span className="relative">✦ À la une ✦</span>
+          </p>
           <div className={heroGridClass}>
             {heroSideA && <SideHeroBox article={heroSideA} className="md:pr-8" />}
             <MainHeroBox article={heroMain} className={heroSideA ? "md:px-8" : heroSideB ? "md:pr-8" : ""} />

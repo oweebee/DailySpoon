@@ -105,7 +105,7 @@ export function CategoryGrid({
       <MobilePagedSection
         date={date}
         className="md:hidden"
-        pages={categories.map((cat) => ({
+        pages={categories.map((cat, i) => ({
           key: cat.label,
           content: (
             <CategoryColumn
@@ -116,6 +116,7 @@ export function CategoryGrid({
               showDateStamp={showDateStamp}
               showFavorite={showFavorite}
               autoInfinite
+              highlightIndex={i}
             />
           )
         }))}
@@ -133,6 +134,12 @@ export function CategoryGrid({
           exactement la même position par catégorie qu'avant. */}
       {(() => {
         const nonHero = categories.filter((cat) => !cat.isHero);
+        // Index stable par catégorie (position dans nonHero, PAS dans le
+        // bucket qui la contient) — sert uniquement à choisir la trace de
+        // surligneur (highlightIndex % 3 dans CategoryColumn), pour ne
+        // jamais répéter deux fois la même trace d'affilée d'une catégorie
+        // à l'autre.
+        const highlightIndexByLabel = new Map(nonHero.map((cat, i) => [cat.label, i]));
         const renderColumn = (bucket: CategoryEntry[], colIndex: number, lastIndex: number) => (
           <div
             key={colIndex}
@@ -155,6 +162,7 @@ export function CategoryGrid({
                 showDateStamp={showDateStamp}
                 showFavorite={showFavorite}
                 scrollExpand
+                highlightIndex={highlightIndexByLabel.get(cat.label) ?? 0}
               />
             ))}
           </div>
