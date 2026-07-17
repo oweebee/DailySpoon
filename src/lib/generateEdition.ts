@@ -280,17 +280,6 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
 
   const articleCount = await prisma.article.count({ where: { publishedAt: contentRange, included: true } });
 
-  await prisma.edition.update({
-    where: { id: edition.id },
-    data: {
-      headline: heroArticle?.headline ?? edition.headline,
-      status: articleCount > 0 ? "published" : "draft",
-      // Vivier total (avant plafond IA par catégorie) — voir schema.prisma,
-      // affiché à côté du compte final retenu sur la une (snapshot.length).
-      sourcePoolCount: articleCount
-    }
-  });
-
   // Photo figée (EditionArticle) de la une IA telle qu'elle est À CET
   // INSTANT précis — mêmes critères de qualification que la page d'accueil
   // et /archive (included + aiRewritten + catégorie toujours activée pour
@@ -311,6 +300,28 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
       included: true,
       aiRewritten: true,
       ...(disabledLabels.length > 0 ? { NOT: { categoryLabel: { in: disabledLabels } } } : {})
+    }
+  });
+
+  // "published" exige au moins un article RÉELLEMENT réécrit par l'IA (donc
+  // au moins une ligne EditionArticle créée juste après) — pas seulement un
+  // articleCount brut positif. Sans ce garde-fou, un passage où TOUS les
+  // appels IA échouent (mauvais modèle Gemini, clé invalide, panne...)
+  // marquait quand même l'édition "published" (des articles bruts existent
+  // bien pour le jour), avec une photo figée totalement VIDE : la page
+  // d'accueil affiche alors "Aucune édition générée", ou pire, une édition
+  // précédente non vide disparaît de la une au profit de cette coquille
+  // vide qui devient la plus récente "published".
+  const status = qualifyingArticles.length > 0 ? "published" : "draft";
+
+  await prisma.edition.update({
+    where: { id: edition.id },
+    data: {
+      headline: heroArticle?.headline ?? edition.headline,
+      status,
+      // Vivier total (avant plafond IA par catégorie) — voir schema.prisma,
+      // affiché à côté du compte final retenu sur la une (snapshot.length).
+      sourcePoolCount: articleCount
     }
   });
 

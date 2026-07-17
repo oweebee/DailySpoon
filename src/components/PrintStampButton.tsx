@@ -18,6 +18,18 @@ export function PrintStampButton({ provider }: { provider?: string }) {
   const [message, setMessage] = useState<string | null>(null);
 
   async function print() {
+    // Popup de confirmation natif (fonctionne aussi bien sur mobile que sur
+    // desktop, sans dépendance ni composant modal maison) : évite qu'un clic
+    // accidentel (ou un doigt qui glisse sur mobile) ne déclenche une
+    // impression IA — donc une consommation de tokens — sans confirmation
+    // explicite. Ce bouton n'est de toute façon affiché que quand le
+    // planning automatique est désactivé (voir page.tsx) : en mode manuel,
+    // AUCUNE impression IA ne doit pouvoir partir sans cette validation.
+    const confirmed = window.confirm(
+      `Lancer l'impression du journal ? Cette action va consommer des tokens de l'API ${providerLabel}.`
+    );
+    if (!confirmed) return;
+
     setPrinting(true);
     setMessage(null);
     try {

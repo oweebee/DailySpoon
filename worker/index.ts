@@ -102,9 +102,23 @@ console.log("[worker] DailySpoon worker started — checking the schedule (from 
 
 cron.schedule("* * * * *", tick);
 
-// Also run once immediately on boot if RUN_ON_START=true (handy for first deploy/testing).
+// Also run once immediately on boot if RUN_ON_START=true (handy for first
+// deploy/testing) — mais SEULEMENT si le planning auto est actif
+// (editionScheduleEnabled). Avant ce garde-fou, ce bloc lançait
+// inconditionnellement une génération IA COMPLÈTE (runOnce, coût IA) à
+// chaque redémarrage du conteneur, y compris en mode manuel
+// (editionScheduleEnabled: false, bouton "Lancer l'impression" sur
+// l'accueil) — un simple redéploiement Coolify (ou un restart automatique,
+// crash, etc.), même en pleine nuit, déclenchait donc une impression IA
+// surprise sans aucune action de l'utilisateur.
 if (process.env.RUN_ON_START === "true") {
   getSettings().then((settings) => {
+    if (!settings.editionScheduleEnabled) {
+      console.log(
+        "[worker] RUN_ON_START ignoré : planning auto désactivé (mode manuel) — aucune génération IA au démarrage."
+      );
+      return;
+    }
     lastRunDate = currentHourMinuteInTz(settings.editionTz).dateKey;
     runOnce();
   });

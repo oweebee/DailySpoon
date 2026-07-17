@@ -141,10 +141,16 @@ export function CategoryColumn({
       <div
         ref={listRef}
         style={expanded && lockedHeight ? { maxHeight: lockedHeight, overflowY: "auto" } : undefined}
-        className={`divide-y divide-ink/20 ${expanded ? "pr-4" : ""}`}
+        className={`flex flex-col gap-4 ${expanded ? "pr-4" : ""}`}
       >
         {visible.map((article) => (
-          <article key={article.id} className="py-4 first:pt-0">
+          // Chaque article dans son propre encadré (bordure + fond gris
+          // clair) — même esprit que les encadrés de rubrique de la page IA
+          // (CATEGORY_BOX_TONES dans FrontPageView), mais un ton plus clair
+          // puisqu'ici c'est CHAQUE article qui est encadré, pas juste la
+          // rubrique entière. Remplace l'ancien filet horizontal
+          // (divide-y) entre articles.
+          <article key={article.id} className="border border-ink/25 bg-ink/[0.035] p-4">
             {article.imageUrl && (
               <ArticleLink
                 href={article.sourceUrl}
