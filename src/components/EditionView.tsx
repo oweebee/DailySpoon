@@ -3,6 +3,7 @@ import { ArticleLink } from "./ArticleLink";
 import { ArticleImage } from "./ArticleImage";
 import { FavoriteStar } from "./FavoriteStar";
 import { SpoonDivider } from "./SpoonDivider";
+import { todayRangeInTz } from "../lib/tz";
 
 export type ArticleLike = {
   id: string;
@@ -64,14 +65,27 @@ export function EditionView({
   // flux) — plutôt que les 3 mieux priorisées par l'IA. S'il y a moins de 3
   // articles médaillés disponibles, on complète avec les mieux priorisés
   // (comportement précédent) pour ne jamais laisser un emplacement vide.
+  //
+  // Uniquement des news DU JOUR (heure de Paris, comme le reste de l'app) :
+  // "En direct" n'affiche jamais un article périmé en "à la une" simplement
+  // parce que c'est le plus récent d'un flux médaillé — si son dernier
+  // article date d'il y a 2 jours, ce flux n'apparaît tout simplement pas
+  // dans le bloc "à la une" plutôt que d'y montrer du contenu qui n'est plus
+  // d'actualité (repli sur les mieux priorisés) idem, restreint à aujourd'hui.
+  const todayRange = todayRangeInTz("Europe/Paris");
+  const isToday = (a: ArticleLike) => {
+    if (!a.publishedAt) return false;
+    const t = new Date(a.publishedAt).getTime();
+    return t >= todayRange.gte.getTime() && t < todayRange.lt.getTime();
+  };
   const byRecency = (a: ArticleLike, b: ArticleLike) => {
     const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
     const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
     return tb - ta;
   };
-  const medaledArticles = [...articles].filter((a) => a.medal).sort(byRecency);
+  const medaledArticles = [...articles].filter((a) => a.medal && isToday(a)).sort(byRecency);
   const fallbackArticles = [...articles]
-    .filter((a) => !a.medal)
+    .filter((a) => !a.medal && isToday(a))
     .sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
   const [heroA, heroB, heroC] = [...medaledArticles, ...fallbackArticles];
   const heroes = [heroA, heroB, heroC].filter((a): a is ArticleLike => Boolean(a));
