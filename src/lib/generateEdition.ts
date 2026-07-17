@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
 import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle } from "./ai";
-import { stripHtml, looksLikeHtml } from "./text";
+import { stripHtml, looksLikeHtml, stripLeadingChrome } from "./text";
 import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
 
@@ -563,6 +563,16 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
       looksLikeHtml(article.headline) ||
       looksLikeHtml(article.summary);
 
+    // Rattrapage rétroactif pour les articles déjà en base AVANT l'ajout de
+    // stripLeadingChrome (ex. Korben) : leur sourceExcerpt/summary n'a pas
+    // de HTML résiduel (looksLikeHtml=false, déjà passé par stripHtml au
+    // fetch), mais commence quand même par du chrome de page (pub, byline,
+    // tags, "Écouter cet article"...) — retesté à chaque génération jusqu'à
+    // ce que ce soit propre.
+    const chromeDirty =
+      (!!article.sourceExcerpt && stripLeadingChrome(article.sourceExcerpt) !== article.sourceExcerpt) ||
+      (!!article.summary && stripLeadingChrome(article.summary) !== article.summary);
+
     let backfilledImage: string | null = ogImageById.get(article.id) ?? null;
 
     // Toujours rien — favicon du site en dernier recours (pas de requête
@@ -573,15 +583,15 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
       backfilledImage = faviconFallback(article.sourceUrl);
     }
 
-    if (!dirty && !backfilledImage) continue;
+    if (!dirty && !chromeDirty && !backfilledImage) continue;
 
     await prisma.article.update({
       where: { id: article.id },
       data: {
         sourceTitle: article.sourceTitle ? stripHtml(article.sourceTitle) : article.sourceTitle,
-        sourceExcerpt: article.sourceExcerpt ? stripHtml(article.sourceExcerpt) : article.sourceExcerpt,
+        sourceExcerpt: article.sourceExcerpt ? stripLeadingChrome(stripHtml(article.sourceExcerpt)) : article.sourceExcerpt,
         headline: article.headline ? stripHtml(article.headline) : article.headline,
-        summary: article.summary ? stripHtml(article.summary) : article.summary,
+        summary: article.summary ? stripLeadingChrome(stripHtml(article.summary)) : article.summary,
         // backfilledImage prime sur l'ancienne valeur : c'est justement ce
         // qui permet de remplacer un favicon générique par la vraie image
         // une fois qu'on l'a enfin obtenue.

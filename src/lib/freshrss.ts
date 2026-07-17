@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
-import { stripHtml, extractFirstImageSrc } from "./text";
+import { stripHtml, extractFirstImageSrc, stripLeadingChrome } from "./text";
 
 export type RawItem = {
   freshrssItemId: string;
@@ -321,8 +321,13 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     // simple résumé d'une phrase.
     const summaryText = item.summary?.content ? stripHtml(item.summary.content).trim() : "";
     const contentText = item.content?.content ? stripHtml(item.content.content).trim() : "";
-    const excerpt =
+    let excerpt =
       contentText.length > summaryText.length ? contentText : summaryText.length > 0 ? summaryText : null;
+    // Certains flux (voir stripLeadingChrome) collent le chrome de la page
+    // AVANT le vrai texte de l'article — sans ça, l'extrait affiché en
+    // aperçu (accueil, "En direct") n'est que pub/tags/boutons, sans aucun
+    // vrai texte.
+    if (excerpt) excerpt = stripLeadingChrome(excerpt);
 
     let imageUrl = extractImageUrl(item);
     if (!imageUrl && canonicalUrl && included) {
