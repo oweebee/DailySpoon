@@ -40,11 +40,15 @@ const EMPTY: SettingsForm = {
 };
 
 // Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
-// journalistique neutre, comportement historique) ou "ackboo" (sarcastique/
-// passif-agressif façon Ackboo, Canard PC). Sans effet sur /direct.
+// journalistique neutre, comportement historique), "ackboo" (sarcastique/
+// passif-agressif façon Ackboo, Canard PC) ou "darksasuke" (cynique,
+// associal, jamais content, coloration nationaliste assumée — voir
+// WRITING_STYLES dans src/lib/ai.ts pour les garde-fous). Sans effet sur
+// /direct.
 const WRITING_STYLE_OPTIONS = [
   { value: "normal", label: "Normal" },
-  { value: "ackboo", label: "Ackboo" }
+  { value: "ackboo", label: "Ackboo" },
+  { value: "darksasuke", label: "Dark Sasuke" }
 ];
 
 // 6 mois à 5 ans, puis illimité (0 = jamais purgé). Les favoris échappent

@@ -1,6 +1,7 @@
 import cron from "node-cron";
-import { generateDailyEdition } from "../src/lib/generateEdition";
+import { generateDailyEdition, todayDateOnly } from "../src/lib/generateEdition";
 import { getSettings } from "../src/lib/settings";
+import { prisma } from "../src/lib/prisma";
 
 // Self-hosted daily scheduler (no Vercel cron needed).
 // Checked every minute against the current /admin/settings (or env var
@@ -103,19 +104,31 @@ console.log("[worker] DailySpoon worker started — checking the schedule (from 
 cron.schedule("* * * * *", tick);
 
 // Also run once immediately on boot if RUN_ON_START=true (handy for first
-// deploy/testing) — mais SEULEMENT si le planning auto est actif
-// (editionScheduleEnabled). Avant ce garde-fou, ce bloc lançait
-// inconditionnellement une génération IA COMPLÈTE (runOnce, coût IA) à
-// chaque redémarrage du conteneur, y compris en mode manuel
-// (editionScheduleEnabled: false, bouton "Lancer l'impression" sur
-// l'accueil) — un simple redéploiement Coolify (ou un restart automatique,
-// crash, etc.), même en pleine nuit, déclenchait donc une impression IA
-// surprise sans aucune action de l'utilisateur.
+// deploy/testing UNIQUEMENT — ce n'est pas censé rester activé en
+// permanence, voir /admin/settings ou les variables d'env Coolify) — mais
+// SEULEMENT si le planning auto est actif (editionScheduleEnabled) ET
+// SEULEMENT si aucune édition n'existe déjà pour aujourd'hui. Double
+// garde-fou : le premier (editionScheduleEnabled) évite une impression IA
+// surprise en mode manuel ; le second (édition du jour déjà là) évite
+// qu'un redéploiement Coolify répété plusieurs fois la même journée (courant
+// en itérant sur des correctifs) ne relance une génération IA COMPLÈTE
+// (coût réel de tokens) à CHAQUE redémarrage du conteneur — avant ce
+// second garde-fou, RUN_ON_START laissé actif dans Coolify (oubli après le
+// tout premier déploiement) pouvait facturer une impression par
+// redéploiement, potentiellement plusieurs fois par jour en pleine
+// itération.
 if (process.env.RUN_ON_START === "true") {
-  getSettings().then((settings) => {
+  getSettings().then(async (settings) => {
     if (!settings.editionScheduleEnabled) {
       console.log(
         "[worker] RUN_ON_START ignoré : planning auto désactivé (mode manuel) — aucune génération IA au démarrage."
+      );
+      return;
+    }
+    const existing = await prisma.edition.findFirst({ where: { date: todayDateOnly() } });
+    if (existing) {
+      console.log(
+        "[worker] RUN_ON_START ignoré : une édition existe déjà pour aujourd'hui — pas de nouvelle génération IA à chaque redémarrage."
       );
       return;
     }
