@@ -1258,4 +1258,35 @@ function CategorySelectField({
         <option value="" disabled>
           Choisir une catégorie...
         </option>
-        {freshrssCa
+        {freshrssCategories.length > 0 && (
+          <optgroup label="Catégories FreshRSS">
+            {freshrssCategories.map((c) => (
+              <option key={c.freshrssId} value={`fr:${c.freshrssId}`}>
+                {c.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {customCats.length > 0 && (
+          <optgroup label="Catégories personnalisées">
+            {customCats.map((c) => (
+              <option key={c.id} value={`cu:${c.id}`}>
+                {c.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        <option value="new">+ Créer une nouvelle catégorie personnalisée…</option>
+      </select>
+      {value === "new" && (
+        <input
+          type="text"
+          value={newLabel}
+          onChange={(e) => onNewLabelChange(e.target.value)}
+          placeholder="Nom de la nouvelle catégorie"
+          className="min-w-[200px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
+        />
+      )}
+    </>
+  );
+}
