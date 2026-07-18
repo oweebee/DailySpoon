@@ -27,6 +27,58 @@ export function customFeedFreshrssId(feedId: string): string {
   return `custom-feed:${feedId}`;
 }
 
+/**
+ * Résout l'id/le libellé de rubrique effectifs d'un flux personnalisé,
+ * qu'il soit rattaché à une CustomCategory (customCategoryId) ou
+ * directement à une vraie catégorie FreshRSS existante
+ * (freshrssCategoryId/Label) — voir le commentaire sur CustomFeed dans
+ * schema.prisma. Utilisé aussi bien par l'ingestion (fetchCustomFeedItems)
+ * que par les routes admin (résolution d'affichage).
+ */
+export function resolveFeedCategory(feed: {
+  customCategoryId: string | null;
+  customCategory?: { id: string; label: string } | null;
+  freshrssCategoryId: string | null;
+  freshrssCategoryLabel: string | null;
+}): { categoryFreshrssId: string; categoryLabel: string; isFreshrssCategory: boolean } {
+  if (feed.customCategoryId) {
+    return {
+      categoryFreshrssId: customCategoryFreshrssId(feed.customCategoryId),
+      categoryLabel: feed.customCategory?.label ?? "Catégorie personnalisée",
+      isFreshrssCategory: false
+    };
+  }
+  return {
+    categoryFreshrssId: feed.freshrssCategoryId ?? "",
+    categoryLabel: feed.freshrssCategoryLabel ?? "Sans catégorie",
+    isFreshrssCategory: Boolean(feed.freshrssCategoryId)
+  };
+}
+
+/**
+ * Crée une nouvelle catégorie personnalisée et la rend visible immédiatement
+ * (upsert SelectedCategory, comme si l'utilisateur venait de la cocher) —
+ * factorisé ici car appelé à la fois par /api/admin/custom-categories
+ * (création autonome) et /api/admin/custom-feeds (création "à la volée"
+ * depuis le formulaire d'ajout de flux).
+ */
+export async function createCustomCategoryRecord(label: string) {
+  const maxOrder = await prisma.customCategory.aggregate({ _max: { order: true } });
+  const category = await prisma.customCategory.create({
+    data: { label, order: (maxOrder._max.order ?? -1) + 1 }
+  });
+
+  const freshrssId = customCategoryFreshrssId(category.id);
+  const maxSelectedOrder = await prisma.selectedCategory.aggregate({ _max: { order: true } });
+  await prisma.selectedCategory.upsert({
+    where: { freshrssId },
+    update: { label },
+    create: { freshrssId, label, order: (maxSelectedOrder._max.order ?? -1) + 1 }
+  });
+
+  return category;
+}
+
 const parser = new Parser({
   timeout: 10000,
   headers: {
@@ -70,7 +122,7 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
     return []; // pas encore l'heure
   }
 
-  const feeds = await prisma.customFeed.findMany({ include: { category: true } });
+  const feeds = await prisma.customFeed.findMany({ include: { customCategory: true } });
   if (feeds.length === 0) {
     // Rien à faire, mais on marque quand même le passage pour ne pas
     // re-tester à chaque tick tant qu'aucun flux personnalisé n'existe.
@@ -93,7 +145,7 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
 
   for (const feed of feeds) {
     const feedFreshrssId = customFeedFreshrssId(feed.id);
-    const categoryFreshrssId = customCategoryFreshrssId(feed.categoryId);
+    const { categoryFreshrssId, categoryLabel } = resolveFeedCategory(feed);
     const included = selectedIds.has(categoryFreshrssId) && !excludedFeedIds.has(feedFreshrssId);
 
     try {
@@ -120,7 +172,7 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
           freshrssItemId,
           feedId: feedFreshrssId,
           feedTitle: feed.title,
-          categoryLabel: feed.category.label,
+          categoryLabel,
           sourceUrl: canonicalUrl,
           sourceTitle: item.title?.trim() || "(sans titre)",
           sourceExcerpt: excerpt || null,

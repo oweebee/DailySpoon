@@ -73,24 +73,38 @@ model CustomCategory {
   feeds     CustomFeed[]
 }
 
-// Flux RSS/Atom ajouté à la main (URL directe, pas géré par FreshRSS) sous
-// une CustomCategory. Récupéré par src/lib/customFeeds.ts, au même
-// intervalle GLOBAL pour tous les flux personnalisés (Settings.
-// customFeedsIntervalMinutes) — pas de réglage par flux. Les articles
-// récupérés subissent EXACTEMENT le même traitement que ceux de FreshRSS
-// (stripHtml/stripLeadingChrome/fallbackProcess...), stockés avec un
-// feedId synthétique "custom-feed:<id>" réutilisé directement comme
+// Flux RSS/Atom ajouté à la main (URL directe, pas géré par FreshRSS).
+// Récupéré par src/lib/customFeeds.ts, au même intervalle GLOBAL pour tous
+// les flux personnalisés (Settings.customFeedsIntervalMinutes) — pas de
+// réglage par flux. Les articles récupérés subissent EXACTEMENT le même
+// traitement que ceux de FreshRSS (stripHtml/stripLeadingChrome/
+// fallbackProcess...), stockés avec un feedId synthétique
+// "custom-feed:<id>" réutilisé directement comme
 // ExcludedFeed.freshrssId/MedalFeed.freshrssId.
+//
+// Catégorie de destination : EXACTEMENT un des deux couples ci-dessous est
+// renseigné, choisi à la création/édition du flux (voir /admin/categories) :
+//   - customCategoryId : une CustomCategory (FK, cascade à sa suppression) ;
+//   - freshrssCategoryId/Label : une vraie catégorie FreshRSS existante,
+//     copiée telle quelle (pas de table locale pour les catégories
+//     FreshRSS, donc pas de FK possible) — permet d'intégrer un flux perso
+//     directement dans une catégorie FreshRSS déjà sélectionnée : les
+//     articles héritent alors du même traitement (affichage En direct,
+//     génération IA) qu'un flux FreshRSS normal de cette catégorie,
+//     puisque SelectedCategory/AiPrintCategory sont déjà indexées sur cet
+//     id FreshRSS réel.
 model CustomFeed {
-  id            String         @id @default(cuid())
-  url           String
-  title         String
-  categoryId    String
-  category      CustomCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  lastFetchedAt DateTime?
-  createdAt     DateTime       @default(now())
+  id                     String          @id @default(cuid())
+  url                    String
+  title                  String
+  customCategoryId       String?
+  customCategory         CustomCategory? @relation(fields: [customCategoryId], references: [id], onDelete: Cascade)
+  freshrssCategoryId     String?
+  freshrssCategoryLabel  String?
+  lastFetchedAt          DateTime?
+  createdAt              DateTime        @default(now())
 
-  @@index([categoryId])
+  @@index([customCategoryId])
 }
 
 model Article {

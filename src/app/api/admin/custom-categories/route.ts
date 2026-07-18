@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { customCategoryFreshrssId, customFeedFreshrssId } from "@/lib/customFeeds";
+import { customCategoryFreshrssId, customFeedFreshrssId, createCustomCategoryRecord } from "@/lib/customFeeds";
 
 async function assertAuthed(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -15,20 +15,22 @@ async function assertAuthed(req: NextRequest) {
 // pas de doublon de logique ici, seulement la création/suppression, propres
 // aux catégories personnalisées (une catégorie FreshRSS n'est ni créable ni
 // supprimable depuis DailySpoon, géré côté FreshRSS).
+//
+// Gestion SECONDAIRE par rapport à l'ajout de flux (/api/admin/custom-feeds,
+// qui permet aussi de créer une catégorie "à la volée" pendant l'ajout d'un
+// flux). Ne renvoie plus les flux détaillés par catégorie (déplacés vers
+// /api/admin/custom-feeds, liste à plat avec catégorie résolue) — seulement
+// un compte, pour l'affichage ici.
 export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const [categories, selected, aiPrintCategories, excluded, medaled] = await Promise.all([
-    prisma.customCategory.findMany({ include: { feeds: true }, orderBy: { order: "asc" } }),
+  const [categories, selected, aiPrintCategories] = await Promise.all([
+    prisma.customCategory.findMany({ include: { _count: { select: { feeds: true } } }, orderBy: { order: "asc" } }),
     prisma.selectedCategory.findMany(),
-    prisma.aiPrintCategory.findMany(),
-    prisma.excludedFeed.findMany(),
-    prisma.medalFeed.findMany()
+    prisma.aiPrintCategory.findMany()
   ]);
   const selectedIds = new Set(selected.map((s) => s.freshrssId));
   const frontPageEnabledById = new Map(aiPrintCategories.map((c) => [c.freshrssId, c.enabled]));
-  const excludedIds = new Set(excluded.map((e) => e.freshrssId));
-  const medaledIds = new Set(medaled.map((m) => m.freshrssId));
 
   const result = categories.map((cat) => {
     const catFreshrssId = customCategoryFreshrssId(cat.id);
@@ -37,17 +39,7 @@ export async function GET(req: NextRequest) {
       label: cat.label,
       selected: selectedIds.has(catFreshrssId),
       frontPageEnabled: frontPageEnabledById.get(catFreshrssId) ?? true,
-      feeds: cat.feeds.map((f) => {
-        const feedFreshrssId = customFeedFreshrssId(f.id);
-        return {
-          id: f.id,
-          url: f.url,
-          title: f.title,
-          included: !excludedIds.has(feedFreshrssId),
-          medal: medaledIds.has(feedFreshrssId),
-          lastFetchedAt: f.lastFetchedAt
-        };
-      })
+      feedCount: cat._count.feeds
     };
   });
 
@@ -64,18 +56,7 @@ export async function POST(req: NextRequest) {
   const label = typeof body.label === "string" ? body.label.trim() : "";
   if (!label) return NextResponse.json({ error: "label requis" }, { status: 400 });
 
-  const maxOrder = await prisma.customCategory.aggregate({ _max: { order: true } });
-  const category = await prisma.customCategory.create({
-    data: { label, order: (maxOrder._max.order ?? -1) + 1 }
-  });
-
-  const freshrssId = customCategoryFreshrssId(category.id);
-  const maxSelectedOrder = await prisma.selectedCategory.aggregate({ _max: { order: true } });
-  await prisma.selectedCategory.upsert({
-    where: { freshrssId },
-    update: { label },
-    create: { freshrssId, label, order: (maxSelectedOrder._max.order ?? -1) + 1 }
-  });
+  const category = await createCustomCategoryRecord(label);
 
   return NextResponse.json({ category: { id: category.id, label: category.label } });
 }

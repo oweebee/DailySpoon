@@ -10,22 +10,27 @@ CREATE TABLE "CustomCategory" (
     CONSTRAINT "CustomCategory_pkey" PRIMARY KEY ("id")
 );
 
+-- customCategoryId (catégorie perso) et freshrssCategoryId/Label (vraie
+-- catégorie FreshRSS existante) sont mutuellement exclusifs : exactement
+-- l'un des deux est renseigné selon le choix fait à la création du flux.
 CREATE TABLE "CustomFeed" (
     "id" TEXT NOT NULL,
     "url" TEXT NOT NULL,
     "title" TEXT NOT NULL,
-    "categoryId" TEXT NOT NULL,
+    "customCategoryId" TEXT,
+    "freshrssCategoryId" TEXT,
+    "freshrssCategoryLabel" TEXT,
     "lastFetchedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "CustomFeed_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "CustomFeed_categoryId_idx" ON "CustomFeed"("categoryId");
+CREATE INDEX "CustomFeed_customCategoryId_idx" ON "CustomFeed"("customCategoryId");
 
 ALTER TABLE "CustomFeed"
-    ADD CONSTRAINT "CustomFeed_categoryId_fkey"
-    FOREIGN KEY ("categoryId") REFERENCES "CustomCategory"("id")
+    ADD CONSTRAINT "CustomFeed_customCategoryId_fkey"
+    FOREIGN KEY ("customCategoryId") REFERENCES "CustomCategory"("id")
     ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Intervalle global de récupération des flux personnalisés (minutes) + dernier
