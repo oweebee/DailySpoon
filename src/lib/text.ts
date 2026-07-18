@@ -111,3 +111,30 @@ export function extractFirstImageSrc(html: string | null | undefined): string | 
   const match = decoded.match(/<img[^>]+src=["']([^"']+)["']/i);
   return match ? match[1] : null;
 }
+
+/**
+ * Est-ce que cette URL passe déjà PAR l'instance morss configurée ?
+ * Utilisé partout où on envisage un repli via morss après un échec direct
+ * (flux persos, article-proxy) : si l'URL en échec est déjà une URL morss,
+ * l'échec vient de morss lui-même — la relayer une seconde fois via morss
+ * referait exactement la même requête qui vient d'échouer (attente d'un
+ * second timeout pour rien, aucune chance de succès différent). Comparaison
+ * par hostname (pas juste startsWith) pour rester correcte que morssBaseUrl
+ * soit noté avec ou sans "https://", avec ou sans slash final.
+ */
+export function isAlreadyMorssUrl(url: string, morssBaseUrl: string | null | undefined): boolean {
+  if (!morssBaseUrl) return false;
+  try {
+    const morssHost = new URL(
+      morssBaseUrl.startsWith("http") ? morssBaseUrl : `https://${morssBaseUrl}`
+    ).hostname;
+    const urlHost = new URL(url).hostname;
+    return urlHost === morssHost;
+  } catch {
+    // URL(s) mal formées : repli sur une comparaison texte simple plutôt que
+    // de planter — mieux vaut un faux négatif (tente le repli morss pour
+    // rien) qu'une exception qui casserait tout l'import du flux.
+    const strippedBase = morssBaseUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return strippedBase.length > 0 && url.includes(strippedBase);
+  }
+}

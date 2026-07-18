@@ -174,17 +174,25 @@ function decodeHtmlEntities(text: string): string {
 }
 
 /**
- * Récupère og:image ET le VRAI titre de la page (og:title, sinon
- * twitter:title, sinon <title>) en UN SEUL aller-retour réseau — utilisé
- * quand un flux ne fournit ni image ni titre exploitable par item (ex.
- * dépêches AFP redistribuées, vu en usage réel sur fonction-publique.gouv.fr :
- * l'article ouvert en grand affiche bien un titre correct puisqu'il vient de
- * ce même scraping, alors que le flux RSS lui-même n'a aucun <title>).
+ * Récupère og:image, le VRAI titre de la page (og:title, sinon twitter:title,
+ * sinon <title>) ET une description (og:description, sinon meta description,
+ * sinon twitter:description) en UN SEUL aller-retour réseau — utilisé quand
+ * un flux ne fournit ni image ni titre exploitable par item (ex. dépêches AFP
+ * redistribuées, vu en usage réel sur fonction-publique.gouv.fr : l'article
+ * ouvert en grand affiche bien un titre correct puisqu'il vient de ce même
+ * scraping, alors que le flux RSS lui-même n'a aucun <title>). La description
+ * sert de FILET DE SECOURS pour l'extrait affiché ("en direct", accueil)
+ * quand le flux ne fournit vraiment aucun texte exploitable (ni content:encoded,
+ * ni summary, ni contentSnippet) — sans ça l'article retombe sur le texte
+ * générique "Aucun aperçu fourni par le flux" alors qu'une vraie description
+ * existe sur la page source elle-même.
  * fetchOgImage ci-dessous reste un simple alias pour les appelants qui n'ont
  * besoin que de l'image.
  */
-export async function fetchOgMeta(url: string): Promise<{ imageUrl: string | null; title: string | null }> {
-  if (!url) return { imageUrl: null, title: null };
+export async function fetchOgMeta(
+  url: string
+): Promise<{ imageUrl: string | null; title: string | null; description: string | null }> {
+  if (!url) return { imageUrl: null, title: null, description: null };
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -206,7 +214,7 @@ export async function fetchOgMeta(url: string): Promise<{ imageUrl: string | nul
     } finally {
       clearTimeout(timeout);
     }
-    if (!res.ok) return { imageUrl: null, title: null };
+    if (!res.ok) return { imageUrl: null, title: null, description: null };
 
     // On ne s'arrête plus à la fin du <head> : certains sites (ex.
     // Geekzone/WordPress sans plugin SEO configuré sur tous les articles)
@@ -264,10 +272,19 @@ export async function fetchOgMeta(url: string): Promise<{ imageUrl: string | nul
       html.match(/<title[^>]*>([^<]+)<\/title>/i);
     const title = titleMatch ? decodeHtmlEntities(titleMatch[1]).trim() : null;
 
-    return { imageUrl: imageUrl || null, title: title || null };
+    const descMatch =
+      html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i) ||
+      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i) ||
+      html.match(/<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:description["']/i);
+    const description = descMatch ? decodeHtmlEntities(descMatch[1]).trim() : null;
+
+    return { imageUrl: imageUrl || null, title: title || null, description: description || null };
   } catch (err) {
-    console.warn(`[freshrss] og:image/og:title indisponible pour ${url}:`, (err as Error)?.message);
-    return { imageUrl: null, title: null };
+    console.warn(`[freshrss] og:image/og:title/og:description indisponible pour ${url}:`, (err as Error)?.message);
+    return { imageUrl: null, title: null, description: null };
   }
 }
 
@@ -365,11 +382,18 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     if (excerpt) excerpt = stripLeadingChrome(excerpt);
 
     let imageUrl = extractImageUrl(item);
-    if (!imageUrl && canonicalUrl && included) {
-      // Requête réseau (og:image) — seulement pour les articles "included",
-      // pour ne pas multiplier les appels sortants sur tout le flux
-      // FreshRSS (des centaines d'items) à chaque génération.
-      imageUrl = await fetchOgImage(canonicalUrl);
+    // Un seul aller-retour réseau (fetchOgMeta) couvre image manquante ET/OU
+    // extrait manquant — un flux "lien seul" (aucun content:encoded/summary
+    // réel) tombait sinon systématiquement sur le texte générique "Aucun
+    // aperçu fourni par le flux" alors que la page source a presque toujours
+    // une vraie meta description exploitable.
+    if ((!imageUrl || !excerpt) && canonicalUrl && included) {
+      // Requête réseau — seulement pour les articles "included", pour ne pas
+      // multiplier les appels sortants sur tout le flux FreshRSS (des
+      // centaines d'items) à chaque génération.
+      const meta = await fetchOgMeta(canonicalUrl);
+      if (!imageUrl) imageUrl = meta.imageUrl;
+      if (!excerpt && meta.description) excerpt = meta.description;
     }
     if (!imageUrl && canonicalUrl) {
       // Favicon : gratuit (juste une URL construite), toujours tenté même

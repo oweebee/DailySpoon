@@ -1,7 +1,7 @@
 import Parser from "rss-parser";
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
-import { stripHtml, extractFirstImageSrc, stripLeadingChrome } from "./text";
+import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl } from "./text";
 import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
 import { ingestRawItems } from "./generateEdition";
 
@@ -320,10 +320,13 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         // Repli via morss (réglé dans /admin/settings), même mécanisme que
         // pour le fetch d'un article individuel (voir article-proxy) — utile
         // seulement pour un flux dont l'URL n'est PAS déjà elle-même une URL
-        // morss (dans ce cas, l'échec vient de morss lui-même, voir le
-        // timeout augmenté ci-dessus, ce repli n'aidera pas). Ne fait rien si
-        // ce réglage est vide.
-        if (!settings.morssBaseUrl) throw directErr;
+        // morss : si le flux passe déjà PAR morss, l'échec vient de morss
+        // lui-même (voir le timeout déjà augmenté ci-dessus pour ce cas), et
+        // le relayer une seconde fois via morss ne ferait que refaire
+        // exactement la même requête qui vient d'échouer — inutile, et ça
+        // fait juste attendre un second timeout pour rien. Ne fait rien non
+        // plus si ce réglage est vide.
+        if (!settings.morssBaseUrl || isAlreadyMorssUrl(feed.url, settings.morssBaseUrl)) throw directErr;
         const strippedUrl = feed.url.replace(/^https?:\/\//, "");
         parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
       }
@@ -344,18 +347,25 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         let imageUrl = bestImageUrl(item, rawContent);
         const rawTitle = safeTitle(item.title);
 
-        // Un seul aller-retour réseau (fetchOgMeta) couvre les deux besoins
-        // à la fois : l'image manquante ET/OU le titre manquant (voir plus
-        // bas) — évite de fetcher deux fois la même page. Demandé pour les
-        // flux comme les dépêches AFP redistribuées (fonction-publique.gouv.fr)
-        // qui n'ont AUCUN <title> par item : on veut alors EXACTEMENT le même
-        // titre que celui affiché en ouvrant l'article en grand (qui vient de
-        // ce même scraping de page), pas une phrase devinée dans l'extrait.
+        // Un seul aller-retour réseau (fetchOgMeta) couvre TROIS besoins à la
+        // fois : l'image manquante, le titre manquant (voir plus bas) ET
+        // l'extrait manquant — évite de fetcher deux fois la même page.
+        // Demandé pour les flux comme les dépêches AFP redistribuées
+        // (fonction-publique.gouv.fr) qui n'ont AUCUN <title> par item : on
+        // veut alors EXACTEMENT le même titre que celui affiché en ouvrant
+        // l'article en grand (qui vient de ce même scraping de page), pas une
+        // phrase devinée dans l'extrait. Un flux "lien seul" (aucun
+        // content:encoded/summary/contentSnippet réel — ex. agrégateurs de
+        // liens type "Self-Hosted Alternatives...") tombait sinon
+        // systématiquement sur le texte générique "Aucun aperçu fourni par le
+        // flux" alors que la page source a presque toujours une vraie meta
+        // description exploitable.
         let ogTitle: string | null = null;
-        if ((!imageUrl || !rawTitle) && canonicalUrl && included) {
+        if ((!imageUrl || !rawTitle || !excerpt) && canonicalUrl && included) {
           const meta = await fetchOgMeta(canonicalUrl);
           if (!imageUrl) imageUrl = meta.imageUrl;
           ogTitle = meta.title;
+          if (!excerpt && meta.description) excerpt = meta.description;
         }
         if (!imageUrl && canonicalUrl) imageUrl = faviconFallback(canonicalUrl);
 

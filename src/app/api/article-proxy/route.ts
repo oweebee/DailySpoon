@@ -4,6 +4,7 @@ import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { REDLIB_INSTANCES, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
+import { isAlreadyMorssUrl } from "@/lib/text";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -869,6 +870,10 @@ async function fetchArticleHtml(
   if (direct && "html" in direct) return direct;
 
   if (!morssBaseUrl) return direct; // pas de repli configuré : renvoie l'erreur directe telle quelle
+  // Si targetUrl est déjà une URL morss, l'échec vient de morss lui-même —
+  // relayer une seconde fois via morss referait exactement la même requête
+  // qui vient d'échouer, pour rien (juste un second timeout à attendre).
+  if (isAlreadyMorssUrl(targetUrl, morssBaseUrl)) return direct;
 
   const strippedUrl = targetUrl.replace(/^https?:\/\//, "");
   const morssUrl = `${morssBaseUrl}/:html/${strippedUrl}`;
