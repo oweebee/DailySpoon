@@ -108,6 +108,52 @@ export async function recomputeIncludedForFreshrssCategory(freshrssCategoryId: s
   }
 }
 
+/**
+ * Passe d'auto-correction GLOBALE, appelée à chaque tick du worker (voir
+ * syncCustomFeeds ci-dessous) — recalcule `included` pour TOUS les articles
+ * déjà en base issus de flux personnalisés, à partir des trois conditions
+ * réelles actuelles (catégorie sélectionnée, flux non exclu, bascule
+ * groupée), pour les DEUX types de rattachement (CustomCategory ET vraie
+ * catégorie FreshRSS confondus, via resolveFeedCategory).
+ *
+ * Nécessaire en complément de recomputeIncludedForFreshrssCategory
+ * (déclenchée ponctuellement sur certaines actions admin précises) : si un
+ * article a été ingéré une fois avec included=false à cause d'un état
+ * transitoire (catégorie pas encore cochée, migration pas encore appliquée,
+ * bug corrigé depuis...), `ingestRawItems` ne le retouche plus jamais après
+ * coup (upsert en `update: {}` pour ne pas écraser le travail éditorial —
+ * voir generateEdition.ts) : sans cette passe, l'article restait caché pour
+ * toujours même une fois la config redevenue correcte. Coût négligeable :
+ * uniquement des requêtes DB indexées, aucun appel réseau, un seul passage
+ * par flux personnalisé existant (généralement une poignée).
+ */
+export async function recomputeAllCustomFeedIncluded(): Promise<void> {
+  const [selected, excludedFeeds, disabledCategories, feeds] = await Promise.all([
+    prisma.selectedCategory.findMany({ select: { freshrssId: true } }),
+    prisma.excludedFeed.findMany({ select: { freshrssId: true } }),
+    prisma.disabledCustomFeedsCategory.findMany({ select: { freshrssCategoryId: true } }),
+    prisma.customFeed.findMany({ include: { customCategory: true } })
+  ]);
+  if (feeds.length === 0) return;
+
+  const selectedIds = new Set(selected.map((s) => s.freshrssId));
+  const excludedIds = new Set(excludedFeeds.map((e) => e.freshrssId));
+  const disabledCategoryIds = new Set(disabledCategories.map((d) => d.freshrssCategoryId));
+
+  for (const feed of feeds) {
+    const feedFreshrssId = customFeedFreshrssId(feed.id);
+    const { categoryFreshrssId } = resolveFeedCategory(feed);
+    const groupDisabled = Boolean(feed.freshrssCategoryId) && disabledCategoryIds.has(feed.freshrssCategoryId!);
+    const included = selectedIds.has(categoryFreshrssId) && !excludedIds.has(feedFreshrssId) && !groupDisabled;
+    // "included: { not: included }" : n'écrit rien si déjà cohérent, pour ne
+    // pas faire une passe UPDATE coûteuse à vide sur chaque tick.
+    await prisma.article.updateMany({
+      where: { feedId: feedFreshrssId, included: { not: included } },
+      data: { included }
+    });
+  }
+}
+
 const parser = new Parser({
   timeout: 10000,
   headers: {
@@ -221,9 +267,20 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
         });
       }
 
-      await prisma.customFeed.update({ where: { id: feed.id }, data: { lastFetchedAt: new Date() } });
+      await prisma.customFeed.update({
+        where: { id: feed.id },
+        data: { lastFetchedAt: new Date(), lastFetchError: null }
+      });
     } catch (err) {
-      console.warn(`[customFeeds] Échec pour "${feed.title}" (${feed.url}):`, (err as Error)?.message);
+      const message = (err as Error)?.message || "Échec inconnu";
+      console.warn(`[customFeeds] Échec pour "${feed.title}" (${feed.url}):`, message);
+      // Remonté dans /admin/categories (GET /api/admin/custom-feeds) — sans
+      // ça, un flux qui échoue ici en boucle semblait juste "ne jamais
+      // apparaître en En direct", sans aucune explication visible pour
+      // l'utilisateur (le seul indice restait un log serveur Coolify).
+      await prisma.customFeed
+        .update({ where: { id: feed.id }, data: { lastFetchError: message } })
+        .catch(() => {});
     }
   }
 
@@ -247,5 +304,11 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
 export async function syncCustomFeeds(): Promise<{ fetched: number }> {
   const items = await fetchCustomFeedItems();
   if (items.length > 0) await ingestRawItems(items, null);
+  // Passe d'auto-correction à CHAQUE appel (donc chaque tick du worker, ~1x/
+  // minute), indépendamment du gating réseau ci-dessus — coût DB seul, voir
+  // le commentaire de recomputeAllCustomFeedIncluded.
+  await recomputeAllCustomFeedIncluded().catch((err) => {
+    console.error("[customFeeds] recomputeAllCustomFeedIncluded a échoué:", err);
+  });
   return { fetched: items.length };
 }

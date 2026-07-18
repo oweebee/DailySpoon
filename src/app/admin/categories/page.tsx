@@ -49,6 +49,7 @@ type CustomFeedItem = {
   included: boolean;
   medal: boolean;
   lastFetchedAt: string | null;
+  lastFetchError: string | null;
   customCategoryId: string | null;
   freshrssCategoryId: string | null;
   freshrssCategoryLabel: string | null;
@@ -591,10 +592,16 @@ export default function AdminCategoriesPage() {
         className="flex flex-wrap items-center justify-between gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
       >
         <span className="text-sm">
-          {feed.title}{" "}
-          <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
-            {feed.categoryLabel} · {feed.isFreshrssCategory ? "FreshRSS" : "perso"}
-          </span>
+          {feed.title}
+          {/* Dernier échec de récupération (parsing RSS impossible, hôte
+              injoignable...) — sans ça, un flux qui échoue en boucle côté
+              worker n'affiche jamais rien nulle part, sans aucune explication
+              visible depuis l'admin (voir customFeeds.ts, lastFetchError). */}
+          {feed.lastFetchError && (
+            <span className="mt-0.5 block text-xs italic text-red-700" title={feed.lastFetchError}>
+              Échec de récupération : {feed.lastFetchError}
+            </span>
+          )}
         </span>
         <div className="flex shrink-0 flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-xs italic text-sepia">
@@ -839,6 +846,11 @@ export default function AdminCategoriesPage() {
                           ({childFeeds.length + childCustomFeeds.length})
                         </span>
                       )}
+                      {childCustomFeeds.length > 0 && (
+                        <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                          perso
+                        </span>
+                      )}
                     </button>
                     <div className="flex shrink-0 flex-wrap items-center gap-4">
                       {childCustomFeeds.length > 0 && (
@@ -1064,6 +1076,9 @@ export default function AdminCategoriesPage() {
                     <span className="inline-block w-3 text-xs text-sepia">{isCollapsed ? "▸" : "▾"}</span>
                     {cat.label}
                     <span className="text-xs font-normal italic text-sepia">({catFeeds.length})</span>
+                    <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                      perso
+                    </span>
                   </button>
                   <div className="flex flex-wrap items-center gap-4">
                     <label className="flex items-center gap-2 text-xs italic text-sepia">

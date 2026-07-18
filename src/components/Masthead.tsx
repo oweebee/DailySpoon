@@ -40,7 +40,11 @@ export function Masthead({ date }: { date: Date }) {
           <span>Prix : ≈ 10 ¢</span>
         </div>
 
-        {/* Masthead gothique centré */}
+        {/* Masthead gothique centré — "relative" sert de repère de hauteur
+            au timbre desktop ci-dessous (inset-y-0 SANS hauteur explicite =
+            il exploite exactement la hauteur de cette cellule titre, ni
+            plus ni moins, largeur recalculée automatiquement à partir du
+            ratio réel de l'image via aspect-ratio). */}
         <div className="relative py-6 text-center">
           <Link href="/" className="font-masthead text-5xl font-black uppercase tracking-tight md:text-7xl">
             DailySp
@@ -53,29 +57,31 @@ export function Masthead({ date }: { date: Date }) {
               place à droite du titre en mobile). */}
           <Link
             href="/direct"
-            className="stamp-live stamp-bg-sm relative mx-auto mt-4 flex h-12 items-center justify-center px-4 font-display text-xs uppercase tracking-[0.25em] text-white md:hidden"
+            className="stamp-live stamp-bg-sm relative mx-auto mt-4 flex h-20 items-center justify-center px-4 font-display text-xs uppercase tracking-[0.25em] text-white md:hidden"
+          >
+            <span className="stamp-live-text">En direct</span>
+          </Link>
+
+          {/* Timbre "EN DIRECT" version desktop — classe ".stamp-live"
+              autonome (voir globals.css), qui NE se combine PAS avec
+              ".stamp-button" : les deux se disputaient la propriété
+              "transform" (rotation vs centrage vertical), ce qui empêchait
+              la rotation de s'afficher. "inset-y-0" SANS hauteur explicite
+              (ni h-fit ni h-*) étire le timbre sur TOUTE la hauteur de cette
+              cellule titre (le "relative py-6" ci-dessus) — largeur
+              recalculée automatiquement par le navigateur à partir du ratio
+              réel de l'image (aspect-ratio sur .stamp-bg-sm), jamais
+              déformée. Le fond (.stamp-live) reste droit ; seul le texte,
+              enveloppé dans .stamp-live-text, garde l'inclinaison. */}
+          <Link
+            href="/direct"
+            className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 hidden items-center justify-center px-5 font-display text-sm uppercase tracking-[0.25em] text-white md:flex"
           >
             <span className="stamp-live-text">En direct</span>
           </Link>
         </div>
 
         <div className="double-rule" />
-
-        {/* Timbre "EN DIRECT" version desktop — classe ".stamp-live"
-            autonome (voir globals.css), qui NE se combine PAS avec
-            ".stamp-button" : les deux se disputaient la propriété
-            "transform" (rotation vs centrage vertical), ce qui empêchait la
-            rotation de s'afficher. Centré verticalement sur toute la zone
-            "bandeau + titre + filet" ci-dessus via inset-y-0/my-auto (sans
-            transform, donc aucun conflit avec la rotation de .stamp-live).
-            Le fond (.stamp-live) reste droit ; seul le texte, enveloppé
-            dans .stamp-live-text, garde l'inclinaison. */}
-        <Link
-          href="/direct"
-          className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 my-auto hidden h-16 items-center justify-center px-5 font-display text-sm uppercase tracking-[0.25em] text-white md:flex"
-        >
-          <span className="stamp-live-text">En direct</span>
-        </Link>
       </div>
 
       {/* Ligne de date entre deux filets */}

@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
         included: !excludedIds.has(feedFreshrssId),
         medal: medaledIds.has(feedFreshrssId),
         lastFetchedAt: feed.lastFetchedAt,
+        lastFetchError: feed.lastFetchError,
         customCategoryId: feed.customCategoryId,
         freshrssCategoryId: feed.freshrssCategoryId,
         freshrssCategoryLabel: feed.freshrssCategoryLabel,

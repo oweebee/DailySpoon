@@ -102,6 +102,13 @@ model CustomFeed {
   freshrssCategoryId     String?
   freshrssCategoryLabel  String?
   lastFetchedAt          DateTime?
+  // Message d'erreur du dernier échec de récupération (parsing RSS impossible,
+  // hôte injoignable, timeout...) — null si la dernière tentative a réussi.
+  // Affiché en rouge dans /admin/categories : sans ça, un flux qui échoue en
+  // silence dans le worker (erreur seulement loguée côté serveur, invisible
+  // depuis l'admin) semblait juste "ne jamais apparaître en En direct" sans
+  // aucune explication.
+  lastFetchError         String?
   createdAt              DateTime        @default(now())
 
   @@index([customCategoryId])
