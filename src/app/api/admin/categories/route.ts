@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listAllCategories } from "@/lib/freshrss";
+import { recomputeIncludedForFreshrssCategory } from "@/lib/customFeeds";
 
 async function assertAuthed(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -17,14 +18,16 @@ export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
-    const [freshrssCategories, selected, aiPrintCategories] = await Promise.all([
+    const [freshrssCategories, selected, aiPrintCategories, disabledCustomFeedsCategories] = await Promise.all([
       listAllCategories(),
       prisma.selectedCategory.findMany(),
-      prisma.aiPrintCategory.findMany()
+      prisma.aiPrintCategory.findMany(),
+      prisma.disabledCustomFeedsCategory.findMany()
     ]);
     const selectedIds = new Set(selected.map((s) => s.freshrssId));
     const orderById = new Map(selected.map((s) => [s.freshrssId, s.order]));
     const frontPageEnabledById = new Map(aiPrintCategories.map((c) => [c.freshrssId, c.enabled]));
+    const disabledCustomFeedsIds = new Set(disabledCustomFeedsCategories.map((d) => d.freshrssCategoryId));
 
     // Catégories sélectionnées d'abord, dans l'ordre choisi dans
     // /admin/categories (persisté en base) ; le reste ensuite, par ordre
@@ -35,7 +38,11 @@ export async function GET(req: NextRequest) {
         label: c.label,
         selected: selectedIds.has(c.freshrssId),
         order: orderById.get(c.freshrssId) ?? null,
-        frontPageEnabled: frontPageEnabledById.get(c.freshrssId) ?? true
+        frontPageEnabled: frontPageEnabledById.get(c.freshrssId) ?? true,
+        // Bascule groupée pour les flux personnalisés rattachés à cette
+        // catégorie (voir DisabledCustomFeedsCategory) — sans effet sur les
+        // vrais flux FreshRSS de la catégorie. true = activé par défaut.
+        customFeedsEnabled: !disabledCustomFeedsIds.has(c.freshrssId)
       }))
       .sort((a, b) => {
         if (a.order !== null && b.order !== null) return a.order - b.order;
@@ -59,11 +66,12 @@ export async function POST(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { freshrssId, label, selected, frontPageEnabled } = body as {
+  const { freshrssId, label, selected, frontPageEnabled, customFeedsEnabled } = body as {
     freshrssId?: string;
     label?: string;
     selected?: boolean;
     frontPageEnabled?: boolean;
+    customFeedsEnabled?: boolean;
   };
 
   if (!freshrssId || !label) {
@@ -79,6 +87,26 @@ export async function POST(req: NextRequest) {
       update: { label, enabled: frontPageEnabled },
       create: { freshrssId, label, enabled: frontPageEnabled }
     });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Bascule GROUPÉE des flux personnalisés rattachés à cette catégorie
+  // (voir DisabledCustomFeedsCategory) : n'écrase JAMAIS les cases
+  // individuelles "inclure le flux" de chacun (ExcludedFeed intact) — juste
+  // un interrupteur en plus, recalculé proprement via
+  // recomputeIncludedForFreshrssCategory. Sans effet sur la catégorie
+  // FreshRSS elle-même ni ses vrais flux.
+  if (typeof customFeedsEnabled === "boolean" && typeof selected !== "boolean" && typeof frontPageEnabled !== "boolean") {
+    if (customFeedsEnabled) {
+      await prisma.disabledCustomFeedsCategory.deleteMany({ where: { freshrssCategoryId: freshrssId } });
+    } else {
+      await prisma.disabledCustomFeedsCategory.upsert({
+        where: { freshrssCategoryId: freshrssId },
+        update: { label },
+        create: { freshrssCategoryId: freshrssId, label }
+      });
+    }
+    await recomputeIncludedForFreshrssCategory(freshrssId);
     return NextResponse.json({ ok: true });
   }
 
@@ -118,6 +146,13 @@ export async function POST(req: NextRequest) {
     if (count > 0) {
       console.log(`[admin/categories] ${count} article(s) réinclus pour la catégorie "${label}".`);
     }
+
+    // Le updateMany ci-dessus vient de tout remettre included=true pour
+    // cette catégorie, y COMPRIS les articles des flux personnalisés qui y
+    // sont rattachés (même categoryLabel) — sans distinguer la bascule
+    // groupée DisabledCustomFeedsCategory. On corrige juste après pour ces
+    // flux perso précisément, sans retoucher aux vrais flux FreshRSS.
+    await recomputeIncludedForFreshrssCategory(freshrssId);
   } else {
     await prisma.selectedCategory.deleteMany({ where: { freshrssId } });
     // "décoché" ne purge plus les articles : ils restent en base pour rester

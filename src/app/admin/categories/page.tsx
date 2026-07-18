@@ -31,6 +31,7 @@ type Category = {
   selected: boolean;
   order: number | null;
   frontPageEnabled: boolean;
+  customFeedsEnabled: boolean;
 };
 
 type Feed = {
@@ -163,6 +164,20 @@ export default function AdminCategoriesPage() {
 
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
+
+  // Pli/dépli par catégorie perso dans "Catégories personnalisées" — même
+  // pattern que "Catégories & flux" (collapsed/toggleExpanded), déplié par
+  // défaut.
+  const [customCollapsed, setCustomCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleCustomExpanded(id: string) {
+    setCustomCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function loadCustomFeeds() {
     setCustomFeedsLoading(true);
@@ -437,6 +452,26 @@ export default function AdminCategoriesPage() {
     });
   }
 
+  // Bascule GROUPÉE : masque/réaffiche tous les flux personnalisés
+  // rattachés à cette catégorie FreshRSS d'un coup, sans toucher à leurs
+  // cases individuelles "inclure le flux" ni aux vrais flux FreshRSS de la
+  // catégorie (voir DisabledCustomFeedsCategory).
+  async function toggleCustomFeedsEnabled(cat: Category) {
+    setCategories((prev) =>
+      prev.map((c) => (c.freshrssId === cat.freshrssId ? { ...c, customFeedsEnabled: !c.customFeedsEnabled } : c))
+    );
+    await fetch("/api/admin/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        freshrssId: cat.freshrssId,
+        label: cat.label,
+        customFeedsEnabled: !cat.customFeedsEnabled
+      })
+    });
+    await loadCustomFeeds();
+  }
+
   // Réorganisation par glisser-déposer : on saisit le titre d'une
   // catégorie et on la dépose ailleurs dans la liste, sans bouton ni
   // poignée visible. Le nouvel ordre est persisté en base immédiatement
@@ -699,15 +734,28 @@ export default function AdminCategoriesPage() {
                         </span>
                       )}
                     </button>
-                    <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
-                      <input
-                        type="checkbox"
-                        checked={cat.selected}
-                        onChange={() => toggle(cat)}
-                        className="accent-ink"
-                      />
-                      inclure la catégorie
-                    </label>
+                    <div className="flex shrink-0 flex-wrap items-center gap-4">
+                      {childCustomFeeds.length > 0 && (
+                        <label className="flex items-center gap-2 text-xs italic text-sepia">
+                          <input
+                            type="checkbox"
+                            checked={cat.customFeedsEnabled}
+                            onChange={() => toggleCustomFeedsEnabled(cat)}
+                            className="accent-ink"
+                          />
+                          activer les flux perso importés
+                        </label>
+                      )}
+                      <label className="flex items-center gap-2 text-xs italic text-sepia">
+                        <input
+                          type="checkbox"
+                          checked={cat.selected}
+                          onChange={() => toggle(cat)}
+                          className="accent-ink"
+                        />
+                        inclure la catégorie
+                      </label>
+                    </div>
                   </div>
 
                   {!isCollapsed && !feedsLoading && (
@@ -1056,44 +1104,102 @@ export default function AdminCategoriesPage() {
         <p className="py-4 text-center italic text-sepia">Aucune catégorie personnalisée pour l’instant.</p>
       ) : (
         <ul className="border-t-2 border-ink">
-          {customCategories.map((cat) => (
-            <li
-              key={cat.id}
-              className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/30 py-2.5"
-            >
-              <span className="text-sm font-bold">
-                {cat.label}{" "}
-                <span className="text-xs font-normal italic text-sepia">({cat.feedCount} flux)</span>
-              </span>
-              <div className="flex flex-wrap items-center gap-4">
-                <label className="flex items-center gap-2 text-xs italic text-sepia">
-                  <input
-                    type="checkbox"
-                    checked={cat.frontPageEnabled}
-                    onChange={() => toggleCustomCategoryFrontPage(cat)}
-                    className="accent-ink"
-                  />
-                  impression IA
-                </label>
-                <label className="flex items-center gap-2 text-xs italic text-sepia">
-                  <input
-                    type="checkbox"
-                    checked={cat.selected}
-                    onChange={() => toggleCustomCategorySelected(cat)}
-                    className="accent-ink"
-                  />
-                  inclure la catégorie
-                </label>
-                <button
-                  type="button"
-                  onClick={() => deleteCustomCategory(cat)}
-                  className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
-                >
-                  Supprimer
-                </button>
-              </div>
-            </li>
-          ))}
+          {customCategories.map((cat) => {
+            const catFeeds = customFeeds.filter((f) => f.customCategoryId === cat.id);
+            const isCollapsed = customCollapsed.has(cat.id);
+            return (
+              <li key={cat.id} className="border-b border-ink/30">
+                <div className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleCustomExpanded(cat.id)}
+                    className="flex items-center gap-2 text-left font-display font-bold hover:underline"
+                  >
+                    <span className="inline-block w-3 text-xs text-sepia">{isCollapsed ? "▸" : "▾"}</span>
+                    {cat.label}
+                    <span className="text-xs font-normal italic text-sepia">({catFeeds.length})</span>
+                  </button>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 text-xs italic text-sepia">
+                      <input
+                        type="checkbox"
+                        checked={cat.frontPageEnabled}
+                        onChange={() => toggleCustomCategoryFrontPage(cat)}
+                        className="accent-ink"
+                      />
+                      impression IA
+                    </label>
+                    <label className="flex items-center gap-2 text-xs italic text-sepia">
+                      <input
+                        type="checkbox"
+                        checked={cat.selected}
+                        onChange={() => toggleCustomCategorySelected(cat)}
+                        className="accent-ink"
+                      />
+                      inclure la catégorie
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => deleteCustomCategory(cat)}
+                      className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                </div>
+
+                {!isCollapsed && (
+                  <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
+                    {catFeeds.map((feed) => (
+                      <li
+                        key={feed.id}
+                        className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+                      >
+                        <span className="text-sm">{feed.title}</span>
+                        <div className="flex shrink-0 items-center gap-4">
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={feed.medal}
+                              onChange={() => toggleCustomFeedMedal(feed)}
+                              className="accent-journal"
+                            />
+                            médaille
+                          </label>
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={feed.included}
+                              onChange={() => toggleCustomFeedIncluded(feed)}
+                              className="accent-ink"
+                            />
+                            inclure le flux
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => startEditFeedFromTree(feed)}
+                            className="text-xs uppercase tracking-[0.2em] hover:underline"
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteCustomFeed(feed)}
+                            className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                    {catFeeds.length === 0 && (
+                      <p className="py-1.5 text-xs italic text-sepia">Aucun flux dans cette catégorie.</p>
+                    )}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
       </CollapsibleSection>

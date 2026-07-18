@@ -79,6 +79,35 @@ export async function createCustomCategoryRecord(label: string) {
   return category;
 }
 
+/**
+ * Recalcule et applique immédiatement le flag `included` de TOUS les
+ * articles déjà en base pour les flux perso rattachés à cette catégorie
+ * FreshRSS précise — appelé après avoir basculé
+ * DisabledCustomFeedsCategory pour cette catégorie (voir
+ * /api/admin/categories, POST customFeedsEnabled). Recalcule proprement à
+ * partir des TROIS conditions réelles (catégorie sélectionnée, flux non
+ * exclu individuellement, bascule groupée) plutôt que d'écraser
+ * aveuglément à true/false — un flux individuellement exclu (ExcludedFeed)
+ * reste exclu même si on réactive la bascule groupée.
+ */
+export async function recomputeIncludedForFreshrssCategory(freshrssCategoryId: string): Promise<void> {
+  const [selected, excludedFeeds, disabled, feeds] = await Promise.all([
+    prisma.selectedCategory.findMany({ select: { freshrssId: true } }),
+    prisma.excludedFeed.findMany({ select: { freshrssId: true } }),
+    prisma.disabledCustomFeedsCategory.findUnique({ where: { freshrssCategoryId } }),
+    prisma.customFeed.findMany({ where: { freshrssCategoryId } })
+  ]);
+  const selectedIds = new Set(selected.map((s) => s.freshrssId));
+  const excludedIds = new Set(excludedFeeds.map((e) => e.freshrssId));
+  const categoryOk = selectedIds.has(freshrssCategoryId) && !disabled;
+
+  for (const feed of feeds) {
+    const feedFreshrssId = customFeedFreshrssId(feed.id);
+    const included = categoryOk && !excludedIds.has(feedFreshrssId);
+    await prisma.article.updateMany({ where: { feedId: feedFreshrssId }, data: { included } });
+  }
+}
+
 const parser = new Parser({
   timeout: 10000,
   headers: {
@@ -136,19 +165,27 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
     return [];
   }
 
-  const [selected, excludedFeeds] = await Promise.all([
+  const [selected, excludedFeeds, disabledCategories] = await Promise.all([
     prisma.selectedCategory.findMany({ select: { freshrssId: true } }),
-    prisma.excludedFeed.findMany({ select: { freshrssId: true } })
+    prisma.excludedFeed.findMany({ select: { freshrssId: true } }),
+    prisma.disabledCustomFeedsCategory.findMany({ select: { freshrssCategoryId: true } })
   ]);
   const selectedIds = new Set(selected.map((c) => c.freshrssId));
   const excludedFeedIds = new Set(excludedFeeds.map((f) => f.freshrssId));
+  const disabledCategoryIds = new Set(disabledCategories.map((d) => d.freshrssCategoryId));
 
   const items: RawItem[] = [];
 
   for (const feed of feeds) {
     const feedFreshrssId = customFeedFreshrssId(feed.id);
     const { categoryFreshrssId, categoryLabel } = resolveFeedCategory(feed);
-    const included = selectedIds.has(categoryFreshrssId) && !excludedFeedIds.has(feedFreshrssId);
+    // Bascule groupée (DisabledCustomFeedsCategory) : masque tous les flux
+    // perso d'une catégorie FreshRSS d'un coup, sans toucher à ExcludedFeed
+    // — ne s'applique qu'aux flux rattachés à une VRAIE catégorie FreshRSS
+    // (freshrssCategoryId), une catégorie perso pure a déjà son propre
+    // interrupteur dédié ("inclure la catégorie" sur la CustomCategory).
+    const groupDisabled = Boolean(feed.freshrssCategoryId) && disabledCategoryIds.has(feed.freshrssCategoryId!);
+    const included = selectedIds.has(categoryFreshrssId) && !excludedFeedIds.has(feedFreshrssId) && !groupDisabled;
 
     try {
       const parsed = await parser.parseURL(feed.url);

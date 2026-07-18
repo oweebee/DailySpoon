@@ -107,6 +107,20 @@ model CustomFeed {
   @@index([customCategoryId])
 }
 
+// Bascule GROUPÉE : masque en un clic TOUS les flux personnalisés rattachés
+// à cette catégorie FreshRSS (freshrssCategoryId), SANS toucher à leurs
+// cases individuelles "inclure le flux" (ExcludedFeed) ni à la catégorie
+// FreshRSS elle-même (ses vrais flux restent inchangés). Absence de ligne =
+// activé par défaut (les réglages par flux perso s'appliquent normalement).
+// Recoché, chaque flux perso retrouve exactement son propre réglage
+// individuel — rien n'est écrasé silencieusement dans l'autre sens.
+model DisabledCustomFeedsCategory {
+  id                 String   @id @default(cuid())
+  freshrssCategoryId String   @unique
+  label              String
+  createdAt          DateTime @default(now())
+}
+
 model Article {
   id             String    @id @default(cuid())
   freshrssItemId String    @unique // FreshRSS item id, used for dedupe
