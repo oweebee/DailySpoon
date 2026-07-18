@@ -18,7 +18,11 @@ async function guessFeedTitle(url: string): Promise<string> {
   try {
     const parser = new Parser({ timeout: 6000 });
     const parsed = await parser.parseURL(url);
-    if (parsed.title?.trim()) return parsed.title.trim();
+    // Même précaution que côté ingestion (voir customFeeds.ts/safeTitle) :
+    // certains flux renvoient un titre qui n'est pas une chaîne malgré le
+    // typage de rss-parser, ce qui ferait planter `.trim()` directement.
+    const title = typeof parsed.title === "string" ? parsed.title.trim() : String(parsed.title ?? "").trim();
+    if (title) return title;
   } catch {
     // best-effort : on retombe sur l'hôte de l'URL ci-dessous
   }

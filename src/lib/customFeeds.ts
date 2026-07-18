@@ -155,7 +155,11 @@ export async function recomputeAllCustomFeedIncluded(): Promise<void> {
 }
 
 const parser = new Parser({
-  timeout: 10000,
+  // 10s s'est révélé trop court pour certains flux plus lents à répondre
+  // depuis ce serveur (ex. "Libération" : "Request timed out after 10000ms"
+  // en usage réel) — 20s laisse la marge nécessaire sans bloquer
+  // indéfiniment un flux réellement injoignable.
+  timeout: 20000,
   headers: {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -168,6 +172,18 @@ const parser = new Parser({
 function bestRawContent(item: Parser.Item): string {
   const withEncoded = item as unknown as { "content:encoded"?: string };
   return withEncoded["content:encoded"] || item.content || item.summary || "";
+}
+
+/** Certains flux (balisage Atom/RSS non standard, titre en CDATA imbriqué...)
+ *  font remonter un `item.title` qui n'est PAS une chaîne malgré le typage
+ *  de rss-parser (objet, tableau...) — appeler `.trim()` dessus plante alors
+ *  ("title?.trim is not a function", vu en usage réel sur un flux réel).
+ *  Convertit explicitement en chaîne avant de nettoyer, quel que soit le
+ *  type réellement reçu. */
+function safeTitle(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value == null) return "";
+  return String(value).trim();
 }
 
 function bestImageUrl(item: Parser.Item, rawContent: string): string | null {
@@ -241,7 +257,7 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
       const parsed = await parser.parseURL(feed.url);
 
       for (const item of parsed.items) {
-        const guid = item.guid || item.link || item.title;
+        const guid = item.guid || item.link || safeTitle(item.title);
         if (!guid) continue;
         const freshrssItemId = `${feedFreshrssId}:${guid}`;
 
@@ -263,7 +279,7 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
           feedTitle: feed.title,
           categoryLabel,
           sourceUrl: canonicalUrl,
-          sourceTitle: item.title?.trim() || "(sans titre)",
+          sourceTitle: safeTitle(item.title) || "(sans titre)",
           sourceExcerpt: excerpt || null,
           imageUrl,
           publishedAt: item.isoDate ? new Date(item.isoDate) : item.pubDate ? new Date(item.pubDate) : null,
