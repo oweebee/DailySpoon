@@ -24,26 +24,36 @@ async function assertAuthed(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const [categories, selected, aiPrintCategories] = await Promise.all([
-    prisma.customCategory.findMany({ include: { _count: { select: { feeds: true } } }, orderBy: { order: "asc" } }),
-    prisma.selectedCategory.findMany(),
-    prisma.aiPrintCategory.findMany()
-  ]);
-  const selectedIds = new Set(selected.map((s) => s.freshrssId));
-  const frontPageEnabledById = new Map(aiPrintCategories.map((c) => [c.freshrssId, c.enabled]));
+  try {
+    const [categories, selected, aiPrintCategories] = await Promise.all([
+      prisma.customCategory.findMany({ include: { _count: { select: { feeds: true } } }, orderBy: { order: "asc" } }),
+      prisma.selectedCategory.findMany(),
+      prisma.aiPrintCategory.findMany()
+    ]);
+    const selectedIds = new Set(selected.map((s) => s.freshrssId));
+    const frontPageEnabledById = new Map(aiPrintCategories.map((c) => [c.freshrssId, c.enabled]));
 
-  const result = categories.map((cat) => {
-    const catFreshrssId = customCategoryFreshrssId(cat.id);
-    return {
-      id: cat.id,
-      label: cat.label,
-      selected: selectedIds.has(catFreshrssId),
-      frontPageEnabled: frontPageEnabledById.get(catFreshrssId) ?? true,
-      feedCount: cat._count.feeds
-    };
-  });
+    const result = categories.map((cat) => {
+      const catFreshrssId = customCategoryFreshrssId(cat.id);
+      return {
+        id: cat.id,
+        label: cat.label,
+        selected: selectedIds.has(catFreshrssId),
+        frontPageEnabled: frontPageEnabledById.get(catFreshrssId) ?? true,
+        feedCount: cat._count.feeds
+      };
+    });
 
-  return NextResponse.json({ categories: result });
+    return NextResponse.json({ categories: result });
+  } catch (err: any) {
+    // Cause la plus probable : la migration Prisma 20260718140000_custom_feeds
+    // n'a pas encore été appliquée en base (colonnes/tables manquantes).
+    console.error("[admin/custom-categories] GET failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Impossible de charger les catégories personnalisées (migration appliquée ?)" },
+      { status: 500 }
+    );
+  }
 }
 
 // Crée une nouvelle catégorie personnalisée — sélectionnée par défaut
@@ -52,13 +62,21 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const label = typeof body.label === "string" ? body.label.trim() : "";
-  if (!label) return NextResponse.json({ error: "label requis" }, { status: 400 });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const label = typeof body.label === "string" ? body.label.trim() : "";
+    if (!label) return NextResponse.json({ error: "label requis" }, { status: 400 });
 
-  const category = await createCustomCategoryRecord(label);
+    const category = await createCustomCategoryRecord(label);
 
-  return NextResponse.json({ category: { id: category.id, label: category.label } });
+    return NextResponse.json({ category: { id: category.id, label: category.label } });
+  } catch (err: any) {
+    console.error("[admin/custom-categories] POST failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Échec de la création de la catégorie (migration appliquée ?)" },
+      { status: 500 }
+    );
+  }
 }
 
 // Supprime une catégorie personnalisée : cascade sur ses flux (FK
@@ -69,24 +87,32 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const id = typeof body.id === "string" ? body.id : "";
-  if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
 
-  const category = await prisma.customCategory.findUnique({ where: { id }, include: { feeds: true } });
-  if (!category) return NextResponse.json({ error: "Catégorie introuvable" }, { status: 404 });
+    const category = await prisma.customCategory.findUnique({ where: { id }, include: { feeds: true } });
+    if (!category) return NextResponse.json({ error: "Catégorie introuvable" }, { status: 404 });
 
-  const catFreshrssId = customCategoryFreshrssId(id);
-  const feedFreshrssIds = category.feeds.map((f) => customFeedFreshrssId(f.id));
+    const catFreshrssId = customCategoryFreshrssId(id);
+    const feedFreshrssIds = category.feeds.map((f) => customFeedFreshrssId(f.id));
 
-  await prisma.$transaction([
-    prisma.selectedCategory.deleteMany({ where: { freshrssId: catFreshrssId } }),
-    prisma.aiPrintCategory.deleteMany({ where: { freshrssId: catFreshrssId } }),
-    prisma.excludedFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
-    prisma.medalFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
-    prisma.article.updateMany({ where: { feedId: { in: feedFreshrssIds } }, data: { included: false } }),
-    prisma.customCategory.delete({ where: { id } }) // cascade -> CustomFeed
-  ]);
+    await prisma.$transaction([
+      prisma.selectedCategory.deleteMany({ where: { freshrssId: catFreshrssId } }),
+      prisma.aiPrintCategory.deleteMany({ where: { freshrssId: catFreshrssId } }),
+      prisma.excludedFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
+      prisma.medalFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
+      prisma.article.updateMany({ where: { feedId: { in: feedFreshrssIds } }, data: { included: false } }),
+      prisma.customCategory.delete({ where: { id } }) // cascade -> CustomFeed
+    ]);
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error("[admin/custom-categories] DELETE failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Échec de la suppression de la catégorie" },
+      { status: 500 }
+    );
+  }
 }

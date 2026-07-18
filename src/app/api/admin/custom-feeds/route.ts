@@ -88,66 +88,84 @@ function validateUrl(url: string): boolean {
 export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const [rows, excluded, medaled] = await Promise.all([
-    prisma.customFeed.findMany({ include: { customCategory: true }, orderBy: { createdAt: "asc" } }),
-    prisma.excludedFeed.findMany(),
-    prisma.medalFeed.findMany()
-  ]);
-  const excludedIds = new Set(excluded.map((e) => e.freshrssId));
-  const medaledIds = new Set(medaled.map((m) => m.freshrssId));
+  try {
+    const [rows, excluded, medaled] = await Promise.all([
+      prisma.customFeed.findMany({ include: { customCategory: true }, orderBy: { createdAt: "asc" } }),
+      prisma.excludedFeed.findMany(),
+      prisma.medalFeed.findMany()
+    ]);
+    const excludedIds = new Set(excluded.map((e) => e.freshrssId));
+    const medaledIds = new Set(medaled.map((m) => m.freshrssId));
 
-  const feeds = rows.map((feed) => {
-    const feedFreshrssId = customFeedFreshrssId(feed.id);
-    const { categoryLabel, isFreshrssCategory } = resolveFeedCategory(feed);
-    return {
-      id: feed.id,
-      url: feed.url,
-      title: feed.title,
-      included: !excludedIds.has(feedFreshrssId),
-      medal: medaledIds.has(feedFreshrssId),
-      lastFetchedAt: feed.lastFetchedAt,
-      customCategoryId: feed.customCategoryId,
-      freshrssCategoryId: feed.freshrssCategoryId,
-      freshrssCategoryLabel: feed.freshrssCategoryLabel,
-      categoryLabel,
-      isFreshrssCategory
-    };
-  });
+    const feeds = rows.map((feed) => {
+      const feedFreshrssId = customFeedFreshrssId(feed.id);
+      const { categoryLabel, isFreshrssCategory } = resolveFeedCategory(feed);
+      return {
+        id: feed.id,
+        url: feed.url,
+        title: feed.title,
+        included: !excludedIds.has(feedFreshrssId),
+        medal: medaledIds.has(feedFreshrssId),
+        lastFetchedAt: feed.lastFetchedAt,
+        customCategoryId: feed.customCategoryId,
+        freshrssCategoryId: feed.freshrssCategoryId,
+        freshrssCategoryLabel: feed.freshrssCategoryLabel,
+        categoryLabel,
+        isFreshrssCategory
+      };
+    });
 
-  return NextResponse.json({ feeds });
+    return NextResponse.json({ feeds });
+  } catch (err: any) {
+    // Cause la plus probable : la migration Prisma 20260718140000_custom_feeds
+    // n'a pas encore été appliquée en base (colonnes/tables manquantes).
+    console.error("[admin/custom-feeds] GET failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Impossible de charger les flux personnalisés (migration appliquée ?)" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const url = typeof body.url === "string" ? body.url.trim() : "";
-  let title = typeof body.title === "string" ? body.title.trim() : "";
+  try {
+    const body = await req.json().catch(() => ({}));
+    const url = typeof body.url === "string" ? body.url.trim() : "";
+    let title = typeof body.title === "string" ? body.title.trim() : "";
 
-  if (!url) return NextResponse.json({ error: "url requise" }, { status: 400 });
-  if (!validateUrl(url)) return NextResponse.json({ error: "URL de flux invalide" }, { status: 400 });
+    if (!url) return NextResponse.json({ error: "url requise" }, { status: 400 });
+    if (!validateUrl(url)) return NextResponse.json({ error: "URL de flux invalide" }, { status: 400 });
 
-  const resolved = await resolveCategoryChoice({
-    customCategoryId: typeof body.customCategoryId === "string" ? body.customCategoryId : undefined,
-    freshrssCategoryId: typeof body.freshrssCategoryId === "string" ? body.freshrssCategoryId : undefined,
-    freshrssCategoryLabel: typeof body.freshrssCategoryLabel === "string" ? body.freshrssCategoryLabel : undefined,
-    newCategoryLabel: typeof body.newCategoryLabel === "string" ? body.newCategoryLabel : undefined
-  });
-  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
+    const resolved = await resolveCategoryChoice({
+      customCategoryId: typeof body.customCategoryId === "string" ? body.customCategoryId : undefined,
+      freshrssCategoryId: typeof body.freshrssCategoryId === "string" ? body.freshrssCategoryId : undefined,
+      freshrssCategoryLabel: typeof body.freshrssCategoryLabel === "string" ? body.freshrssCategoryLabel : undefined,
+      newCategoryLabel: typeof body.newCategoryLabel === "string" ? body.newCategoryLabel : undefined
+    });
+    if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
 
-  if (!title) title = await guessFeedTitle(url);
+    if (!title) title = await guessFeedTitle(url);
 
-  const feed = await prisma.customFeed.create({
-    data: {
-      url,
-      title,
-      customCategoryId: resolved.customCategoryId,
-      freshrssCategoryId: resolved.freshrssCategoryId,
-      freshrssCategoryLabel: resolved.freshrssCategoryLabel
-    }
-  });
+    const feed = await prisma.customFeed.create({
+      data: {
+        url,
+        title,
+        customCategoryId: resolved.customCategoryId,
+        freshrssCategoryId: resolved.freshrssCategoryId,
+        freshrssCategoryLabel: resolved.freshrssCategoryLabel
+      }
+    });
 
-  return NextResponse.json({ feed: { id: feed.id, url: feed.url, title: feed.title } });
+    return NextResponse.json({ feed: { id: feed.id, url: feed.url, title: feed.title } });
+  } catch (err: any) {
+    console.error("[admin/custom-feeds] POST failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Échec de l'ajout du flux (migration appliquée ?)" },
+      { status: 500 }
+    );
+  }
 }
 
 // Édition d'un flux existant : URL, titre et/ou catégorie de destination
@@ -157,44 +175,52 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const id = typeof body.id === "string" ? body.id : "";
-  if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
 
-  const existing = await prisma.customFeed.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Flux introuvable" }, { status: 404 });
+    const existing = await prisma.customFeed.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: "Flux introuvable" }, { status: 404 });
 
-  const data: Record<string, unknown> = {};
+    const data: Record<string, unknown> = {};
 
-  if (typeof body.url === "string" && body.url.trim()) {
-    const url = body.url.trim();
-    if (!validateUrl(url)) return NextResponse.json({ error: "URL de flux invalide" }, { status: 400 });
-    data.url = url;
+    if (typeof body.url === "string" && body.url.trim()) {
+      const url = body.url.trim();
+      if (!validateUrl(url)) return NextResponse.json({ error: "URL de flux invalide" }, { status: 400 });
+      data.url = url;
+    }
+    if (typeof body.title === "string" && body.title.trim()) {
+      data.title = body.title.trim();
+    }
+
+    const hasCategoryChoice =
+      typeof body.customCategoryId === "string" ||
+      (typeof body.freshrssCategoryId === "string" && typeof body.freshrssCategoryLabel === "string") ||
+      (typeof body.newCategoryLabel === "string" && body.newCategoryLabel.trim());
+
+    if (hasCategoryChoice) {
+      const resolved = await resolveCategoryChoice({
+        customCategoryId: typeof body.customCategoryId === "string" ? body.customCategoryId : undefined,
+        freshrssCategoryId: typeof body.freshrssCategoryId === "string" ? body.freshrssCategoryId : undefined,
+        freshrssCategoryLabel: typeof body.freshrssCategoryLabel === "string" ? body.freshrssCategoryLabel : undefined,
+        newCategoryLabel: typeof body.newCategoryLabel === "string" ? body.newCategoryLabel : undefined
+      });
+      if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
+      data.customCategoryId = resolved.customCategoryId;
+      data.freshrssCategoryId = resolved.freshrssCategoryId;
+      data.freshrssCategoryLabel = resolved.freshrssCategoryLabel;
+    }
+
+    const feed = await prisma.customFeed.update({ where: { id }, data });
+    return NextResponse.json({ feed: { id: feed.id, url: feed.url, title: feed.title } });
+  } catch (err: any) {
+    console.error("[admin/custom-feeds] PATCH failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Échec de la modification du flux (migration appliquée ?)" },
+      { status: 500 }
+    );
   }
-  if (typeof body.title === "string" && body.title.trim()) {
-    data.title = body.title.trim();
-  }
-
-  const hasCategoryChoice =
-    typeof body.customCategoryId === "string" ||
-    (typeof body.freshrssCategoryId === "string" && typeof body.freshrssCategoryLabel === "string") ||
-    (typeof body.newCategoryLabel === "string" && body.newCategoryLabel.trim());
-
-  if (hasCategoryChoice) {
-    const resolved = await resolveCategoryChoice({
-      customCategoryId: typeof body.customCategoryId === "string" ? body.customCategoryId : undefined,
-      freshrssCategoryId: typeof body.freshrssCategoryId === "string" ? body.freshrssCategoryId : undefined,
-      freshrssCategoryLabel: typeof body.freshrssCategoryLabel === "string" ? body.freshrssCategoryLabel : undefined,
-      newCategoryLabel: typeof body.newCategoryLabel === "string" ? body.newCategoryLabel : undefined
-    });
-    if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
-    data.customCategoryId = resolved.customCategoryId;
-    data.freshrssCategoryId = resolved.freshrssCategoryId;
-    data.freshrssCategoryLabel = resolved.freshrssCategoryLabel;
-  }
-
-  const feed = await prisma.customFeed.update({ where: { id }, data });
-  return NextResponse.json({ feed: { id: feed.id, url: feed.url, title: feed.title } });
 }
 
 // Supprime un flux personnalisé : nettoie ExcludedFeed/MedalFeed pour son id
@@ -203,21 +229,29 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const id = typeof body.id === "string" ? body.id : "";
-  if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
 
-  const feed = await prisma.customFeed.findUnique({ where: { id } });
-  if (!feed) return NextResponse.json({ error: "Flux introuvable" }, { status: 404 });
+    const feed = await prisma.customFeed.findUnique({ where: { id } });
+    if (!feed) return NextResponse.json({ error: "Flux introuvable" }, { status: 404 });
 
-  const feedFreshrssId = customFeedFreshrssId(id);
+    const feedFreshrssId = customFeedFreshrssId(id);
 
-  await prisma.$transaction([
-    prisma.excludedFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
-    prisma.medalFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
-    prisma.article.updateMany({ where: { feedId: feedFreshrssId }, data: { included: false } }),
-    prisma.customFeed.delete({ where: { id } })
-  ]);
+    await prisma.$transaction([
+      prisma.excludedFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
+      prisma.medalFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
+      prisma.article.updateMany({ where: { feedId: feedFreshrssId }, data: { included: false } }),
+      prisma.customFeed.delete({ where: { id } })
+    ]);
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error("[admin/custom-feeds] DELETE failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Échec de la suppression du flux" },
+      { status: 500 }
+    );
+  }
 }
