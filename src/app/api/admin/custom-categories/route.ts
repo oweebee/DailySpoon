@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
       prisma.aiPrintCategory.findMany()
     ]);
     const selectedIds = new Set(selected.map((s) => s.freshrssId));
+    const orderById = new Map(selected.map((s) => [s.freshrssId, s.order]));
     const frontPageEnabledById = new Map(aiPrintCategories.map((c) => [c.freshrssId, c.enabled]));
 
     const result = categories.map((cat) => {
@@ -39,6 +40,11 @@ export async function GET(req: NextRequest) {
         id: cat.id,
         label: cat.label,
         selected: selectedIds.has(catFreshrssId),
+        // Même source d'ordre que les catégories FreshRSS (SelectedCategory.
+        // order, PAS CustomCategory.order qui n'est qu'un compteur local aux
+        // catégories perso) — nécessaire pour fusionner les deux listes dans
+        // une seule arborescence triée de façon cohérente (voir /admin/categories).
+        order: orderById.get(catFreshrssId) ?? null,
         frontPageEnabled: frontPageEnabledById.get(catFreshrssId) ?? true,
         feedCount: cat._count.feeds
       };

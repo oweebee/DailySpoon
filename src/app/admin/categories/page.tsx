@@ -65,6 +65,10 @@ type CustomCategoryItem = {
   id: string;
   label: string;
   selected: boolean;
+  // Même source (SelectedCategory.order) que Category.order ci-dessus — sert
+  // à fusionner catégories FreshRSS et perso dans UNE SEULE liste triée de
+  // façon cohérente (voir combinedCategoryRows plus bas).
+  order: number | null;
   frontPageEnabled: boolean;
   feedCount: number;
 };
@@ -629,7 +633,7 @@ export default function AdminCategoriesPage() {
         <span className="text-sm">
           {feed.title}{" "}
           {showPersoBadge && (
-            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+            <span className="rounded-sm bg-ink px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-paper">
               perso
             </span>
           )}
@@ -858,141 +862,215 @@ export default function AdminCategoriesPage() {
           )}
 
           <ul className="border-t-2 border-ink">
-            {categories.map((cat) => {
-              const childFeeds = feeds.filter((f) => f.categoryLabels.includes(cat.label));
-              // Flux personnalisés rattachés directement à CETTE catégorie
-              // FreshRSS (voir /admin/categories, formulaire "Flux
-              // personnalisés") — affichés ici, mêlés aux vrais flux
-              // FreshRSS, pour une arborescence fidèle à leur traitement en
-              // aval (même catégorie = mêmes réglages En direct/Impression
-              // IA). Toujours listés aussi dans "Flux personnalisés" plus
-              // bas, qui reste le point d'entrée pour les modifier/supprimer.
-              const childCustomFeeds = customFeeds.filter((f) => f.freshrssCategoryId === cat.freshrssId);
-              const isCollapsed = collapsed.has(cat.freshrssId);
-              return (
-                <li
-                  key={cat.freshrssId}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    handleDrop(cat.freshrssId);
-                  }}
-                  className={`border-b border-ink/30 transition-colors hover:bg-ink/5 ${draggedId === cat.freshrssId ? "opacity-40" : ""}`}
-                >
-                  <div className="flex items-center justify-between gap-4 py-3">
-                    <button
-                      type="button"
-                      draggable
-                      onDragStart={() => setDraggedId(cat.freshrssId)}
-                      onDragEnd={() => setDraggedId(null)}
-                      onClick={() => toggleExpanded(cat.freshrssId)}
-                      className="flex cursor-grab items-center gap-2 text-left font-display font-bold hover:underline active:cursor-grabbing"
-                    >
-                      <span className="inline-block w-3 text-xs text-sepia">
-                        {isCollapsed ? "▸" : "▾"}
-                      </span>
-                      {cat.label}
-                      {!feedsLoading && (
-                        <span className="text-xs font-normal italic text-sepia">
-                          ({childFeeds.length + childCustomFeeds.length})
-                        </span>
+            {(() => {
+              // Fusion des catégories FreshRSS et perso dans UNE SEULE liste
+              // triée (même source d'ordre pour les deux : SelectedCategory.
+              // order, voir Category.order / CustomCategoryItem.order) — sur
+              // demande explicite : "monter les categories persos avec les
+              // categories fresh rss" plutôt que deux arborescences séparées.
+              // Chaque ligne garde un tag ("FRESHRSS" / "PERSO") pour rester
+              // identifiable au premier coup d'œil.
+              type Row = { kind: "freshrss"; cat: Category } | { kind: "custom"; cat: CustomCategoryItem };
+              const rows: Row[] = [
+                ...categories.map((cat) => ({ kind: "freshrss" as const, cat })),
+                ...customCategories.map((cat) => ({ kind: "custom" as const, cat }))
+              ].sort((a, b) => {
+                const oa = a.cat.order;
+                const ob = b.cat.order;
+                if (oa !== null && ob !== null) return oa - ob;
+                if (oa !== null) return -1;
+                if (ob !== null) return 1;
+                return a.cat.label.localeCompare(b.cat.label);
+              });
+
+              if (rows.length === 0) {
+                return (
+                  <p className="py-6 text-center italic text-sepia">
+                    Aucune catégorie trouvée dans FreshRSS.
+                  </p>
+                );
+              }
+
+              return rows.map((row) => {
+                if (row.kind === "custom") {
+                  const cat = row.cat;
+                  const catFeeds = customFeeds.filter((f) => f.customCategoryId === cat.id);
+                  const isCollapsed = customCollapsed.has(cat.id);
+                  return (
+                    <li key={`custom-${cat.id}`} className="border-b border-ink/30">
+                      <div className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleCustomExpanded(cat.id)}
+                          className="flex items-center gap-2 text-left font-display font-bold hover:underline"
+                        >
+                          <span className="inline-block w-3 text-xs text-sepia">
+                            {isCollapsed ? "▸" : "▾"}
+                          </span>
+                          {cat.label}
+                          <span className="text-xs font-normal italic text-sepia">({catFeeds.length})</span>
+                          <span className="rounded-sm bg-ink px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-paper">
+                            perso
+                          </span>
+                        </button>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={cat.frontPageEnabled}
+                              onChange={() => toggleCustomCategoryFrontPage(cat)}
+                              className="accent-ink"
+                            />
+                            impression IA
+                          </label>
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={cat.selected}
+                              onChange={() => toggleCustomCategorySelected(cat)}
+                              className="accent-ink"
+                            />
+                            inclure la catégorie
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => deleteCustomCategory(cat)}
+                            className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      </div>
+                      {!isCollapsed && (
+                        <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
+                          {catFeeds.map((feed) => renderCustomFeedRow(feed))}
+                          {catFeeds.length === 0 && (
+                            <p className="py-1.5 text-xs italic text-sepia">Aucun flux dans cette catégorie.</p>
+                          )}
+                        </ul>
                       )}
-                      {/* Plus de badge "perso" ICI : cette catégorie est une
-                          vraie catégorie FreshRSS, la mention doit se lire à
-                          côté de chaque flux (voir plus bas), pas laisser
-                          penser que la catégorie entière serait perso alors
-                          qu'elle mélange flux FreshRSS réels et flux perso. */}
-                    </button>
-                    <div className="flex shrink-0 flex-wrap items-center gap-4">
-                      {childCustomFeeds.length > 0 && (
+                    </li>
+                  );
+                }
+
+                const cat = row.cat;
+                const childFeeds = feeds.filter((f) => f.categoryLabels.includes(cat.label));
+                // Flux personnalisés rattachés directement à CETTE catégorie
+                // FreshRSS (voir /admin/categories, formulaire "Flux
+                // personnalisés") — affichés ici, mêlés aux vrais flux
+                // FreshRSS, pour une arborescence fidèle à leur traitement en
+                // aval (même catégorie = mêmes réglages En direct/Impression
+                // IA).
+                const childCustomFeeds = customFeeds.filter((f) => f.freshrssCategoryId === cat.freshrssId);
+                const isCollapsed = collapsed.has(cat.freshrssId);
+                return (
+                  <li
+                    key={cat.freshrssId}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDrop(cat.freshrssId);
+                    }}
+                    className={`border-b border-ink/30 transition-colors hover:bg-ink/5 ${draggedId === cat.freshrssId ? "opacity-40" : ""}`}
+                  >
+                    <div className="flex items-center justify-between gap-4 py-3">
+                      <button
+                        type="button"
+                        draggable
+                        onDragStart={() => setDraggedId(cat.freshrssId)}
+                        onDragEnd={() => setDraggedId(null)}
+                        onClick={() => toggleExpanded(cat.freshrssId)}
+                        className="flex cursor-grab items-center gap-2 text-left font-display font-bold hover:underline active:cursor-grabbing"
+                      >
+                        <span className="inline-block w-3 text-xs text-sepia">
+                          {isCollapsed ? "▸" : "▾"}
+                        </span>
+                        {cat.label}
+                        {!feedsLoading && (
+                          <span className="text-xs font-normal italic text-sepia">
+                            ({childFeeds.length + childCustomFeeds.length})
+                          </span>
+                        )}
+                        <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                          freshrss
+                        </span>
+                      </button>
+                      <div className="flex shrink-0 flex-wrap items-center gap-4">
+                        {childCustomFeeds.length > 0 && (
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={cat.customFeedsEnabled}
+                              onChange={() => toggleCustomFeedsEnabled(cat)}
+                              className="accent-ink"
+                            />
+                            activer les flux perso importés
+                          </label>
+                        )}
                         <label className="flex items-center gap-2 text-xs italic text-sepia">
                           <input
                             type="checkbox"
-                            checked={cat.customFeedsEnabled}
-                            onChange={() => toggleCustomFeedsEnabled(cat)}
+                            checked={cat.selected}
+                            onChange={() => toggle(cat)}
                             className="accent-ink"
                           />
-                          activer les flux perso importés
+                          inclure la catégorie
                         </label>
-                      )}
-                      <label className="flex items-center gap-2 text-xs italic text-sepia">
-                        <input
-                          type="checkbox"
-                          checked={cat.selected}
-                          onChange={() => toggle(cat)}
-                          className="accent-ink"
-                        />
-                        inclure la catégorie
-                      </label>
+                      </div>
                     </div>
-                  </div>
 
-                  {!isCollapsed && !feedsLoading && (
-                    <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
-                      {childFeeds.map((feed) => (
-                        <li
-                          key={feed.freshrssId}
-                          className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
-                        >
-                          <span className="text-sm">
-                            {feed.title}{" "}
-                            {/* Tag "FreshRSS" à côté de CE flux précis — pour
-                                le distinguer d'un flux perso mélangé dans la
-                                même catégorie (voir childCustomFeeds
-                                ci-dessous, tag "perso"), maintenant que la
-                                distinction se lit par flux et non plus par
-                                catégorie entière. */}
-                            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
-                              freshrss
+                    {!isCollapsed && !feedsLoading && (
+                      <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
+                        {childFeeds.map((feed) => (
+                          <li
+                            key={feed.freshrssId}
+                            className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+                          >
+                            <span className="text-sm">
+                              {feed.title}{" "}
+                              <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                                freshrss
+                              </span>
+                              <span className="mt-0.5 block text-xs italic text-sepia">
+                                {feed.articleCount === 0
+                                  ? "0 article récupéré pour l'instant"
+                                  : `${feed.articleCount} article${feed.articleCount > 1 ? "s" : ""} récupéré${feed.articleCount > 1 ? "s" : ""}, ${feed.visibleArticleCount} visible${feed.visibleArticleCount > 1 ? "s" : ""} en direct`}
+                              </span>
                             </span>
-                            {/* Même compte réel qu'en /admin, section flux
-                                personnalisés — cohérence entre les deux
-                                sections, et utile pour diagnostiquer un flux
-                                FreshRSS silencieusement vide côté DailySpoon. */}
-                            <span className="mt-0.5 block text-xs italic text-sepia">
-                              {feed.articleCount === 0
-                                ? "0 article récupéré pour l'instant"
-                                : `${feed.articleCount} article${feed.articleCount > 1 ? "s" : ""} récupéré${feed.articleCount > 1 ? "s" : ""}, ${feed.visibleArticleCount} visible${feed.visibleArticleCount > 1 ? "s" : ""} en direct`}
-                            </span>
-                          </span>
-                          <div className="flex shrink-0 items-center gap-4">
-                            <label className="flex items-center gap-2 text-xs italic text-sepia">
-                              <input
-                                type="checkbox"
-                                checked={feed.medal}
-                                onChange={() => toggleMedal(feed)}
-                                className="accent-journal"
-                              />
-                              médaille
-                            </label>
-                            <label className="flex items-center gap-2 text-xs italic text-sepia">
-                              <input
-                                type="checkbox"
-                                checked={feed.included}
-                                onChange={() => toggleFeed(feed)}
-                                className="accent-ink"
-                              />
-                              inclure le flux
-                            </label>
-                          </div>
-                        </li>
-                      ))}
-                      {childCustomFeeds.map((feed) => renderCustomFeedRow(feed, true))}
-                      {childFeeds.length === 0 && childCustomFeeds.length === 0 && (
-                        <p className="py-1.5 text-xs italic text-sepia">
-                          Aucun flux trouvé pour cette catégorie.
-                        </p>
-                      )}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-            {categories.length === 0 && (
-              <p className="py-6 text-center italic text-sepia">
-                Aucune catégorie trouvée dans FreshRSS.
-              </p>
-            )}
+                            <div className="flex shrink-0 items-center gap-4">
+                              <label className="flex items-center gap-2 text-xs italic text-sepia">
+                                <input
+                                  type="checkbox"
+                                  checked={feed.medal}
+                                  onChange={() => toggleMedal(feed)}
+                                  className="accent-journal"
+                                />
+                                médaille
+                              </label>
+                              <label className="flex items-center gap-2 text-xs italic text-sepia">
+                                <input
+                                  type="checkbox"
+                                  checked={feed.included}
+                                  onChange={() => toggleFeed(feed)}
+                                  className="accent-ink"
+                                />
+                                inclure le flux
+                              </label>
+                            </div>
+                          </li>
+                        ))}
+                        {childCustomFeeds.map((feed) => renderCustomFeedRow(feed, true))}
+                        {childFeeds.length === 0 && childCustomFeeds.length === 0 && (
+                          <p className="py-1.5 text-xs italic text-sepia">
+                            Aucun flux trouvé pour cette catégorie.
+                          </p>
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                );
+              });
+            })()}
           </ul>
 
           {!feedsLoading &&
@@ -1059,9 +1137,10 @@ export default function AdminCategoriesPage() {
         <a href="/admin/settings" className="underline">
           /admin/settings
         </a>
-        . Gestion centralisée ci-dessous : chaque flux n’apparaît qu’une seule fois, sous sa
-        catégorie (perso rattachée à une vraie catégorie FreshRSS : voir aussi « Catégories & flux »
-        plus haut).
+        . Gestion et affichage entièrement centralisés dans « Catégories & flux » ci-dessus : la
+        catégorie perso que tu crées ici y apparaît immédiatement, mêlée aux catégories FreshRSS,
+        chacune identifiée par un tag (« FreshRSS » ou « Perso ») — plus de liste séparée en double
+        ici, uniquement la création.
       </p>
 
       <div className="mb-6 flex flex-wrap items-center gap-3 border-b-2 border-ink pb-4">
@@ -1139,71 +1218,8 @@ export default function AdminCategoriesPage() {
 
       {customFeedsError && <p className="mb-3 text-sm text-journal">{customFeedsError}</p>}
       {customCategoriesError && <p className="mb-3 text-sm text-journal">{customCategoriesError}</p>}
-      {customFeedsLoading || customCategoriesLoading ? (
+      {(customFeedsLoading || customCategoriesLoading) && (
         <p className="italic text-sepia">Chargement...</p>
-      ) : customCategories.length === 0 ? (
-        <p className="py-4 text-center italic text-sepia">Aucune catégorie personnalisée pour l’instant.</p>
-      ) : (
-        <ul className="border-t-2 border-ink">
-          {customCategories.map((cat) => {
-            const catFeeds = customFeeds.filter((f) => f.customCategoryId === cat.id);
-            const isCollapsed = customCollapsed.has(cat.id);
-            return (
-              <li key={cat.id} className="border-b border-ink/30">
-                <div className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleCustomExpanded(cat.id)}
-                    className="flex items-center gap-2 text-left font-display font-bold hover:underline"
-                  >
-                    <span className="inline-block w-3 text-xs text-sepia">{isCollapsed ? "▸" : "▾"}</span>
-                    {cat.label}
-                    <span className="text-xs font-normal italic text-sepia">({catFeeds.length})</span>
-                    <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
-                      perso
-                    </span>
-                  </button>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 text-xs italic text-sepia">
-                      <input
-                        type="checkbox"
-                        checked={cat.frontPageEnabled}
-                        onChange={() => toggleCustomCategoryFrontPage(cat)}
-                        className="accent-ink"
-                      />
-                      impression IA
-                    </label>
-                    <label className="flex items-center gap-2 text-xs italic text-sepia">
-                      <input
-                        type="checkbox"
-                        checked={cat.selected}
-                        onChange={() => toggleCustomCategorySelected(cat)}
-                        className="accent-ink"
-                      />
-                      inclure la catégorie
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => deleteCustomCategory(cat)}
-                      className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-
-                {!isCollapsed && (
-                  <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
-                    {catFeeds.map((feed) => renderCustomFeedRow(feed))}
-                    {catFeeds.length === 0 && (
-                      <p className="py-1.5 text-xs italic text-sepia">Aucun flux dans cette catégorie.</p>
-                    )}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
       )}
       </CollapsibleSection>
 
