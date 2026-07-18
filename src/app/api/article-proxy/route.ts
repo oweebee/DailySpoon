@@ -844,16 +844,19 @@ export async function GET(req: NextRequest) {
   const articleRecord = await prisma.article
     .findFirst({
       where: { sourceUrl: originalUrl },
-      select: { id: true, favorite: true, sourceExcerpt: true, summary: true, sourceTitle: true }
+      select: { id: true, favorite: true, sourceExcerpt: true, summary: true, sourceTitle: true, headline: true }
     })
     .catch(() => null);
   const articleId = articleRecord?.id ?? null;
   const favorite = articleRecord?.favorite ?? false;
   const fallbackExcerpt = articleRecord?.summary?.trim() || articleRecord?.sourceExcerpt?.trim() || null;
   // Même titre que celui déjà affiché en vignette (accueil, En direct) —
-  // plus parlant que "Reddit indisponible..."/"Article non extrait" quand
-  // on a un vrai texte de repli à montrer en dessous.
-  const fallbackTitle = articleRecord?.sourceTitle?.trim() || null;
+  // headline (réécrit par l'IA, ex. en français) prioritaire sur sourceTitle
+  // (brut, langue d'origine) : même ordre de priorité que partout ailleurs
+  // dans l'appli (EditionView/CategoryColumn affichent headline||sourceTitle)
+  // — sinon on se retrouvait avec un titre anglais au-dessus d'un texte
+  // français, incohérent avec la vignette.
+  const fallbackTitle = articleRecord?.headline?.trim() || articleRecord?.sourceTitle?.trim() || null;
 
   // Le message d'avertissement passe APRÈS le texte récupéré (pas avant) et
   // dans un encadré grisé sur toute la largeur de la zone de texte — même
