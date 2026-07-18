@@ -22,3 +22,19 @@ export const REDLIB_INSTANCES = [
 export function isRedditHostname(hostname: string): boolean {
   return /(^|\.)reddit\.com$/i.test(hostname);
 }
+
+// Les posts Reddit à média (image/vidéo) donnent souvent, dans le flux RSS
+// (surtout via un miroir Redlib), un lien direct vers le CDN média de
+// Reddit comme URL canonique de l'item — plutôt que le lien de la
+// discussion (reddit.com/.../comments/...). Ces domaines ne sont ni des
+// pages HTML classiques (Readability n'y trouve rien) ni embarquables en
+// iframe (Reddit bloque X-Frame-Options même sur ces sous-domaines) : il
+// faut les détecter à part pour les afficher directement plutôt que de
+// tomber sur la page de repli iframe (cassée, voir article-proxy).
+export function isRedditImageHostname(hostname: string): boolean {
+  return /(^|\.)i\.redd\.it$/i.test(hostname) || /(^|\.)preview\.redd\.it$/i.test(hostname);
+}
+
+export function isRedditVideoHostname(hostname: string): boolean {
+  return /(^|\.)v\.redd\.it$/i.test(hostname);
+}

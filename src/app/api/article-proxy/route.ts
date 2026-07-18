@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
-import { REDLIB_INSTANCES, isRedditHostname } from "@/lib/reddit";
+import { REDLIB_INSTANCES, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -22,6 +22,10 @@ function escapeHtml(s: string): string {
 
 function proxyImageUrl(absoluteUrl: string): string {
   return `/api/image-proxy?url=${encodeURIComponent(absoluteUrl)}`;
+}
+
+function proxyVideoUrl(absoluteUrl: string): string {
+  return `/api/video-proxy?url=${encodeURIComponent(absoluteUrl)}`;
 }
 
 // Beaucoup de sites glissent, après le vrai texte de l'article mais toujours
@@ -795,6 +799,67 @@ export async function GET(req: NextRequest) {
     .catch(() => null);
   const articleId = articleRecord?.id ?? null;
   const favorite = articleRecord?.favorite ?? false;
+
+  // Certains posts Reddit à média donnent, dans le flux RSS (surtout via un
+  // miroir Redlib), un lien DIRECT vers le CDN média (i.redd.it/v.redd.it)
+  // comme URL de l'article plutôt que le lien de la discussion — ni une
+  // page HTML (Readability n'y trouve rien), ni embarquable en iframe
+  // (Reddit bloque X-Frame-Options dessus aussi) : sans ce cas à part, ça
+  // tombait sur la page de repli iframe, cassée. On les affiche donc
+  // directement.
+  if (isRedditImageHostname(parsed.hostname)) {
+    return htmlResponse(
+      renderPage({
+        title: "Image Reddit",
+        siteName: "reddit.com",
+        bodyHtml: `<p style="text-align:center;"><img src="${proxyImageUrl(originalUrl)}" alt="" /></p>`,
+        originalUrl,
+        articleId,
+        favorite
+      })
+    );
+  }
+
+  if (isRedditVideoHostname(parsed.hostname)) {
+    // v.redd.it ne sert jamais de fichier vidéo à sa racine — il faut
+    // deviner un des chemins DASH_<résolution>.mp4 habituels. Limite
+    // connue et non contournable simplement : cette piste vidéo est SANS
+    // LE SON (Reddit sert l'audio à part, la remuxer demanderait du
+    // traitement serveur type ffmpeg, hors de portée ici) — best-effort,
+    // testé en cascade côté client jusqu'à trouver une résolution
+    // disponible, avec un mot vers "Voir l'original" pour le son.
+    const base = `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`.replace(/\/+$/, "");
+    const candidates = ["1080", "720", "480", "360", "240"].map((res) => proxyVideoUrl(`${base}/DASH_${res}.mp4`));
+    const bodyHtml = `
+      <p style="text-align:center;">
+        <video id="reddit-video" controls preload="metadata" style="max-width:100%;border:1px solid #1a1a1a;box-shadow:3px 3px 0 rgba(26,26,26,0.15);"></video>
+      </p>
+      <p style="text-align:center;font-size:0.8em;font-style:italic;">Vidéo Reddit sans son (limitation technique de ce serveur) — pour la version complète avec le son, utilise « Voir l'original » en haut de page.</p>
+      <script>
+        (function () {
+          var candidates = ${JSON.stringify(candidates)};
+          var video = document.getElementById("reddit-video");
+          var i = 0;
+          function tryNext() {
+            if (i >= candidates.length) return;
+            video.src = candidates[i++];
+          }
+          video.addEventListener("error", tryNext);
+          tryNext();
+        })();
+      </script>
+    `;
+    return htmlResponse(
+      renderPage({
+        title: "Vidéo Reddit",
+        siteName: "reddit.com",
+        bodyHtml,
+        originalUrl,
+        articleId,
+        favorite
+      })
+    );
+  }
 
   if (isRedditPostUrl(parsed)) {
     // 1) Miroir Redlib (best-effort, voir REDLIB_INSTANCES) : rendu HTML
