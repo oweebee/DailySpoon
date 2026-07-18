@@ -1107,27 +1107,40 @@ export default function AdminCategoriesPage() {
                     className={`border-b border-ink/30 transition-colors hover:bg-ink/5 ${draggedId === cat.freshrssId ? "opacity-40" : ""}`}
                   >
                     <div className="flex items-center justify-between gap-4 py-3">
-                      <button
-                        type="button"
-                        draggable
-                        onDragStart={() => setDraggedId(cat.freshrssId)}
-                        onDragEnd={() => setDraggedId(null)}
-                        onClick={() => toggleExpanded(cat.freshrssId)}
-                        className="flex cursor-grab items-center gap-2 text-left font-display font-bold hover:underline active:cursor-grabbing"
-                      >
-                        <span className="inline-block w-3 text-xs text-sepia">
-                          {isCollapsed ? "▸" : "▾"}
+                      <div className="flex items-center gap-2">
+                        {/* Poignée de glissé séparée du bouton de dépliage : un
+                            seul élément à la fois draggable ET cliquable fait
+                            que le navigateur interprète parfois un simple clic
+                            comme un début de glissé (surtout au 2e clic), ce
+                            qui bloquait le repli. */}
+                        <span
+                          draggable
+                          onDragStart={() => setDraggedId(cat.freshrssId)}
+                          onDragEnd={() => setDraggedId(null)}
+                          title="Glisser pour réordonner"
+                          className="cursor-grab select-none px-1 text-sepia active:cursor-grabbing"
+                        >
+                          ⠿
                         </span>
-                        {cat.label}
-                        {!feedsLoading && (
-                          <span className="text-xs font-normal italic text-sepia">
-                            ({childFeeds.length + childCustomFeeds.length})
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(cat.freshrssId)}
+                          className="flex items-center gap-2 text-left font-display font-bold hover:underline"
+                        >
+                          <span className="inline-block w-3 text-xs text-sepia">
+                            {isCollapsed ? "▸" : "▾"}
                           </span>
-                        )}
-                        <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
-                          freshrss
-                        </span>
-                      </button>
+                          {cat.label}
+                          {!feedsLoading && (
+                            <span className="text-xs font-normal italic text-sepia">
+                              ({childFeeds.length + childCustomFeeds.length})
+                            </span>
+                          )}
+                          <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                            freshrss
+                          </span>
+                        </button>
+                      </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-4">
                         {childCustomFeeds.length > 0 && (
                           <label className="flex items-center gap-2 text-xs italic text-sepia">

@@ -155,6 +155,38 @@ export async function recomputeAllCustomFeedIncluded(): Promise<void> {
   }
 }
 
+/**
+ * Complément indispensable à recomputeAllCustomFeedIncluded ci-dessus : celle-
+ * ci ne boucle QUE sur les CustomFeed encore existants, donc si un flux/une
+ * catégorie perso est supprimé alors qu'un de ses articles était resté
+ * included=true (quelle qu'en soit la raison, y compris un bug antérieur déjà
+ * corrigé), plus rien ne le revisite jamais — il reste affiché "en direct"
+ * pour toujours, orphelin de toute config. Repéré via le cas concret d'une
+ * catégorie perso "test" supprimée dont un article traînait encore dans "En
+ * direct". Ici on part de la DIRECTION INVERSE : tout article included=true
+ * dont le feedId ressemble à un flux perso ("custom-feed:...") mais qui ne
+ * correspond à AUCUN CustomFeed actuel est décoché.
+ */
+export async function recomputeOrphanedCustomFeedArticles(): Promise<void> {
+  const feeds = await prisma.customFeed.findMany({ select: { id: true } });
+  const currentFeedIds = new Set(feeds.map((f) => customFeedFreshrssId(f.id)));
+
+  const orphanCandidates = await prisma.article.findMany({
+    where: { included: true, feedId: { startsWith: "custom-feed:" } },
+    select: { id: true, feedId: true },
+    distinct: ["feedId"]
+  });
+  const orphanFeedIds = orphanCandidates
+    .map((a) => a.feedId)
+    .filter((id): id is string => Boolean(id) && !currentFeedIds.has(id!));
+  if (orphanFeedIds.length === 0) return;
+
+  await prisma.article.updateMany({
+    where: { feedId: { in: orphanFeedIds }, included: true },
+    data: { included: false }
+  });
+}
+
 const parser = new Parser({
   // Certaines URL de flux perso pointent DIRECTEMENT vers une instance morss
   // (voir /admin/categories, champ URL du flux) plutôt que vers la source
@@ -441,6 +473,14 @@ export async function syncCustomFeeds(force = false): Promise<{ fetched: number 
   // le commentaire de recomputeAllCustomFeedIncluded.
   await recomputeAllCustomFeedIncluded().catch(async (err) => {
     await writeLog("error", "custom-feeds", "recomputeAllCustomFeedIncluded a échoué", (err as Error)?.message);
+  });
+  await recomputeOrphanedCustomFeedArticles().catch(async (err) => {
+    await writeLog(
+      "error",
+      "custom-feeds",
+      "recomputeOrphanedCustomFeedArticles a échoué",
+      (err as Error)?.message
+    );
   });
   return { fetched: items.length };
 }
