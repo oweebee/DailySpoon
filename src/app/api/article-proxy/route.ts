@@ -476,18 +476,25 @@ function renderPage(opts: {
     color: #3a3a3a;
   }
   /* Bouton "timbre" — même fond de timbre-poste que côté app React (voir
-     public/stamps/stamp-md.png, globals.css .stamp-bg-md), stretché aux
-     dimensions du bouton. Répliqué en CSS pur ici puisque cette page est
-     servie hors du bundle Tailwind (rendu HTML brut pour l'iframe de
-     lecture) — même chemin /stamps/ (dossier public, servi tel quel). */
+     public/stamps/stamp-md.png, globals.css .stamp-bg-md). Ratio RÉEL de
+     l'image imposé via "aspect-ratio" (700/270, dimensions exactes du
+     fichier) plutôt qu'étiré aux dimensions du bouton — sinon les
+     perforations rondes de l'image se déforment en ovales. La largeur
+     (texte + padding horizontal) pilote donc la hauteur, jamais l'inverse.
+     Répliqué en CSS pur ici puisque cette page est servie hors du bundle
+     Tailwind (rendu HTML brut pour l'iframe de lecture) — même chemin
+     /stamps/ (dossier public, servi tel quel). */
   .stamp-link {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background-image: url("/stamps/stamp-md.png");
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 100% 100%;
+    background-size: contain;
+    aspect-ratio: 700 / 270;
     color: #f0f0f0;
-    padding: 0.7em 1.5em;
+    padding: 0 1.6em;
     font-family: Georgia, serif;
     font-size: 0.7rem;
     text-transform: uppercase;

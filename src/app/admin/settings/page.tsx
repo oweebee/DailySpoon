@@ -478,14 +478,14 @@ export default function AdminSettingsPage() {
             <button
               onClick={save}
               disabled={saving}
-              className="stamp-button stamp-bg-md px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
             >
               {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
             <button
               onClick={test}
               disabled={testing}
-              className="stamp-button stamp-bg-md px-4 py-2 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
             >
               {testing ? "Test en cours..." : "Tester les réglages"}
             </button>

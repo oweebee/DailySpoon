@@ -114,23 +114,34 @@ body {
   box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
 }
 
-/* Fonds de timbre — 3 tailles/ratios (voir public/stamps/), stretchées
-   exactement aux dimensions EXISTANTES du bouton (background-size 100% 100%)
-   plutôt que conservées à leur ratio d'origine : les boutons gardent donc
-   leurs dimensions actuelles (padding/texte inchangés), seul le fond change.
-   sm = le plus "carré" (ratio ~2:1) pour les libellés courts (En direct),
-   md = intermédiaire (~2.9:1) pour la plupart des boutons, lg = le plus
-   large/plat (~4.5:1) pour le texte le plus long (Lancer l'impression). */
+/* Fonds de timbre — 3 tailles/ratios (voir public/stamps/). Le ratio RÉEL de
+   chaque image est imposé au bouton via "aspect-ratio" (plutôt que
+   d'étirer l'image aux dimensions du bouton, ce qui déformait les
+   perforations rondes en ovales — moche, et une vraie déformation du visuel
+   fourni) : c'est donc la largeur du bouton (texte + padding horizontal)
+   qui pilote sa hauteur, jamais l'inverse. "background-size: contain" en
+   filet de sécurité, au cas où le contenu forcerait une largeur qui ne
+   respecte plus exactement le ratio. PAS de "display" ici volontairement :
+   une règle CSS non "layered" comme celle-ci passe TOUJOURS devant les
+   classes Tailwind (même avec des utilitaires responsives type
+   hidden/md:flex) — y toucher casserait l'affichage conditionnel
+   mobile/desktop du timbre "En direct" (voir Masthead.tsx). Le
+   flex/items-center/justify-center se pose donc côté JSX, en utilitaires
+   Tailwind classiques.
+   sm = le plus "carré" pour les libellés courts (En direct), md =
+   intermédiaire pour la plupart des boutons, lg = le plus large/plat pour
+   le texte le plus long (Lancer l'impression). Ratios = dimensions réelles
+   des fichiers dans public/stamps/. */
 .stamp-bg-sm,
 .stamp-bg-md,
 .stamp-bg-lg {
   background-repeat: no-repeat;
   background-position: center;
-  background-size: 100% 100%;
+  background-size: contain;
 }
-.stamp-bg-sm { background-image: url("/stamps/stamp-sm.png"); }
-.stamp-bg-md { background-image: url("/stamps/stamp-md.png"); }
-.stamp-bg-lg { background-image: url("/stamps/stamp-lg.png"); }
+.stamp-bg-sm { background-image: url("/stamps/stamp-sm.png"); aspect-ratio: 600 / 406; }
+.stamp-bg-md { background-image: url("/stamps/stamp-md.png"); aspect-ratio: 700 / 270; }
+.stamp-bg-lg { background-image: url("/stamps/stamp-lg.png"); aspect-ratio: 900 / 205; }
 
 /* Ouverture du lecteur d'article interne : la page pivote depuis sa
    tranche gauche pour s'ouvrir face à l'écran, comme une page de journal

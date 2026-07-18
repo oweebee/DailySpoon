@@ -57,7 +57,7 @@ export function PrintStampButton({ provider }: { provider?: string }) {
       <button
         onClick={print}
         disabled={printing}
-        className="stamp-button stamp-bg-lg px-6 py-3 font-display text-xs uppercase tracking-[0.25em] text-paper disabled:opacity-50"
+        className="stamp-button stamp-bg-lg inline-flex items-center justify-center px-6 font-display text-xs uppercase tracking-[0.25em] text-paper disabled:opacity-50"
       >
         {printing ? "Impression en cours..." : "Lancer l'impression du journal"}
       </button>
