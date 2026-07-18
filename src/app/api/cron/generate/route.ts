@@ -24,11 +24,19 @@ export async function POST(req: NextRequest) {
   try {
     // Balayage des flux personnalisés AVANT la génération, pour que leurs
     // nouveaux articles (zéro coût IA, voir customFeeds.ts) fassent partie
-    // du même vivier que celui que generateDailyEdition va afficher/traiter
-    // — sinon un clic sur "Aspirer les news" ne rafraîchirait pas un flux
-    // perso tout juste ajouté, qui devrait sinon attendre le prochain tick
-    // du worker (jusqu'à 1mn) ET son propre intervalle de récupération.
-    await syncCustomFeeds().catch((err) => {
+    // du même vivier que celui que generateDailyEdition va afficher/traiter.
+    //
+    // Forcé (bypass de l'intervalle customFeedsIntervalMinutes) exactement
+    // quand forceNoAi l'est aussi — c'est-à-dire pour TOUTE "aspiration sans
+    // IA", qu'elle soit déclenchée à la main ("Aspirer les news"/"Régénérer
+    // maintenant") OU automatiquement par le worker (aspiration de secours
+    // toutes les FALLBACK_INTERVAL_HOURS, ~3h) : dans les deux cas
+    // l'utilisateur/le cycle attend un VRAI aller-retour réseau à chaque
+    // fois, pas un no-op silencieux parce que l'intervalle des flux perso
+    // (réglage séparé) n'est pas encore écoulé. La vraie génération IA
+    // quotidienne (forceNoAi=false, une fois par jour) reste gatée
+    // normalement — sans enjeu vu sa fréquence.
+    await syncCustomFeeds(forceNoAi).catch((err) => {
       console.error("[cron/generate] Synchronisation des flux personnalisés échouée:", err);
     });
 

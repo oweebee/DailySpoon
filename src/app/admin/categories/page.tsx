@@ -827,6 +827,103 @@ export default function AdminCategoriesPage() {
         </CollapsibleSection>
       )}
 
+      <CollapsibleSection title="Catégories & flux personnalisés">
+      <p className="newsprint mb-6 text-sm text-neutral-700">
+        Crée d’abord une catégorie personnalisée si besoin, ajoute ensuite un flux RSS/Atom (sans
+        passer par FreshRSS) en choisissant où le ranger — une catégorie FreshRSS existante (le flux
+        est alors traité en tout point comme un flux FreshRSS de cette catégorie, affichage En direct
+        et génération IA compris), une catégorie personnalisée déjà créée, ou une toute nouvelle
+        catégorie créée à la volée. Mêmes cases qu’un flux FreshRSS (inclure, médaille), même
+        filtrage/mise en forme, récupérés à l’intervalle global réglable dans{" "}
+        <a href="/admin/settings" className="underline">
+          /admin/settings
+        </a>
+        . Gestion et affichage entièrement centralisés dans « Catégories & flux » ci-dessus : la
+        catégorie perso que tu crées ici y apparaît immédiatement, mêlée aux catégories FreshRSS,
+        chacune identifiée par un tag (« FreshRSS » ou « Perso ») — plus de liste séparée en double
+        ici, uniquement la création.
+      </p>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3 border-b-2 border-ink pb-4">
+        <button
+          type="button"
+          onClick={forceSyncCustomFeeds}
+          disabled={forcingSync}
+          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
+        >
+          {forcingSync ? "Récupération en cours..." : "Forcer la récupération maintenant"}
+        </button>
+        {forceSyncMessage && <p className="text-sm italic text-sepia">{forceSyncMessage}</p>}
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-ink/30 pb-4">
+        <input
+          type="text"
+          value={newCategoryLabel}
+          onChange={(e) => setNewCategoryLabel(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && createCustomCategory()}
+          placeholder="Nom de la nouvelle catégorie"
+          className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
+        />
+        <button
+          type="button"
+          onClick={createCustomCategory}
+          disabled={creatingCategory || !newCategoryLabel.trim()}
+          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
+        >
+          {creatingCategory ? "Création..." : "Créer la catégorie"}
+        </button>
+      </div>
+
+      <div className="mb-6 space-y-2 border-b-2 border-ink pb-4">
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="url"
+            value={feedForm.url}
+            onChange={(e) => setFeedForm((prev) => ({ ...prev, url: e.target.value }))}
+            placeholder="URL du flux RSS/Atom"
+            className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            value={feedForm.title}
+            onChange={(e) => setFeedForm((prev) => ({ ...prev, title: e.target.value }))}
+            placeholder="Nom personnalisé (optionnel)"
+            className="w-48 border border-ink/40 bg-transparent px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <CategorySelectField
+            value={feedForm.categoryChoice}
+            onChange={(v) => setFeedForm((prev) => ({ ...prev, categoryChoice: v }))}
+            newLabel={feedForm.newCategoryLabel}
+            onNewLabelChange={(v) => setFeedForm((prev) => ({ ...prev, newCategoryLabel: v }))}
+            freshrssCategories={categories}
+            customCats={customCategories}
+          />
+          <button
+            type="button"
+            onClick={addCustomFeed}
+            disabled={
+              addingFeed ||
+              !feedForm.url.trim() ||
+              !feedForm.categoryChoice ||
+              (feedForm.categoryChoice === "new" && !feedForm.newCategoryLabel.trim())
+            }
+            className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+          >
+            {addingFeed ? "Ajout..." : "Ajouter le flux"}
+          </button>
+        </div>
+      </div>
+
+      {customFeedsError && <p className="mb-3 text-sm text-journal">{customFeedsError}</p>}
+      {customCategoriesError && <p className="mb-3 text-sm text-journal">{customCategoriesError}</p>}
+      {(customFeedsLoading || customCategoriesLoading) && (
+        <p className="italic text-sepia">Chargement...</p>
+      )}
+      </CollapsibleSection>
+
       <CollapsibleSection title="Catégories & flux">
       {!loading && !error && categories.length > 0 && (
         <div className="mb-3 flex justify-end gap-3 text-xs uppercase tracking-[0.2em] text-sepia">
@@ -1126,103 +1223,6 @@ export default function AdminCategoriesPage() {
       )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Catégories & flux personnalisés">
-      <p className="newsprint mb-6 text-sm text-neutral-700">
-        Crée d’abord une catégorie personnalisée si besoin, ajoute ensuite un flux RSS/Atom (sans
-        passer par FreshRSS) en choisissant où le ranger — une catégorie FreshRSS existante (le flux
-        est alors traité en tout point comme un flux FreshRSS de cette catégorie, affichage En direct
-        et génération IA compris), une catégorie personnalisée déjà créée, ou une toute nouvelle
-        catégorie créée à la volée. Mêmes cases qu’un flux FreshRSS (inclure, médaille), même
-        filtrage/mise en forme, récupérés à l’intervalle global réglable dans{" "}
-        <a href="/admin/settings" className="underline">
-          /admin/settings
-        </a>
-        . Gestion et affichage entièrement centralisés dans « Catégories & flux » ci-dessus : la
-        catégorie perso que tu crées ici y apparaît immédiatement, mêlée aux catégories FreshRSS,
-        chacune identifiée par un tag (« FreshRSS » ou « Perso ») — plus de liste séparée en double
-        ici, uniquement la création.
-      </p>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3 border-b-2 border-ink pb-4">
-        <button
-          type="button"
-          onClick={forceSyncCustomFeeds}
-          disabled={forcingSync}
-          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
-        >
-          {forcingSync ? "Récupération en cours..." : "Forcer la récupération maintenant"}
-        </button>
-        {forceSyncMessage && <p className="text-sm italic text-sepia">{forceSyncMessage}</p>}
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-ink/30 pb-4">
-        <input
-          type="text"
-          value={newCategoryLabel}
-          onChange={(e) => setNewCategoryLabel(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && createCustomCategory()}
-          placeholder="Nom de la nouvelle catégorie"
-          className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
-        />
-        <button
-          type="button"
-          onClick={createCustomCategory}
-          disabled={creatingCategory || !newCategoryLabel.trim()}
-          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
-        >
-          {creatingCategory ? "Création..." : "Créer la catégorie"}
-        </button>
-      </div>
-
-      <div className="mb-6 space-y-2 border-b-2 border-ink pb-4">
-        <div className="flex flex-wrap gap-2">
-          <input
-            type="url"
-            value={feedForm.url}
-            onChange={(e) => setFeedForm((prev) => ({ ...prev, url: e.target.value }))}
-            placeholder="URL du flux RSS/Atom"
-            className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
-          />
-          <input
-            type="text"
-            value={feedForm.title}
-            onChange={(e) => setFeedForm((prev) => ({ ...prev, title: e.target.value }))}
-            placeholder="Nom personnalisé (optionnel)"
-            className="w-48 border border-ink/40 bg-transparent px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CategorySelectField
-            value={feedForm.categoryChoice}
-            onChange={(v) => setFeedForm((prev) => ({ ...prev, categoryChoice: v }))}
-            newLabel={feedForm.newCategoryLabel}
-            onNewLabelChange={(v) => setFeedForm((prev) => ({ ...prev, newCategoryLabel: v }))}
-            freshrssCategories={categories}
-            customCats={customCategories}
-          />
-          <button
-            type="button"
-            onClick={addCustomFeed}
-            disabled={
-              addingFeed ||
-              !feedForm.url.trim() ||
-              !feedForm.categoryChoice ||
-              (feedForm.categoryChoice === "new" && !feedForm.newCategoryLabel.trim())
-            }
-            className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
-          >
-            {addingFeed ? "Ajout..." : "Ajouter le flux"}
-          </button>
-        </div>
-      </div>
-
-      {customFeedsError && <p className="mb-3 text-sm text-journal">{customFeedsError}</p>}
-      {customCategoriesError && <p className="mb-3 text-sm text-journal">{customCategoriesError}</p>}
-      {(customFeedsLoading || customCategoriesLoading) && (
-        <p className="italic text-sepia">Chargement...</p>
-      )}
-      </CollapsibleSection>
-
       <SpoonDivider />
     </main>
   );
@@ -1258,35 +1258,4 @@ function CategorySelectField({
         <option value="" disabled>
           Choisir une catégorie...
         </option>
-        {freshrssCategories.length > 0 && (
-          <optgroup label="Catégories FreshRSS">
-            {freshrssCategories.map((c) => (
-              <option key={c.freshrssId} value={`fr:${c.freshrssId}`}>
-                {c.label}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {customCats.length > 0 && (
-          <optgroup label="Catégories personnalisées">
-            {customCats.map((c) => (
-              <option key={c.id} value={`cu:${c.id}`}>
-                {c.label}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        <option value="new">+ Créer une nouvelle catégorie personnalisée…</option>
-      </select>
-      {value === "new" && (
-        <input
-          type="text"
-          value={newLabel}
-          onChange={(e) => onNewLabelChange(e.target.value)}
-          placeholder="Nom de la nouvelle catégorie"
-          className="min-w-[200px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
-        />
-      )}
-    </>
-  );
-}
+        {freshrssCa
