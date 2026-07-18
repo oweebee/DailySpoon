@@ -46,6 +46,19 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
     setState(null);
   }
 
+  // Requête de recherche pour le bouton "Chercher sur Google" — le titre de
+  // la news si on l'a (cas normal), sinon le nom de domaine du lien source
+  // en dernier recours plutôt qu'une exception (new URL() peut planter sur
+  // une URL mal formée, jamais souhaitable en plein rendu).
+  function googleSearchQuery(url: string, title?: string): string {
+    if (title) return title;
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  }
+
   return (
     <ArticleModalContext.Provider value={{ openArticle }}>
       {children}
@@ -61,13 +74,20 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
           >
             <div className="flex items-center justify-end gap-4 border-b-2 border-ink px-4 py-2.5">
               <div className="flex shrink-0 items-center gap-4 text-xs uppercase tracking-[0.2em]">
+                {
+                  // Recherche Google sur le TITRE de la news (pas l'URL) —
+                  // utile quand l'extraction de l'article a échoué (voir
+                  // article-proxy) ou pour retrouver d'autres sources sur le
+                  // même sujet. Repli sur le nom de domaine si jamais aucun
+                  // titre n'a été transmis (ArticleLink, title optionnel).
+                }
                 <a
-                  href={state.url}
+                  href={`https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery(state.url, state.title))}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:underline"
                 >
-                  Ouvrir dans un nouvel onglet ↗
+                  Chercher sur Google ↗
                 </a>
                 <button onClick={close} className="font-bold hover:underline" aria-label="Fermer">
                   ✕ Fermer
