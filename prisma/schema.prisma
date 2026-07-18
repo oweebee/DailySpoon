@@ -334,5 +334,38 @@ model Settings {
   // à fetchCustomFeedItems() de savoir si l'intervalle ci-dessus est déjà
   // écoulé, indépendamment de la cadence à laquelle le worker l'appelle.
   customFeedsLastFetchedAt  DateTime?
+  // Rétention (en minutes) de la page de logs (/admin/logs, LogEntry
+  // ci-dessous) : 60 (1h), 1440 (1j, défaut), 10080 (1 semaine), 43200
+  // (1 mois), 0 = illimité (jamais purgé). Complètement indépendant de
+  // retentionDays (qui ne concerne que les articles/éditions).
+  logRetentionMinutes Int?
   updatedAt           DateTime @default(now()) @updatedAt
+}
+
+// Journal technique persistant (visible dans /admin/logs) : trace les
+// événements utiles pour diagnostiquer "est-ce que tout se passe bien" sans
+// devoir aller fouiller les logs bruts du conteneur Coolify — récupération
+// des flux (persos ET FreshRSS), génération d'édition, appels IA, tick du
+// worker. Volontairement séparé d'Article/Edition (données produit) : une
+// simple table d'événements, purgée par pruneOldLogs() selon
+// Settings.logRetentionMinutes, sans lien de clé étrangère vers rien
+// d'autre.
+model LogEntry {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  // "info" (déroulement normal), "warn" (dégradé mais pas bloquant, ex. un
+  // flux en échec parmi d'autres) ou "error" (échec net d'une opération).
+  level     String
+  // Origine courte, ex. "custom-feeds", "freshrss", "edition", "ai", "worker"
+  // — sert de filtre dans /admin/logs.
+  source    String
+  message   String
+  // Contexte additionnel optionnel (message d'erreur détaillé, nom du flux
+  // concerné...) — jamais de secret (clé API, mot de passe) : voir writeLog
+  // dans src/lib/logger.ts, qui ne reçoit que des chaînes déjà construites
+  // par l'appelant.
+  detail    String?  @db.Text
+
+  @@index([createdAt])
+  @@index([level])
 }

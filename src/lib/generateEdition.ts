@@ -13,6 +13,7 @@ import { stripHtml, looksLikeHtml, stripLeadingChrome } from "./text";
 import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
+import { writeLog } from "./logger";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
 // og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
@@ -158,9 +159,11 @@ export async function ingestRawItems(rawItems: RawItem[], editionId: string | nu
         }
       });
     } catch (err) {
-      console.error(
-        `[ingestRawItems] Échec pour "${raw.sourceTitle}" (${raw.freshrssItemId}), article ignoré :`,
-        (err as Error)?.message
+      await writeLog(
+        "error",
+        "edition",
+        `Article ignoré : "${raw.sourceTitle}"`,
+        `${raw.freshrssItemId} — ${(err as Error)?.message}`
       );
     }
   }
@@ -255,8 +258,22 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   await cleanExistingHtmlArtifacts();
   await pruneOldArticles();
 
-  const rawItems = await fetchNewItemsFromSelectedCategories();
-  console.log(`[edition] Fetched ${rawItems.length} new items from FreshRSS.`);
+  let rawItems: RawItem[];
+  try {
+    rawItems = await fetchNewItemsFromSelectedCategories();
+    await writeLog("info", "freshrss", `${rawItems.length} nouvel(aux) item(s) récupéré(s) depuis FreshRSS.`);
+  } catch (err) {
+    // Rethrow préservé tel quel (comportement inchangé, voir worker/index.ts
+    // qui logue déjà l'échec en console) — writeLog en plus pour que ce même
+    // échec soit aussi visible dans /admin/logs, pas seulement Coolify.
+    await writeLog(
+      "error",
+      "freshrss",
+      "Échec de récupération FreshRSS (auth/connexion)",
+      (err as Error)?.message
+    );
+    throw err;
+  }
 
   // Contenu à afficher : les articles publiés AUJOURD'HUI (Paris) s'il y en
   // a — sinon on retombe sur le jour le plus récent qui en a, plutôt que de
@@ -355,8 +372,10 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
         })
       );
 
-      console.log(
-        `[edition] ${aiItems.length} article(s) réécrits par l'IA ce passage ` +
+      await writeLog(
+        "info",
+        "ai",
+        `${aiItems.length} article(s) réécrits par l'IA ce passage ` +
           `(plafond ${MAX_AI_ITEMS_PER_CATEGORY}/catégorie, sur ${pending.length} en attente).`
       );
     }
@@ -438,6 +457,13 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     }
   });
 
+  await writeLog(
+    status === "published" ? "info" : "warn",
+    "edition",
+    `Génération terminée — statut "${status}", ${qualifyingArticles.length} article(s) sur la une` +
+      (options.forceNoAi ? " (mode Aspirer les news, sans IA)." : ` (${usage.inputTokens + usage.outputTokens} tokens).`)
+  );
+
   // Le contenu réel (texte, image, score...) est stocké une seule fois par
   // combinaison distincte dans ArticleSnapshotContent (déduplication par
   // empreinte) — EditionArticle ne fait plus que lier une édition à ce
@@ -499,7 +525,7 @@ async function pruneOldArticles(): Promise<void> {
     }
   });
   if (count > 0) {
-    console.log(`[edition] Rétention (${retentionDays} j) : ${count} article(s) purgé(s).`);
+    await writeLog("info", "edition", `Rétention (${retentionDays} j) : ${count} article(s) purgé(s).`);
   }
 }
 
@@ -588,7 +614,7 @@ async function curateFrontPageScores(
       })
     )
   );
-  console.log(`[edition] Une du jour recalculée par l'IA pour ${scores.size} article(s).`);
+  await writeLog("info", "ai", `Une du jour recalculée par l'IA pour ${scores.size} article(s).`);
 }
 
 /**

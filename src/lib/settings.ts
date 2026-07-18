@@ -41,6 +41,9 @@ export type AppSettings = {
    *  les flux personnalisés confondus, pas par flux/catégorie. Défaut :
    *  60 minutes. */
   customFeedsIntervalMinutes: number;
+  /** Rétention (minutes) du journal technique (/admin/logs, LogEntry). 0 =
+   *  illimité. Défaut : 1440 (1 jour) — voir src/lib/logger.ts. */
+  logRetentionMinutes: number;
 };
 
 /**
@@ -69,7 +72,8 @@ export async function getSettings(): Promise<AppSettings> {
       row?.editionScheduleEnabled ?? process.env.EDITION_SCHEDULE_ENABLED !== "false",
     writingStyle: row?.writingStyle || process.env.WRITING_STYLE || "normal",
     morssBaseUrl: (row?.morssBaseUrl || process.env.MORSS_BASE_URL || "").replace(/\/+$/, ""),
-    customFeedsIntervalMinutes: row?.customFeedsIntervalMinutes ?? 60
+    customFeedsIntervalMinutes: row?.customFeedsIntervalMinutes ?? 60,
+    logRetentionMinutes: row?.logRetentionMinutes ?? 1440
   };
 }
 
@@ -104,6 +108,7 @@ export type SettingsInput = Partial<{
   writingStyle: string | null;
   morssBaseUrl: string | null;
   customFeedsIntervalMinutes: number | null;
+  logRetentionMinutes: number | null;
 }>;
 
 /**
@@ -143,6 +148,12 @@ export async function updateSettings(input: SettingsInput): Promise<void> {
   if ("customFeedsIntervalMinutes" in input) {
     const v = input.customFeedsIntervalMinutes;
     data.customFeedsIntervalMinutes = v === null || v === undefined || Number.isNaN(v) ? null : v;
+  }
+  if ("logRetentionMinutes" in input) {
+    // 0 est une valeur volontaire ("illimité"), à bien distinguer de
+    // null/undefined (pas réglé -> retombe sur le défaut, 1 jour).
+    const v = input.logRetentionMinutes;
+    data.logRetentionMinutes = v === null || v === undefined || Number.isNaN(v) ? null : v;
   }
 
   await prisma.settings.upsert({

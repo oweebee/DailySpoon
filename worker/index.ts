@@ -4,6 +4,7 @@ import { getSettings } from "../src/lib/settings";
 import { prisma } from "../src/lib/prisma";
 import { healthCheckRedditFeeds } from "../src/lib/redditFeedHealth";
 import { syncCustomFeeds } from "../src/lib/customFeeds";
+import { writeLog, pruneOldLogs } from "../src/lib/logger";
 
 // Self-hosted daily scheduler (no Vercel cron needed).
 // Checked every minute against the current /admin/settings (or env var
@@ -53,7 +54,7 @@ async function runOnce() {
     const result = await generateDailyEdition();
     console.log("[worker] Done:", result);
   } catch (err) {
-    console.error("[worker] Generation failed:", err);
+    await writeLog("error", "worker", "Génération quotidienne échouée", (err as Error)?.message);
   }
 }
 
@@ -75,7 +76,7 @@ async function runOnceNoAi() {
     const result = await generateDailyEdition({ forceNoAi: true });
     console.log("[worker] Done:", result);
   } catch (err) {
-    console.error("[worker] Aspiration de secours échouée:", err);
+    await writeLog("error", "worker", "Aspiration de secours échouée", (err as Error)?.message);
   }
 }
 
@@ -95,10 +96,10 @@ async function maybeRunRedditHealthCheck(tz: string) {
   try {
     const result = await healthCheckRedditFeeds();
     if (result.switched.length > 0) {
-      console.log(`[worker] Flux Reddit basculés vers Redlib : ${result.switched.join(", ")}`);
+      await writeLog("info", "worker", `Flux Reddit basculés vers Redlib : ${result.switched.join(", ")}`);
     }
   } catch (err) {
-    console.error("[worker] Vérification des flux Reddit échouée:", err);
+    await writeLog("error", "worker", "Vérification des flux Reddit échouée", (err as Error)?.message);
   }
 }
 
@@ -115,12 +116,21 @@ async function maybeSyncCustomFeeds() {
       console.log(`[worker] Flux personnalisés : ${result.fetched} nouvel(aux) article(s).`);
     }
   } catch (err) {
-    console.error("[worker] Synchronisation des flux personnalisés échouée:", err);
+    // Les échecs PAR FLUX sont déjà loggués individuellement dans
+    // customFeeds.ts (writeLog "custom-feeds") — ce catch-ci ne couvre que
+    // l'échec de syncCustomFeeds() lui-même (ex. recomputeAllCustomFeedIncluded,
+    // souci DB), pas un flux précis.
+    await writeLog("error", "worker", "Synchronisation des flux personnalisés échouée", (err as Error)?.message);
   }
 }
 
 async function tick() {
   const settings = await getSettings();
+
+  // Purge du journal (/admin/logs) — DELETE indexé sur createdAt, négligeable
+  // même appelé chaque minute (voir logger.ts). S'auto-gate en interne sur
+  // Settings.logRetentionMinutes (0 = illimité, ne fait rien).
+  await pruneOldLogs();
 
   await maybeRunRedditHealthCheck(settings.editionTz);
   await maybeSyncCustomFeeds();

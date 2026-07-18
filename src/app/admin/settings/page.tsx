@@ -248,6 +248,9 @@ export default function AdminSettingsPage() {
           <a href="/admin/categories" className="hover:underline">
             ← Catégories
           </a>
+          <a href="/admin/logs" className="hover:underline">
+            Journal
+          </a>
           <button onClick={logout} className="uppercase tracking-[0.3em] hover:underline">
             Se déconnecter
           </button>

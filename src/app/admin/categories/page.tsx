@@ -705,6 +705,9 @@ export default function AdminCategoriesPage() {
         </a>
         <div className="double-rule mt-3" />
         <div className="flex items-center justify-between py-1.5 text-[0.65rem] uppercase tracking-[0.3em] text-sepia">
+          <a href="/admin/logs" className="hover:underline">
+            Journal
+          </a>
           <a href="/admin/settings" className="hover:underline">
             Réglages →
           </a>

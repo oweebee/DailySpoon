@@ -4,6 +4,7 @@ import { getSettings } from "./settings";
 import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl } from "./text";
 import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
 import { ingestRawItems } from "./generateEdition";
+import { writeLog } from "./logger";
 
 /**
  * Flux RSS/Atom ajoutés à la main depuis /admin/categories (CustomFeed),
@@ -331,6 +332,7 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
       }
 
+      let newForThisFeed = 0;
       for (const item of parsed.items) {
         const guid = item.guid || item.link || safeTitle(item.title);
         if (!guid) continue;
@@ -381,6 +383,15 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
           publishedAt: safePublishedAt(item),
           included
         });
+        newForThisFeed++;
+      }
+
+      if (newForThisFeed > 0) {
+        await writeLog(
+          "info",
+          "custom-feeds",
+          `"${feed.title}" : ${newForThisFeed} nouvel(aux) article(s) récupéré(s).`
+        );
       }
 
       await prisma.customFeed.update({
@@ -389,11 +400,12 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
       });
     } catch (err) {
       const message = (err as Error)?.message || "Échec inconnu";
-      console.warn(`[customFeeds] Échec pour "${feed.title}" (${feed.url}):`, message);
-      // Remonté dans /admin/categories (GET /api/admin/custom-feeds) — sans
-      // ça, un flux qui échoue ici en boucle semblait juste "ne jamais
-      // apparaître en En direct", sans aucune explication visible pour
-      // l'utilisateur (le seul indice restait un log serveur Coolify).
+      // Remonté aussi dans /admin/categories (GET /api/admin/custom-feeds)
+      // via lastFetchError — sans ça, un flux qui échoue ici en boucle
+      // semblait juste "ne jamais apparaître en En direct", sans aucune
+      // explication visible pour l'utilisateur (le seul indice restait un
+      // log serveur Coolify). writeLog() couvre maintenant aussi /admin/logs.
+      await writeLog("error", "custom-feeds", `Échec pour "${feed.title}"`, `${feed.url} — ${message}`);
       await prisma.customFeed
         .update({ where: { id: feed.id }, data: { lastFetchError: message } })
         .catch(() => {});

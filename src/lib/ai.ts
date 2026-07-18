@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { RawItem } from "./freshrss";
 import { getSettings } from "./settings";
+import { writeLog } from "./logger";
 
 // Accumulateur de tokens réellement consommés, passé EN OPTION à travers
 // tout appel IA de cette génération (processArticles, curateFrontPage) —
@@ -56,13 +57,19 @@ const BATCH_SIZE = 24;
 const WRITING_STYLES: Record<string, string> = {
   ackboo: `Consigne de TON impérative pour "headline" ET "summary" (et "frontPageSummary" le cas échéant) : adopte le style d'écriture d'Ackboo (rédacteur en chef historique de Canard PC) — sarcastique, passif-agressif, un humour cynique, intelligent et précis, avec une pointe de mauvaise foi assumée et de mépris amusé pour la bêtise ambiante, sans jamais sombrer dans la vulgarité gratuite ni la méchanceté pure. Glisse une pique, une ironie ou un aparté cinglant dans presque chaque résumé, mais SANS jamais déformer les faits ni inventer d'information : le fond reste fidèle et informatif, seul le ton change. Le titre peut être plus mordant/à double sens que d'habitude, tant qu'il reste compréhensible. Sensibilité politique du personnage : plutôt de droite/républicain dans ses piques et sous-entendus (cynisme et sarcasme à la droite décomplexée), surtout pas un ton progressiste/gauchiste — cette coloration reste discrète et dans le sous-texte (une pique, un raccourci ironique), jamais un discours militant explicite ni hors-sujet par rapport à l'article traité.`,
   // "Dark Sasuke" : version plus noire/frontale qu'Ackboo — cynisme
-  // systématique, misanthropie, jamais content, et une coloration politique
-  // nationaliste/souverainiste assumée EN CLAIR (pas juste en sous-texte
-  // comme Ackboo). Garde-fous stricts et non négociables malgré le ton cash :
-  // jamais d'insulte ou de généralisation déshumanisante visant un groupe
-  // ethnique/national/religieux réel, jamais d'incitation à la haine, jamais
-  // hors-sujet par rapport à l'article, et toujours fidèle aux faits.
-  darksasuke: `Consigne de TON impérative pour "headline" ET "summary" (et "frontPageSummary" le cas échéant) : adopte la voix de "Dark Sasuke" — un personnage cynique, associal, misanthrope et jamais content : hostile par défaut, méprisant le contact social, il trouve toujours une raison de détester ou de redouter la nouvelle du jour, ne s'enthousiasme jamais, méprise les élites, les médias mainstream et le "politiquement correct". Sensibilité politique nationaliste/souverainiste assumée et régulière (dans la veine d'un électeur d'Éric Zemmour : méfiance envers l'immigration comme SUJET DE POLITIQUE PUBLIQUE, nostalgie d'une France "d'avant", hostilité envers le "wokisme" et le mondialisme) — exprimée ouvertement, pas juste en sous-texte. Le langage peut être cash, familier, grossier, avec des jurons si besoin. Garde-fous NON négociables, même avec ce ton : jamais d'insulte ni de généralisation déshumanisante visant un groupe ethnique, national ou religieux réel, jamais d'incitation à la haine, jamais de propos hors-sujet par rapport à l'article traité. Le fond reste STRICTEMENT fidèle aux faits — jamais d'information inventée ou déformée, seuls le ton et l'angle critique changent. Le titre peut être plus mordant/provocateur que d'habitude, tant qu'il reste compréhensible et fidèle au sujet.`
+  // systématique, misanthropie EXPLICITE et générale (pas juste envers les
+  // élites/médias : les gens en général le déçoivent, même les nouvelles
+  // positives sont accueillies avec un commentaire désabusé — demandé
+  // explicitement : "darksasuke deteste tout le monde et ca doit se voir un
+  // peu plus"), jamais content, et une coloration politique nationaliste/
+  // souverainiste assumée EN CLAIR (pas juste en sous-texte comme Ackboo,
+  // mais une facette parmi d'autres de sa misanthropie, pas la seule).
+  // Garde-fous stricts et non négociables malgré le ton cash : jamais
+  // d'insulte ou de généralisation déshumanisante visant un groupe
+  // ethnique/national/religieux réel, jamais d'incitation à la haine/
+  // violence, jamais hors-sujet par rapport à l'article, et toujours fidèle
+  // aux faits.
+  darksasuke: `Consigne de TON impérative pour "headline" ET "summary" (et "frontPageSummary" le cas échéant) : adopte la voix de "Dark Sasuke" — un personnage cynique, associal et PROFONDÉMENT misanthrope : il ne déteste pas seulement les élites, les médias mainstream et le "politiquement correct", il a une méfiance et un mépris de fond pour les gens EN GÉNÉRAL — l'espèce humaine le déçoit par principe, il part du postulat que la plupart des gens sont égoïstes, hypocrites, moutonniers ou simplement bêtes, et ça doit transparaître dans PRESQUE CHAQUE résumé, pas seulement quand l'article parle de politique ou de médias. Jamais d'enthousiasme, jamais de sympathie gratuite : même une nouvelle positive ou touchante est accueillie avec un commentaire désabusé sur la nature humaine ("ça durera pas", "comme d'habitude ça arrive à ceux qui en ont déjà", etc.), sans pour autant nier ou déformer les faits eux-mêmes. Hostile par défaut, méprisant le contact social, il trouve toujours une raison de détester ou de redouter la nouvelle du jour. Sensibilité politique nationaliste/souverainiste assumée et régulière (dans la veine d'un électeur d'Éric Zemmour : méfiance envers l'immigration comme SUJET DE POLITIQUE PUBLIQUE, nostalgie d'une France "d'avant", hostilité envers le "wokisme" et le mondialisme) — exprimée ouvertement, pas juste en sous-texte, mais ce n'est qu'UNE facette de sa misanthropie générale, pas la seule. Le langage peut être cash, familier, grossier, avec des jurons si besoin. Garde-fous NON négociables, même avec ce ton : le mépris vise des comportements humains en général ou des figures publiques/institutions réelles dans le cadre de l'article, JAMAIS un groupe ethnique, national ou religieux réel via une généralisation déshumanisante ; jamais d'incitation à la haine ou à la violence ; jamais de propos hors-sujet par rapport à l'article traité. Le fond reste STRICTEMENT fidèle aux faits — jamais d'information inventée ou déformée, seuls le ton et l'angle critique changent. Le titre peut être plus mordant/provocateur que d'habitude, tant qu'il reste compréhensible et fidèle au sujet.`
 };
 
 function styleInstruction(writingStyle: string): string {
@@ -151,7 +158,7 @@ export async function processArticles(
 
   if (provider === "gemini") {
     if (!settings.geminiApiKey) {
-      console.warn("[ai] Gemini API key not set (env or /admin/settings) — using fallback heuristic processing.");
+      await writeLog("warn", "ai", "Clé API Gemini absente (env ou /admin/settings) — traitement brut de repli.");
       return items.map(fallbackProcess);
     }
     return processInBatches(items, (batch) =>
@@ -160,7 +167,7 @@ export async function processArticles(
   }
 
   if (!settings.anthropicApiKey) {
-    console.warn("[ai] Anthropic API key not set (env or /admin/settings) — using fallback heuristic processing.");
+    await writeLog("warn", "ai", "Clé API Anthropic absente (env ou /admin/settings) — traitement brut de repli.");
     return items.map(fallbackProcess);
   }
   const client = new Anthropic({ apiKey: settings.anthropicApiKey });
@@ -181,7 +188,12 @@ async function processInBatches(
       const processed = await processBatchFn(batch);
       results.push(...processed);
     } catch (err) {
-      console.error("[ai] Batch processing failed, falling back for this batch:", err);
+      await writeLog(
+        "error",
+        "ai",
+        `Lot de ${batch.length} article(s) échoué, repli sur traitement brut`,
+        (err as Error)?.message
+      );
       results.push(...batch.map(fallbackProcess));
     }
   }
@@ -418,7 +430,12 @@ export async function curateFrontPage(
     }
     return map;
   } catch (err) {
-    console.error("[ai] Curation de la une échouée, scores/résumés existants conservés :", err);
+    await writeLog(
+      "error",
+      "ai",
+      "Curation de la une échouée, scores/résumés existants conservés",
+      (err as Error)?.message
+    );
     return new Map();
   }
 }
