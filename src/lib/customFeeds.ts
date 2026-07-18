@@ -386,13 +386,17 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         newForThisFeed++;
       }
 
-      if (newForThisFeed > 0) {
-        await writeLog(
-          "info",
-          "custom-feeds",
-          `"${feed.title}" : ${newForThisFeed} nouvel(aux) article(s) récupéré(s).`
-        );
-      }
+      // Loggué même à 0 nouvel article (pas seulement en cas de nouveauté) —
+      // sur demande explicite : voir la vérification tourner et réussir est
+      // aussi une information utile ("tout va bien"), pas seulement les
+      // échecs ou les nouveautés.
+      await writeLog(
+        "info",
+        "custom-feeds",
+        newForThisFeed > 0
+          ? `"${feed.title}" : ${newForThisFeed} nouvel(aux) article(s) récupéré(s).`
+          : `"${feed.title}" : vérifié, aucun nouvel article.`
+      );
 
       await prisma.customFeed.update({
         where: { id: feed.id },
@@ -435,8 +439,8 @@ export async function syncCustomFeeds(force = false): Promise<{ fetched: number 
   // Passe d'auto-correction à CHAQUE appel (donc chaque tick du worker, ~1x/
   // minute), indépendamment du gating réseau ci-dessus — coût DB seul, voir
   // le commentaire de recomputeAllCustomFeedIncluded.
-  await recomputeAllCustomFeedIncluded().catch((err) => {
-    console.error("[customFeeds] recomputeAllCustomFeedIncluded a échoué:", err);
+  await recomputeAllCustomFeedIncluded().catch(async (err) => {
+    await writeLog("error", "custom-feeds", "recomputeAllCustomFeedIncluded a échoué", (err as Error)?.message);
   });
   return { fetched: items.length };
 }

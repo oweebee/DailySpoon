@@ -301,7 +301,11 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   if (rawItems.length === 0) {
     const existingForContent = await prisma.article.count({ where: { publishedAt: contentRange, ...aiPrintWhere } });
     if (existingForContent === 0) {
-      console.log("[edition] No new items and nothing to show yet — leaving edition as draft.");
+      await writeLog(
+        "info",
+        "edition",
+        "Vérifié : aucun nouvel item et rien à afficher pour l'instant — édition laissée en brouillon."
+      );
       return { editionId: edition.id, articleCount: 0 };
     }
   }
@@ -378,6 +382,8 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
         `${aiItems.length} article(s) réécrits par l'IA ce passage ` +
           `(plafond ${MAX_AI_ITEMS_PER_CATEGORY}/catégorie, sur ${pending.length} en attente).`
       );
+    } else {
+      await writeLog("info", "ai", "Vérifié : aucun article en attente de réécriture IA ce passage.");
     }
   }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateDailyEdition } from "@/lib/generateEdition";
 import { syncCustomFeeds } from "@/lib/customFeeds";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
+import { writeLog } from "@/lib/logger";
 
 // Triggered either by:
 // 1. The self-hosted worker/cron script, authenticated with CRON_SECRET
@@ -36,14 +37,31 @@ export async function POST(req: NextRequest) {
     // (réglage séparé) n'est pas encore écoulé. La vraie génération IA
     // quotidienne (forceNoAi=false, une fois par jour) reste gatée
     // normalement — sans enjeu vu sa fréquence.
-    await syncCustomFeeds(forceNoAi).catch((err) => {
-      console.error("[cron/generate] Synchronisation des flux personnalisés échouée:", err);
+    await syncCustomFeeds(forceNoAi).catch(async (err) => {
+      // Échecs PAR FLUX déjà loggués individuellement dans customFeeds.ts —
+      // ce catch-ci ne couvre que l'échec de syncCustomFeeds() lui-même.
+      await writeLog(
+        "error",
+        "worker",
+        "Synchronisation des flux personnalisés échouée (déclenchement manuel)",
+        (err as Error)?.message
+      );
     });
 
     const result = await generateDailyEdition({ forceNoAi });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error("[cron/generate] failed:", err);
+    // Filet de secours : couvre tout échec qui surviendrait AVANT le premier
+    // writeLog interne de generateDailyEdition (ex. souci DB dès la création
+    // de l'Edition) — sans ça, un échec précoce sur un déclenchement manuel
+    // ("Aspirer les news"/"Lancer l'impression") ne laissait de trace que
+    // dans les logs bruts Coolify, invisible depuis /admin/logs.
+    await writeLog(
+      "error",
+      "worker",
+      "Génération échouée (déclenchement manuel)",
+      (err as Error)?.message
+    );
     return NextResponse.json({ error: "generation failed" }, { status: 500 });
   }
 }

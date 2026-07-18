@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { syncCustomFeeds } from "@/lib/customFeeds";
+import { writeLog } from "@/lib/logger";
 
 async function assertAuthed(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -20,7 +21,14 @@ export async function POST(req: NextRequest) {
     const result = await syncCustomFeeds(true);
     return NextResponse.json({ ok: true, fetched: result.fetched });
   } catch (err: any) {
-    console.error("[admin/custom-feeds/sync] failed:", err);
+    // Échecs PAR FLUX déjà loggués individuellement dans customFeeds.ts —
+    // ce catch-ci ne couvre que l'échec de syncCustomFeeds() lui-même.
+    await writeLog(
+      "error",
+      "custom-feeds",
+      "Récupération forcée échouée (bouton admin)",
+      err?.message
+    );
     return NextResponse.json(
       { error: err?.message || "Échec de la synchronisation forcée" },
       { status: 500 }
