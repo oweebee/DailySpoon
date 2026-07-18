@@ -83,7 +83,7 @@ export function DirectView({
           <button
             onClick={pull}
             disabled={pulling}
-            className="stamp-button border-2 border-ink bg-ink px-5 py-2.5 font-display text-xs uppercase tracking-[0.25em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
+            className="stamp-button stamp-bg-md px-5 py-2.5 font-display text-xs uppercase tracking-[0.25em] text-paper disabled:opacity-50"
           >
             {pulling ? "Aspiration en cours..." : "Aspirer les news"}
           </button>

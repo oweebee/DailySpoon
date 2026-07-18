@@ -69,15 +69,17 @@ body {
   hyphens: auto;
 }
 
-/* Bouton "timbre" : effet de timbre-poste collé sur le papier — contour
-   pointillé décalé (perforations), légère rotation et ombre portée, qui se
-   redresse légèrement au survol comme si on le décollait. */
+/* Bouton "timbre" : vrai fond de timbre-poste vierge (illustration fournie
+   par l'utilisateur, voir public/stamps/), plutôt que l'ancien contour
+   pointillé dessiné en CSS — le bord perforé/festonné fait maintenant partie
+   de l'image elle-même. Rotation légère et ombre portée conservées, qui se
+   redressent légèrement au survol comme si on décollait le timbre. Trois
+   fonds (stamp-sm/md/lg, voir .stamp-bg-*) selon la longueur du texte du
+   bouton — attribué au cas par cas côté JSX. */
 .stamp-button {
   position: relative;
   transform: rotate(-1.5deg);
   box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
-  outline: 2px dashed rgba(26, 26, 26, 0.5);
-  outline-offset: 5px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -110,9 +112,25 @@ body {
 .stamp-live {
   transform: rotate(-9deg);
   box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
-  outline: 2px dashed rgba(26, 26, 26, 0.5);
-  outline-offset: 5px;
 }
+
+/* Fonds de timbre — 3 tailles/ratios (voir public/stamps/), stretchées
+   exactement aux dimensions EXISTANTES du bouton (background-size 100% 100%)
+   plutôt que conservées à leur ratio d'origine : les boutons gardent donc
+   leurs dimensions actuelles (padding/texte inchangés), seul le fond change.
+   sm = le plus "carré" (ratio ~2:1) pour les libellés courts (En direct),
+   md = intermédiaire (~2.9:1) pour la plupart des boutons, lg = le plus
+   large/plat (~4.5:1) pour le texte le plus long (Lancer l'impression). */
+.stamp-bg-sm,
+.stamp-bg-md,
+.stamp-bg-lg {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+.stamp-bg-sm { background-image: url("/stamps/stamp-sm.png"); }
+.stamp-bg-md { background-image: url("/stamps/stamp-md.png"); }
+.stamp-bg-lg { background-image: url("/stamps/stamp-lg.png"); }
 
 /* Ouverture du lecteur d'article interne : la page pivote depuis sa
    tranche gauche pour s'ouvrir face à l'écran, comme une page de journal

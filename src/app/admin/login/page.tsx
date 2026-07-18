@@ -47,7 +47,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="stamp-button w-full border-2 border-ink bg-ink px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-paper transition-colors hover:bg-paper hover:text-ink disabled:opacity-50"
+        className="stamp-button stamp-bg-md w-full px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-paper disabled:opacity-50"
       >
         {loading ? "Connexion..." : "Se connecter"}
       </button>

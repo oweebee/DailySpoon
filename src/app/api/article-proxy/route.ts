@@ -475,6 +475,34 @@ function renderPage(opts: {
     line-height: 1.6;
     color: #3a3a3a;
   }
+  /* Bouton "timbre" — même fond de timbre-poste que côté app React (voir
+     public/stamps/stamp-md.png, globals.css .stamp-bg-md), stretché aux
+     dimensions du bouton. Répliqué en CSS pur ici puisque cette page est
+     servie hors du bundle Tailwind (rendu HTML brut pour l'iframe de
+     lecture) — même chemin /stamps/ (dossier public, servi tel quel). */
+  .stamp-link {
+    display: inline-block;
+    background-image: url("/stamps/stamp-md.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 100% 100%;
+    color: #f0f0f0;
+    padding: 0.7em 1.5em;
+    font-family: Georgia, serif;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    text-decoration: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    transform: rotate(-1.5deg);
+    box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .stamp-link:hover {
+    transform: rotate(0deg) scale(1.03);
+    box-shadow: 3px 5px 10px rgba(26, 26, 26, 0.32);
+  }
+  .stamp-wrap { text-align: center; margin-top: 2.6em; }
   .colophon { text-align: center; margin-top: 3.2em; color: #5c5c5c; }
   .colophon svg { display: inline-block; vertical-align: middle; margin: 0 9px; fill: currentColor; }
   /* Repli iframe (fetch serveur bloqué) : occupe la hauteur visible de la
@@ -495,9 +523,7 @@ function renderPage(opts: {
 <body>
   <div class="page">
     <p class="meta-top">
-      <span class="meta-left">
-        <a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Voir l'original ↗</a>
-      </span>
+      <span class="meta-left"></span>
       <span class="meta-center">
         ${showTranslateLink ? `<a href="${escapeHtml(translateHref)}">${translateLabel}</a>` : ""}
       </span>
@@ -514,6 +540,9 @@ function renderPage(opts: {
     <div class="article-body">${bodyHtml}</div>
     <p class="source-bottom">Source : ${kicker}${starHtml}</p>`
     }
+    <p class="stamp-wrap">
+      <a class="stamp-link" href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir dans un nouvel onglet ↗</a>
+    </p>
     <p class="colophon">${spoonSvg(-18)}${spoonSvg(14)}${spoonSvg(-18)}</p>
   </div>
   <div class="lightbox-overlay" id="lightbox"><img id="lightbox-img" src="" alt="" /></div>
@@ -898,6 +927,28 @@ export async function GET(req: NextRequest) {
   }
 
   if (isRedditPostUrl(parsed)) {
+    // Si on a déjà un texte pour ce post en base (fallbackExcerpt =
+    // summary IA sinon sourceExcerpt tel que récupéré depuis le flux — ce
+    // dernier est parfois déjà en français : Reddit traduit lui-même
+    // certains posts côté flux/Redlib, indépendamment de toute IA de notre
+    // côté), on le sert directement plutôt que d'aller chercher le texte
+    // ORIGINAL (souvent anglais) via Redlib/l'API JSON officielle plus bas :
+    // cohérence avec la vignette avant tout — c'est exactement le même
+    // texte qui y est affiché — plus besoin d'aller-retour réseau pour un
+    // résultat qu'on a déjà en base.
+    if (fallbackExcerpt) {
+      return htmlResponse(
+        renderPage({
+          title: fallbackTitle || "Post Reddit",
+          siteName: "reddit.com",
+          bodyHtml: `<p>${escapeHtml(fallbackExcerpt)}</p><div class="notice-box">Texte tel que récupéré depuis le flux (même texte qu'en vignette). Pour le texte original et les commentaires, utilise « Voir l'original » en haut de page.</div>`,
+          originalUrl,
+          articleId,
+          favorite
+        })
+      );
+    }
+
     // 1) Miroir Redlib (best-effort, voir REDLIB_INSTANCES) : rendu HTML
     //    complet côté serveur, passé par le même pipeline Readability que
     //    n'importe quel autre site.

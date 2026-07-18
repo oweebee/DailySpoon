@@ -53,7 +53,7 @@ export function Masthead({ date }: { date: Date }) {
               place à droite du titre en mobile). */}
           <Link
             href="/direct"
-            className="stamp-live relative mx-auto mt-4 block w-fit border-2 border-ink bg-ink px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-white md:hidden"
+            className="stamp-live stamp-bg-sm relative mx-auto mt-4 block w-fit px-4 py-1.5 font-display text-xs font-bold uppercase tracking-[0.25em] text-white md:hidden"
           >
             En direct
           </Link>
@@ -70,7 +70,7 @@ export function Masthead({ date }: { date: Date }) {
             transform, donc aucun conflit avec la rotation de .stamp-live). */}
         <Link
           href="/direct"
-          className="stamp-live absolute inset-y-0 -right-2.5 my-auto hidden h-fit border-2 border-ink bg-ink px-5 py-2 font-display text-sm font-bold uppercase tracking-[0.25em] text-white md:block"
+          className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 my-auto hidden h-fit px-5 py-2 font-display text-sm font-bold uppercase tracking-[0.25em] text-white md:block"
         >
           En direct
         </Link>
