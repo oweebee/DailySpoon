@@ -180,9 +180,27 @@ function bestRawContent(item: Parser.Item): string {
  *  ("title?.trim is not a function", vu en usage réel sur un flux réel).
  *  Convertit explicitement en chaîne avant de nettoyer, quel que soit le
  *  type réellement reçu. */
-function safeTitle(value: unknown): string {
+export function safeTitle(value: unknown): string {
   if (typeof value === "string") return value.trim();
   if (value == null) return "";
+  if (typeof value === "object") {
+    // Forme typique produite par le parseur XML sous-jacent pour un élément
+    // à contenu mixte (ex. balise avec attributs ET texte) : { _: "texte",
+    // $: {...attributs} } — tenter cette clé avant toute conversion.
+    const obj = value as Record<string, unknown>;
+    const inner = obj["_"] ?? obj["#text"];
+    if (typeof inner === "string") return inner.trim();
+    // Repli défensif : un objet sans prototype exploitable (ex.
+    // Object.create(null), certains nœuds XML mal formés) fait planter
+    // String() avec "Cannot convert object to primitive value" — vu en
+    // usage réel sur un flux réel. On abandonne proprement plutôt que de
+    // faire échouer tout le flux pour un seul titre illisible.
+    try {
+      return String(value).trim();
+    } catch {
+      return "";
+    }
+  }
   return String(value).trim();
 }
 
@@ -254,7 +272,20 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
     const included = selectedIds.has(categoryFreshrssId) && !excludedFeedIds.has(feedFreshrssId) && !groupDisabled;
 
     try {
-      const parsed = await parser.parseURL(feed.url);
+      let parsed;
+      try {
+        parsed = await parser.parseURL(feed.url);
+      } catch (directErr) {
+        // Repli via morss (réglé dans /admin/settings), même mécanisme que
+        // pour le fetch d'un article individuel (voir article-proxy) : morss
+        // relaie la requête depuis SA propre IP, ce qui peut réussir là où
+        // une requête directe échoue (timeout, blocage) — utile pour un flux
+        // lent/bloqué comme "Libération" vu en usage réel
+        // ("Request timed out after 20000ms" en direct).
+        if (!settings.morssBaseUrl) throw directErr;
+        const strippedUrl = feed.url.replace(/^https?:\/\//, "");
+        parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
+      }
 
       for (const item of parsed.items) {
         const guid = item.guid || item.link || safeTitle(item.title);

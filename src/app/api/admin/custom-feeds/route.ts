@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Parser from "rss-parser";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { customFeedFreshrssId, createCustomCategoryRecord, resolveFeedCategory } from "@/lib/customFeeds";
+import { customFeedFreshrssId, createCustomCategoryRecord, resolveFeedCategory, safeTitle } from "@/lib/customFeeds";
 
 async function assertAuthed(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -18,10 +18,7 @@ async function guessFeedTitle(url: string): Promise<string> {
   try {
     const parser = new Parser({ timeout: 6000 });
     const parsed = await parser.parseURL(url);
-    // Même précaution que côté ingestion (voir customFeeds.ts/safeTitle) :
-    // certains flux renvoient un titre qui n'est pas une chaîne malgré le
-    // typage de rss-parser, ce qui ferait planter `.trim()` directement.
-    const title = typeof parsed.title === "string" ? parsed.title.trim() : String(parsed.title ?? "").trim();
+    const title = safeTitle(parsed.title);
     if (title) return title;
   } catch {
     // best-effort : on retombe sur l'hôte de l'URL ci-dessous
