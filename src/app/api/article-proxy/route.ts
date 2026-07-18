@@ -82,6 +82,18 @@ function rewriteContentImages(contentDom: JSDOM, baseUrl: string): void {
   });
 }
 
+// Les apostrophes ' et ’ (courbe) sont interchangeables selon le site source
+// (voire selon l'encodeur HTML utilisé), mais toutes les listes de phrases
+// ci-dessous n'écrivent qu'UNE seule forme — sans normalisation, une phrase
+// comme "écran d'accueil" (apostrophe droite dans la liste) ne matchait pas
+// "écran d’accueil" (apostrophe courbe sur le site réel), et la détection de
+// contenu/chrome échouait silencieusement. Appliqué à CHAQUE comparaison de
+// texte de cette page (isSubstantiveParagraph, isLeadingJunkElement,
+// isRelatedPostsHeading) via normalizeApostrophes().
+function normalizeApostrophes(text: string): string {
+  return text.replace(/[’‘]/g, "'");
+}
+
 // Beaucoup de sites glissent, après le vrai texte de l'article mais toujours
 // à l'intérieur du bloc que Readability extrait, un rebus de fin d'article :
 // pub pour l'appli mobile, bandeau newsletter, liste "à lire aussi" — pas du
@@ -123,7 +135,13 @@ const TRAILING_JUNK_PHRASES = [
   // suit (voir plus bas).
   "soutenez",
   "sans publicité",
-  "découvrez tous nos contenus"
+  "découvrez tous nos contenus",
+  // Bandeau promo appli/newsletter (ex. Numerama, "ToujoursPlus") — le
+  // paragraphe entier passait isSubstantiveParagraph (assez long, lien minoritaire
+  // dans le texte) faute d'y reconnaître une phrase connue.
+  "un édito exclusif",
+  "l'agenda de la rédaction",
+  "toujoursplus"
 ];
 
 // Un "vrai" paragraphe peut être un <p> classique ou un <blockquote> (souvent
@@ -136,7 +154,7 @@ function isSubstantiveParagraph(el: Element): boolean {
   const text = (el.textContent || "").trim();
   if (text.length < 40) return false;
 
-  const lower = text.toLowerCase();
+  const lower = normalizeApostrophes(text.toLowerCase());
   if (TRAILING_JUNK_PHRASES.some((p) => lower.includes(p))) return false;
 
   // Un paragraphe qui n'est en fait qu'un lien/bouton habillé (CTA) plutôt
@@ -169,12 +187,24 @@ const RELATED_POSTS_HEADING_PHRASES = [
   "posts similaires",
   "related posts",
   "you might also like",
-  "on vous recommande"
+  "on vous recommande",
+  // Gamekult (et sans doute d'autres sites au même gabarit) : cette phrase de
+  // transition n'est PAS un titre (H1-4) mais un simple <p>, juste avant une
+  // liste de teasers d'articles suggérés (image + titre-lien + tag "news"
+  // répétés) — vu en usage réel, tout ce bloc restait affiché après le
+  // "vrai" texte de l'article, sans qu'aucun signal de titre classique ne
+  // permette de le détecter.
+  "ça vous a intéressé"
 ];
 
 function isRelatedPostsHeading(el: Element): boolean {
-  if (!/^H[1-4]$/.test(el.tagName)) return false;
-  const text = (el.textContent || "").trim().toLowerCase();
+  const text = normalizeApostrophes((el.textContent || "").trim().toLowerCase());
+  const isHeadingTag = /^H[1-4]$/.test(el.tagName);
+  // Un <p> très court (pas un vrai paragraphe de contenu) peut aussi porter
+  // ce signal — voir "ça vous a intéressé" ci-dessus, jamais dans un H1-4
+  // sur Gamekult.
+  const isShortParagraph = el.tagName === "P" && text.length < 80;
+  if (!isHeadingTag && !isShortParagraph) return false;
   return RELATED_POSTS_HEADING_PHRASES.some((p) => text.includes(p));
 }
 
@@ -231,7 +261,7 @@ const LEADING_JUNK_EXACT_PHRASES = [
 
 function isLeadingJunkElement(el: Element): boolean {
   if (el.tagName === "UL" || el.tagName === "OL" || el.tagName === "NAV") return true;
-  const text = (el.textContent || "").trim().toLowerCase();
+  const text = normalizeApostrophes((el.textContent || "").trim().toLowerCase());
   return LEADING_JUNK_EXACT_PHRASES.includes(text);
 }
 
@@ -1108,16 +1138,38 @@ export async function GET(req: NextRequest) {
     const fetched = await fetchArticleHtml(fetchUrl, morssBaseUrl);
 
     if (!fetched || "error" in fetched) {
-      // Fetch serveur bloqué (403, anti-bot...) même après repli morss :
-      // plutôt qu'un message d'erreur, on tente d'afficher directement la
-      // page source dans une iframe — la requête part alors du NAVIGATEUR
-      // du visiteur, pas de ce serveur, donc contourne un blocage qui ne
-      // visait QUE les requêtes serveur-à-serveur (cas fréquent : anti-bot
-      // basé sur l'IP/réputation plutôt qu'un vrai blocage d'affichage).
-      // Sans garantie non plus : certains sites (X-Frame-Options/CSP
-      // frame-ancestors) refusent aussi l'affichage en iframe, auquel cas
-      // la zone reste vide — "Ouvrir dans un nouvel onglet" (déjà en haut
-      // de page) reste alors le seul recours.
+      // Fetch serveur bloqué (403, anti-bot...) même après repli morss. Si on
+      // a déjà un titre/texte pour cet article en base (récupéré depuis le
+      // flux RSS — voir fallbackExcerpt/fallbackTitle plus haut), on l'affiche
+      // directement : PLUS FIABLE que l'iframe ci-dessous, et cohérent avec ce
+      // que fait déjà ce même code pour Reddit et pour un Readability qui ne
+      // trouve rien (voir plus bas). Vu en usage réel sur nytimes.com : le
+      // flux RSS donne un titre et un extrait exploitables alors que le fetch
+      // serveur ET l'iframe (X-Frame-Options bloqué par NYT) échouent tous
+      // les deux — sans ce repli, la page ne montrait rien d'utile du tout.
+      if (fallbackExcerpt) {
+        return htmlResponse(
+          renderPage({
+            title: fallbackTitle || new URL(originalUrl).hostname.replace(/^www\./, ""),
+            bodyHtml: excerptFallbackBodyHtml(
+              "Lecture directe indisponible sur ce serveur (site bloquant, y compris via le repli morss) — voici l'aperçu récupéré depuis le flux. Utilise « Ouvrir dans un nouvel onglet » pour lire l'article complet."
+            ),
+            originalUrl,
+            articleId,
+            favorite
+          })
+        );
+      }
+
+      // Rien en base non plus : on tente d'afficher directement la page
+      // source dans une iframe — la requête part alors du NAVIGATEUR du
+      // visiteur, pas de ce serveur, donc contourne un blocage qui ne visait
+      // QUE les requêtes serveur-à-serveur (cas fréquent : anti-bot basé sur
+      // l'IP/réputation plutôt qu'un vrai blocage d'affichage). Sans garantie
+      // non plus : certains sites (X-Frame-Options/CSP frame-ancestors)
+      // refusent aussi l'affichage en iframe, auquel cas la zone reste vide —
+      // "Ouvrir dans un nouvel onglet" (déjà en haut de page) reste alors le
+      // seul recours.
       return htmlResponse(
         renderPage({
           title: new URL(originalUrl).hostname.replace(/^www\./, ""),
