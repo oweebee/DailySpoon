@@ -793,12 +793,26 @@ export async function GET(req: NextRequest) {
 
   // Retrouve l'Article correspondant (même sourceUrl) pour savoir s'il faut
   // afficher l'étoile favori et dans quel état — absent si l'article n'est
-  // pas (ou plus) en base.
+  // pas (ou plus) en base. sourceExcerpt/summary servent de repli texte
+  // (voir excerptFallbackBodyHtml) quand l'extraction live échoue
+  // complètement (Reddit bloqué, Readability qui ne trouve rien...) : on a
+  // déjà ce texte en base (récupéré depuis le flux RSS), pas de raison de
+  // se contenter d'un simple message d'erreur si on peut l'afficher à la
+  // place, non tronqué (contrairement à la vignette, limitée à 10 lignes).
   const articleRecord = await prisma.article
-    .findFirst({ where: { sourceUrl: originalUrl }, select: { id: true, favorite: true } })
+    .findFirst({
+      where: { sourceUrl: originalUrl },
+      select: { id: true, favorite: true, sourceExcerpt: true, summary: true }
+    })
     .catch(() => null);
   const articleId = articleRecord?.id ?? null;
   const favorite = articleRecord?.favorite ?? false;
+  const fallbackExcerpt = articleRecord?.summary?.trim() || articleRecord?.sourceExcerpt?.trim() || null;
+
+  function excerptFallbackBodyHtml(intro: string): string {
+    if (!fallbackExcerpt) return `<p>${escapeHtml(intro)}</p>`;
+    return `<p>${escapeHtml(intro)}</p><p>${escapeHtml(fallbackExcerpt)}</p>`;
+  }
 
   // Certains posts Reddit à média donnent, dans le flux RSS (surtout via un
   // miroir Redlib), un lien DIRECT vers le CDN média (i.redd.it/v.redd.it)
@@ -950,16 +964,17 @@ export async function GET(req: NextRequest) {
         })
       );
     }
-    // 3) Ni les miroirs Redlib ni l'API JSON n'ont marché. Retomber sur le
-    // fetch générique ne ferait que refaire le même appel bloqué vers
-    // reddit.com pour la même erreur — autant l'annoncer clairement tout
-    // de suite plutôt que de perdre du temps sur une requête vouée à
-    // échouer.
+    // 3) Ni les miroirs Redlib ni l'API JSON n'ont marché. Plutôt qu'un
+    // simple message d'erreur, on retombe sur le texte déjà récupéré et
+    // stocké depuis le flux RSS (sourceExcerpt/summary) s'il existe — non
+    // tronqué, contrairement à la vignette limitée à 10 lignes.
     return htmlResponse(
       renderPage({
         title: "Reddit indisponible depuis ce serveur",
-        bodyHtml:
-          "<p>Reddit bloque les requêtes venant de ce serveur (IP d'hébergeur), y compris via son API publique et les miroirs de secours essayés. Utilise « Ouvrir dans un nouvel onglet » pour lire ce post directement.</p>",
+        bodyHtml: excerptFallbackBodyHtml(
+          "Reddit bloque les requêtes venant de ce serveur (IP d'hébergeur), y compris via son API publique et les miroirs de secours essayés. Utilise « Ouvrir dans un nouvel onglet » pour lire ce post directement" +
+            (fallbackExcerpt ? " ou lire les commentaires." : ".")
+        ),
         originalUrl,
         articleId,
         favorite
@@ -1006,7 +1021,10 @@ export async function GET(req: NextRequest) {
       return htmlResponse(
         renderPage({
           title: "Article non extrait",
-          bodyHtml: `<p>Impossible d'extraire proprement le contenu de cet article. Utilise « Ouvrir dans un nouvel onglet » pour le lire directement sur le site source.</p>`,
+          bodyHtml: excerptFallbackBodyHtml(
+            "Impossible d'extraire proprement le contenu de cet article. Utilise « Ouvrir dans un nouvel onglet » pour le lire directement sur le site source" +
+              (fallbackExcerpt ? " — voici néanmoins l'aperçu récupéré depuis le flux." : ".")
+          ),
           originalUrl,
           articleId,
           favorite
