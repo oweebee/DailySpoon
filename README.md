@@ -4,19 +4,25 @@ Ton journal personnel quotidien, généré automatiquement à partir des flux qu
 FreshRSS.
 
 Chaque jour, DailySpoon récupère les articles des catégories FreshRSS que tu as choisies, fait
-réécrire/résumer/classer/prioriser les articles par une IA, et publie une édition unique (façon
-une de journal) avec archives consultables par date.
+réécrire/résumer/classer/prioriser les articles par une IA, et publie une édition (façon une de
+journal). Autour de cette une : **En direct** (`/direct`, tous les articles récents groupés par
+catégorie, avec recherche dans tout l'historique et bouton « Aspirer les news » sans IA), les
+**favoris** (`/favoris`, étoile shérif), et les **archives** (`/archive`, chaque impression figée
+telle quelle, consultable par date).
 
 ## Stack
 
 - Next.js 14 (App Router) + Tailwind — front + API routes
 - Prisma + PostgreSQL — data (articles, éditions, catégories sélectionnées). Postgres tourne dans
   le même docker-compose, avec un volume persistant : pas besoin d'une base externe.
-- FreshRSS (API Google Reader) — source des articles ; la gestion des flux eux-mêmes
-  (ajout/suppression/organisation) reste entièrement dans FreshRSS, pas dans DailySpoon
-- Anthropic Claude (optionnel) — réécriture/résumé/classement/priorisation des articles
-- Un petit worker Node (`node-cron`) pour la génération quotidienne — pas besoin de Vercel Cron,
-  tout tourne dans tes propres conteneurs Docker
+- FreshRSS (API Google Reader) — source principale des articles ; la gestion de ces flux-là reste
+  dans FreshRSS. En complément, des **flux RSS/Atom personnalisés** (URL directe, sans passer par
+  FreshRSS) peuvent être ajoutés depuis `/admin/categories`, dans des catégories personnalisées ou
+  directement dans une catégorie FreshRSS existante.
+- Anthropic Claude ou Google Gemini (optionnel, au choix dans `/admin/settings`) —
+  réécriture/résumé/classement/priorisation des articles, avec styles d'écriture configurables
+- Un petit worker Node (`node-cron`) pour la génération quotidienne, le balayage des flux perso et
+  les purges — pas besoin de Vercel Cron, tout tourne dans tes propres conteneurs Docker
 - Docker + docker-compose — pensé pour un déploiement Coolify sur ton propre serveur
 
 ## Structure
@@ -44,11 +50,18 @@ Copie `.env.example` vers `.env` (en local) ou renseigne-les directement dans Co
 - `FRESHRSS_BASE_URL` — URL de ton instance FreshRSS (ex: `https://freshrss.mondomaine.fr`)
 - `FRESHRSS_USERNAME` / `FRESHRSS_API_PASSWORD` — identifiants API FreshRSS (étape 1)
 - `ANTHROPIC_API_KEY` — clé API Claude (laisse vide pour tourner en mode dégradé sans réécriture IA)
-- `ADMIN_PASSWORD` — le seul mot de passe protégeant `/admin` (pas de compte utilisateur, juste ce
-  mot de passe, définissable dans les variables Coolify/Docker)
+- `ADMIN_PASSWORD` — le seul mot de passe protégeant tout le site (pas de compte utilisateur, juste
+  ce mot de passe, définissable dans les variables Coolify/Docker)
 - `ADMIN_SECRET` — chaîne aléatoire pour signer la session admin
 - `CRON_SECRET` — si tu veux déclencher `/api/cron/generate` depuis l'extérieur du worker
 - `EDITION_HOUR` / `EDITION_MINUTE` / `EDITION_TZ` — heure de génération quotidienne (par défaut 6h00 Europe/Paris)
+
+La plupart des réglages applicatifs (FreshRSS, fournisseur IA Anthropic/Gemini et modèles, heure
+et activation du planning, style d'écriture, rétention, instance morss, intervalle des flux
+perso...) se règlent ensuite directement dans `/admin/settings`, sans redéploiement — les
+variables d'environnement ne servent que de valeurs de repli quand un champ y est laissé vide
+(`AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `RETENTION_DAYS`, `EDITION_SCHEDULE_ENABLED`,
+`WRITING_STYLE`, `MORSS_BASE_URL` existent aussi en variables d'env pour ça).
 
 ## 3. Pousser le code sur GitHub
 
@@ -98,15 +111,20 @@ Une fois déployé :
 
 1. Va sur `https://ton-domaine/admin/login`, connecte-toi avec `ADMIN_PASSWORD`.
 2. Dans `/admin/settings`, vérifie/renseigne l'URL, l'identifiant et le mot de passe API
-   FreshRSS ainsi que la clé Anthropic et l'heure de l'édition — un bouton **Tester les
-   réglages** vérifie la connexion avant d'enregistrer. Ces valeurs remplacent les variables
-   d'environnement correspondantes une fois enregistrées ici, sans redéploiement ; laisse un
-   champ vide pour revenir à la variable d'environnement.
-3. Dans `/admin/categories`, coche les catégories FreshRSS que DailySpoon doit inclure dans
-   l'édition du jour (la liste est chargée en direct depuis FreshRSS).
-4. Clique sur **Régénérer l'édition maintenant** pour générer une première édition sans attendre
-   le lendemain matin.
-4. Le worker prendra ensuite le relais tout seul, une fois par jour.
+   FreshRSS, le fournisseur IA (Anthropic ou Gemini) et sa clé, ainsi que l'heure et l'activation
+   du planning d'édition — un bouton **Tester les réglages** vérifie la connexion avant
+   d'enregistrer. Ces valeurs remplacent les variables d'environnement correspondantes une fois
+   enregistrées ici, sans redéploiement ; laisse un champ vide pour revenir à la variable
+   d'environnement.
+3. Dans `/admin/categories`, coche les catégories FreshRSS à inclure (liste chargée en direct
+   depuis FreshRSS), règle indépendamment « En direct » et « Impression IA » par catégorie, et
+   ajoute si tu veux des flux RSS personnalisés (avec leurs catégories personnalisées) et des
+   flux « médaillés » (mis en avant à la une d'En direct).
+4. Lance une première impression sans attendre le lendemain : bouton de génération sur l'accueil
+   (si le planning auto est désactivé) ou « Aspirer les news » sur `/direct` pour un premier
+   remplissage sans IA.
+5. Le worker prend ensuite le relais tout seul : édition quotidienne à l'heure réglée (si le
+   planning est actif) et balayage des flux personnalisés à l'intervalle choisi.
 
 ## Développement local (sans Docker)
 
@@ -121,13 +139,21 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
 
 ## Notes
 
-- Sans `ANTHROPIC_API_KEY`, les articles sont quand même récupérés et publiés, mais sans
-  réécriture/résumé/priorisation par IA (mode dégradé, texte brut de FreshRSS).
-- Une édition = un jour. Relancer la génération le même jour complète l'édition existante au lieu
-  d'en créer une nouvelle.
+- Sans clé IA (Anthropic ou Gemini), les articles sont quand même récupérés et publiés, mais sans
+  réécriture/résumé/priorisation par IA (mode dégradé, texte brut des flux). Le bouton « Aspirer
+  les news » de `/direct` ne consomme JAMAIS de tokens IA, même si une clé est configurée.
+- Chaque génération crée sa propre édition, figée telle quelle dans `/archive` (avec le modèle, le
+  style et les tokens consommés de cette impression précise) — régénérer le même jour n'écrase
+  jamais une impression précédente. Les doublons stricts et les brouillons vides ne sont pas
+  conservés.
+- La rétention de l'historique (articles ET éditions) se règle dans `/admin/settings` (2 ans par
+  défaut, 0 = illimité) ; les articles marqués favoris ne sont jamais purgés.
+- Un journal technique (`/admin/logs`) trace récupérations de flux, générations et appels IA, avec
+  sa propre rétention.
 - DailySpoon ne modifie jamais l'état lu/non-lu de tes articles dans FreshRSS — il se contente de
   lire.
-- L'admin n'a pas de compte utilisateur : un seul mot de passe (`ADMIN_PASSWORD`) protège `/admin`.
+- Pas de compte utilisateur : un seul mot de passe (`ADMIN_PASSWORD`) protège tout le site (lecture
+  et admin, même session).
 - Les données Postgres vivent dans le volume Docker `dailyspoon_db_data` : elles survivent aux
   redéploiements, mais si tu supprimes le volume (ou la ressource entière dans Coolify), elles sont
   perdues — pense à un backup si le contenu devient précieux.
