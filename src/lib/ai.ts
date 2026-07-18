@@ -69,6 +69,30 @@ function styleInstruction(writingStyle: string): string {
   return WRITING_STYLES[writingStyle] || "";
 }
 
+// Styles réellement applicables par l'IA (donc "randomisables") — exclut
+// délibérément "random" lui-même : c'est un méta-choix côté réglages
+// (/admin/settings), jamais une vraie instruction de ton. "normal" est inclus
+// malgré l'absence d'entrée dans WRITING_STYLES (styleInstruction renvoie ""
+// pour lui, ce qui EST le comportement "normal") : le hasard doit pouvoir
+// retomber sur le ton neutre au même titre que les autres styles.
+export const RANDOMIZABLE_WRITING_STYLES = ["normal", ...Object.keys(WRITING_STYLES)];
+
+/**
+ * Résout un réglage de style d'écriture pour UNE génération donnée : si
+ * writingStyle vaut "random" (option "Aléatoire" de /admin/settings), tire
+ * un style au hasard parmi RANDOMIZABLE_WRITING_STYLES — sinon renvoie la
+ * valeur telle quelle. Doit être appelé UNE SEULE FOIS par génération (voir
+ * generateEdition.ts) et le résultat réutilisé pour tous les appels IA de
+ * cette même génération (réécriture par lots + curation de la une) : sans
+ * ça, chaque lot/appel tirerait son propre style au hasard, ce qui donnerait
+ * un ton incohérent d'un article à l'autre dans la même impression.
+ */
+export function resolveWritingStyle(writingStyle: string | null | undefined): string {
+  const value = writingStyle || "normal";
+  if (value !== "random") return value;
+  return RANDOMIZABLE_WRITING_STYLES[Math.floor(Math.random() * RANDOMIZABLE_WRITING_STYLES.length)];
+}
+
 // Filet de sécurité partagé : certains flux (ex. Korben) fournissent parfois
 // un extrait totalement vide (balisage/image sans texte réel des deux côtés
 // summary/content) — sans repli, l'IA elle-même reçoit une chaîne vide et
@@ -106,7 +130,13 @@ function chunk<T>(arr: T[], size: number): T[][] {
 export async function processArticles(
   items: RawItem[],
   options: { forceNoAi?: boolean } = {},
-  usage?: TokenUsage
+  usage?: TokenUsage,
+  // Style d'écriture déjà RÉSOLU (voir resolveWritingStyle) pour toute cette
+  // génération — passé explicitement par generateEdition.ts pour que
+  // "random" tire un seul style et le garde cohérent sur tous les lots de
+  // cette impression. Repli sur settings.writingStyle tel quel (non résolu)
+  // pour les rares appelants qui n'ont pas encore ce contexte.
+  writingStyleOverride?: string
 ): Promise<ProcessedArticle[]> {
   if (options.forceNoAi) {
     // Règle du projet : pas de conso de tokens là où ce n'est pas nécessaire.
@@ -117,6 +147,7 @@ export async function processArticles(
 
   const settings = await getSettings();
   const provider = settings.aiProvider === "gemini" ? "gemini" : "anthropic";
+  const writingStyle = writingStyleOverride ?? settings.writingStyle;
 
   if (provider === "gemini") {
     if (!settings.geminiApiKey) {
@@ -124,7 +155,7 @@ export async function processArticles(
       return items.map(fallbackProcess);
     }
     return processInBatches(items, (batch) =>
-      processBatchGemini(batch, settings.geminiApiKey, settings.geminiModel, settings.writingStyle, usage)
+      processBatchGemini(batch, settings.geminiApiKey, settings.geminiModel, writingStyle, usage)
     );
   }
 
@@ -134,7 +165,7 @@ export async function processArticles(
   }
   const client = new Anthropic({ apiKey: settings.anthropicApiKey });
   return processInBatches(items, (batch) =>
-    processBatch(client, batch, settings.anthropicModel, settings.writingStyle, usage)
+    processBatch(client, batch, settings.anthropicModel, writingStyle, usage)
   );
 }
 
@@ -330,12 +361,17 @@ export type CurationResult = { priorityScore: number; frontPageSummary: string }
 // marginal, même avec une centaine d'articles dans la journée.
 export async function curateFrontPage(
   items: CurationItem[],
-  usage?: TokenUsage
+  usage?: TokenUsage,
+  // Voir processArticles ci-dessus : même style déjà résolu, pour rester
+  // cohérent avec la réécriture par lots de la même génération plutôt que
+  // de retirer un second style au hasard pour la seule passe de curation.
+  writingStyleOverride?: string
 ): Promise<Map<string, CurationResult>> {
   if (items.length === 0) return new Map();
 
   const settings = await getSettings();
   const provider = settings.aiProvider === "gemini" ? "gemini" : "anthropic";
+  const writingStyle = writingStyleOverride ?? settings.writingStyle;
 
   try {
     // Signal externe optionnel (Gemini uniquement, via Grounding with Google
@@ -352,7 +388,7 @@ export async function curateFrontPage(
           })
         : null;
 
-    const curationPrompt = buildCurationPrompt(items, settings.writingStyle, trendingTopics);
+    const curationPrompt = buildCurationPrompt(items, writingStyle, trendingTopics);
     const text =
       provider === "gemini"
         ? settings.geminiApiKey

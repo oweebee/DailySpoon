@@ -3,8 +3,22 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
 import { FrontPageView } from "@/components/FrontPageView";
+import { usdToEur } from "@/lib/aiPricing";
 
 export const dynamic = "force-dynamic";
+
+// Voir /archive (liste) pour le même mapping — dupliqué ici volontairement
+// plutôt qu'exporté/partagé : deux petites constantes, pas la peine d'un
+// fichier commun pour ça.
+const WRITING_STYLE_LABELS: Record<string, string> = {
+  normal: "Normal",
+  ackboo: "Ackboo",
+  darksasuke: "Dark Sasuke"
+};
+const PROVIDER_LABELS: Record<string, string> = { anthropic: "Claude", gemini: "Gemini" };
+function formatCost(n: number): string {
+  return n < 0.01 ? n.toFixed(4) : n.toFixed(2);
+}
 
 /**
  * Archive d'une édition donnée (identifiée par son id, plus par sa date —
@@ -78,6 +92,26 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
           <> (sur {edition.sourcePoolCount} récupéré{edition.sourcePoolCount > 1 ? "s" : ""})</>
         )}
       </p>
+      {(edition.aiProvider || edition.writingStyle || (edition.inputTokens !== null && edition.estimatedCostUsd !== null)) && (
+        <div className="mb-6 flex flex-wrap justify-center gap-1.5">
+          {edition.aiProvider && edition.aiModel && (
+            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+              {(PROVIDER_LABELS[edition.aiProvider] || edition.aiProvider) + " · " + edition.aiModel}
+            </span>
+          )}
+          {edition.writingStyle && (
+            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+              Style : {WRITING_STYLE_LABELS[edition.writingStyle] || edition.writingStyle}
+            </span>
+          )}
+          {edition.inputTokens !== null && edition.outputTokens !== null && edition.estimatedCostUsd !== null && (
+            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+              {(edition.inputTokens + edition.outputTokens).toLocaleString("fr-FR")} tokens (≈
+              {formatCost(usdToEur(edition.estimatedCostUsd))} €)
+            </span>
+          )}
+        </div>
+      )}
       {articles.length > 0 ? (
         <FrontPageView articles={articles} categoryOrder={categoryOrder} date={edition.date} />
       ) : (

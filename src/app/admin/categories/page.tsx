@@ -795,34 +795,67 @@ export default function AdminCategoriesPage() {
         (partout, articles déjà récupérés compris), pas seulement des futures récupérations.
       </p>
 
-      {!loading && !error && categories.length > 0 && (
+      {!loading && !error && (categories.length > 0 || customCategories.length > 0) && (
         <CollapsibleSection title="Impression IA">
           <p className="newsprint mb-4 text-sm text-neutral-700">
             L’impression IA (la une générée sur la page d’accueil, uniquement les news du jour) est
-            indépendante d’« En direct » : elle liste ici TOUTES les catégories FreshRSS, cochées ou
-            non pour En direct, et travaille directement sur les news récupérées à la source. Décocher
-            une catégorie ci-dessous la retire uniquement de l’impression IA — elle reste inchangée
-            partout ailleurs (En direct, recherche, archive). Un flux explicitement exclu (ci-dessous)
-            reste exclu même ici.
+            indépendante d’« En direct » : elle liste ici TOUTES les catégories, FreshRSS ET
+            personnalisées, cochées ou non pour En direct, et travaille directement sur les news
+            récupérées à la source. Décocher une catégorie ci-dessous la retire uniquement de
+            l’impression IA — elle reste inchangée partout ailleurs (En direct, recherche, archive).
+            Un flux explicitement exclu (ci-dessous) reste exclu même ici.
           </p>
           <ul className="mb-10 border-t-2 border-ink">
-            {categories.map((cat) => (
-              <li
-                key={cat.freshrssId}
-                className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
-              >
-                <span className="font-display font-bold">{cat.label}</span>
-                <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
-                  <input
-                    type="checkbox"
-                    checked={cat.frontPageEnabled}
-                    onChange={() => toggleFrontPage(cat)}
-                    className="accent-ink"
-                  />
-                  inclure dans l’impression IA
-                </label>
-              </li>
-            ))}
+            {(() => {
+              // Même fusion/tri que la liste "Catégories & flux" plus bas
+              // (SelectedCategory.order partagé) — sur demande explicite : les
+              // catégories perso doivent apparaître ICI AUSSI, pas seulement
+              // dans l'arborescence générale, chacune avec son tag pour rester
+              // identifiable au premier coup d'œil.
+              type Row = { kind: "freshrss"; cat: Category } | { kind: "custom"; cat: CustomCategoryItem };
+              const rows: Row[] = [
+                ...categories.map((cat) => ({ kind: "freshrss" as const, cat })),
+                ...customCategories.map((cat) => ({ kind: "custom" as const, cat }))
+              ].sort((a, b) => {
+                const oa = a.cat.order;
+                const ob = b.cat.order;
+                if (oa !== null && ob !== null) return oa - ob;
+                if (oa !== null) return -1;
+                if (ob !== null) return 1;
+                return a.cat.label.localeCompare(b.cat.label);
+              });
+
+              return rows.map((row) => (
+                <li
+                  key={row.kind === "custom" ? `custom-${row.cat.id}` : row.cat.freshrssId}
+                  className="flex items-center justify-between gap-4 border-b border-ink/30 py-3"
+                >
+                  <span className="font-display font-bold">
+                    {row.cat.label}{" "}
+                    {row.kind === "custom" ? (
+                      <span className="rounded-sm bg-ink px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-paper">
+                        perso
+                      </span>
+                    ) : (
+                      <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                        freshrss
+                      </span>
+                    )}
+                  </span>
+                  <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
+                    <input
+                      type="checkbox"
+                      checked={row.cat.frontPageEnabled}
+                      onChange={() =>
+                        row.kind === "custom" ? toggleCustomCategoryFrontPage(row.cat) : toggleFrontPage(row.cat)
+                      }
+                      className="accent-ink"
+                    />
+                    inclure dans l’impression IA
+                  </label>
+                </li>
+              ));
+            })()}
           </ul>
         </CollapsibleSection>
       )}

@@ -1,7 +1,14 @@
 import { createHash } from "crypto";
 import { prisma } from "./prisma";
 import { fetchNewItemsFromSelectedCategories, fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
-import { processArticles, fallbackProcess, curateFrontPage, type ProcessedArticle, type TokenUsage } from "./ai";
+import {
+  processArticles,
+  fallbackProcess,
+  curateFrontPage,
+  resolveWritingStyle,
+  type ProcessedArticle,
+  type TokenUsage
+} from "./ai";
 import { stripHtml, looksLikeHtml, stripLeadingChrome } from "./text";
 import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
@@ -230,6 +237,17 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // admin. Reste à 0 en mode "Aspirer les news" (forceNoAi) ou sans clé IA.
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
 
+  // Réglages IA lus UNE SEULE FOIS pour toute cette génération. En particulier
+  // le style d'écriture : si /admin/settings est réglé sur "random", le style
+  // réel est tiré au hasard ICI et réutilisé pour TOUS les appels IA de cette
+  // impression (réécriture par lots + curation de la une) — sans ça, chaque
+  // lot tirerait son propre style et l'impression du jour changerait de ton
+  // d'un article à l'autre. Figé aussi sur l'Edition (voir plus bas) pour que
+  // les archives montrent le style RÉELLEMENT utilisé, jamais "random" tel quel.
+  const genSettings = await getSettings();
+  const genProvider = genSettings.aiProvider === "gemini" ? "gemini" : "anthropic";
+  const effectiveWritingStyle = options.forceNoAi ? null : resolveWritingStyle(genSettings.writingStyle);
+
   const edition = await prisma.edition.create({
     data: { date, status: "draft" }
   });
@@ -311,7 +329,12 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     const { aiItems } = capPerCategory(pendingAsRawItems, MAX_AI_ITEMS_PER_CATEGORY);
 
     if (aiItems.length > 0) {
-      const processedAi: ProcessedArticle[] = await processArticles(aiItems, options, usage);
+      const processedAi: ProcessedArticle[] = await processArticles(
+        aiItems,
+        options,
+        usage,
+        effectiveWritingStyle ?? undefined
+      );
       const idByFreshrssId = new Map(pending.map((a) => [a.freshrssItemId, a.id]));
 
       await Promise.all(
@@ -345,7 +368,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // plutôt que par lots isolés de 12 comme processArticles — c'est ce score
   // qui détermine ensuite les articles "à la une" sur la page d'accueil.
   if (!options.forceNoAi) {
-    await curateFrontPageScores(contentRange, usage);
+    await curateFrontPageScores(contentRange, usage, effectiveWritingStyle ?? undefined);
   }
 
   const heroArticle = await prisma.article.findFirst({
@@ -385,14 +408,12 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // Coût estimé à partir des tokens réellement consommés (usage, rempli au
   // fil des appels IA ci-dessus) et du modèle réglé pour CETTE génération —
   // voir aiPricing.ts. 0/0/0 en mode "Aspirer les news" ou sans clé IA.
-  const { aiProvider, anthropicModel, geminiModel } = await getSettings();
-  const provider = aiProvider === "gemini" ? "gemini" : "anthropic";
-  const estimatedCostUsd = estimateCostUsd(
-    provider,
-    provider === "gemini" ? geminiModel : anthropicModel,
-    usage.inputTokens,
-    usage.outputTokens
-  );
+  // Réutilise genSettings/genProvider lus une seule fois en tête de fonction
+  // (voir plus haut), plutôt qu'un second appel getSettings() qui pourrait en
+  // théorie lire un réglage changé entre-temps en pleine génération.
+  const provider = genProvider;
+  const aiModelUsed = provider === "gemini" ? genSettings.geminiModel : genSettings.anthropicModel;
+  const estimatedCostUsd = estimateCostUsd(provider, aiModelUsed, usage.inputTokens, usage.outputTokens);
 
   await prisma.edition.update({
     where: { id: edition.id },
@@ -404,7 +425,16 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
       sourcePoolCount: articleCount,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
-      estimatedCostUsd
+      estimatedCostUsd,
+      // Métadonnées IA figées pour CETTE génération précise, affichées dans
+      // /archive à côté de la date — null en mode "Aspirer les news"
+      // (forceNoAi) puisqu'aucune IA n'est alors intervenue (afficher un
+      // fournisseur/modèle ici serait trompeur, laisserait croire qu'une IA a
+      // tourné). writingStyle est la valeur RÉSOLUE (jamais "random" tel
+      // quel) — voir resolveWritingStyle en tête de fonction.
+      aiProvider: options.forceNoAi ? null : provider,
+      aiModel: options.forceNoAi ? null : aiModelUsed,
+      writingStyle: options.forceNoAi ? null : effectiveWritingStyle
     }
   });
 
@@ -512,7 +542,11 @@ async function syncMedalFlags(): Promise<void> {
  * si aucune clé IA n'est configurée pour le fournisseur choisi (curateFrontPage
  * renvoie alors une Map vide) — les scores existants restent tels quels.
  */
-async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }, usage?: TokenUsage): Promise<void> {
+async function curateFrontPageScores(
+  todayRange: { gte: Date; lt: Date },
+  usage?: TokenUsage,
+  writingStyleOverride?: string
+): Promise<void> {
   // Carte "Impression IA" de /admin/categories (AiPrintCategory, indépendante
   // d'En Direct) : les catégories décochées là ne doivent même pas être
   // soumises à cette passe (ni affichées sur la une, ni comparées aux
@@ -541,7 +575,8 @@ async function curateFrontPageScores(todayRange: { gte: Date; lt: Date }, usage?
       category: a.category || "Autre",
       source: a.feedTitle || ""
     })),
-    usage
+    usage,
+    writingStyleOverride
   );
   if (scores.size === 0) return;
 

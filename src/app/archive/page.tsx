@@ -3,8 +3,28 @@ import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
 import { SpoonDivider } from "@/components/SpoonDivider";
 import { ArchiveSearch } from "@/components/ArchiveSearch";
+import { usdToEur } from "@/lib/aiPricing";
 
 export const dynamic = "force-dynamic";
+
+// Étiquettes lisibles pour les tags affichés sous chaque édition archivée.
+// "random" n'apparaît jamais ici : Edition.writingStyle stocke toujours la
+// valeur déjà RÉSOLUE par resolveWritingStyle (src/lib/ai.ts), jamais le
+// méta-choix "random" tel quel.
+const WRITING_STYLE_LABELS: Record<string, string> = {
+  normal: "Normal",
+  ackboo: "Ackboo",
+  darksasuke: "Dark Sasuke"
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Claude",
+  gemini: "Gemini"
+};
+
+function formatCost(n: number): string {
+  return n < 0.01 ? n.toFixed(4) : n.toFixed(2);
+}
 
 const MONTH_LABELS = [
   "Janvier",
@@ -62,7 +82,13 @@ export default async function ArchivePage({
     generatedAt: e.generatedAt,
     year: e.date.getUTCFullYear(),
     month: e.date.getUTCMonth(), // 0-indexé
-    count: countByEditionId.get(e.id) ?? 0
+    count: countByEditionId.get(e.id) ?? 0,
+    aiProvider: e.aiProvider,
+    aiModel: e.aiModel,
+    writingStyle: e.writingStyle,
+    inputTokens: e.inputTokens,
+    outputTokens: e.outputTokens,
+    estimatedCostUsd: e.estimatedCostUsd
   }));
 
   const now = new Date();
@@ -148,14 +174,51 @@ export default async function ArchivePage({
                 minute: "2-digit",
                 hourCycle: "h23"
               }).format(entry.generatedAt);
+              const modelTag =
+                entry.aiProvider && entry.aiModel
+                  ? `${PROVIDER_LABELS[entry.aiProvider] || entry.aiProvider} · ${entry.aiModel}`
+                  : null;
+              const styleTag = entry.writingStyle
+                ? WRITING_STYLE_LABELS[entry.writingStyle] || entry.writingStyle
+                : null;
+              const tokensTotal =
+                entry.inputTokens !== null && entry.outputTokens !== null
+                  ? entry.inputTokens + entry.outputTokens
+                  : null;
+              const costTag =
+                tokensTotal !== null && entry.estimatedCostUsd !== null
+                  ? `${tokensTotal.toLocaleString("fr-FR")} tokens (≈${formatCost(usdToEur(entry.estimatedCostUsd))} €)`
+                  : null;
+
               return (
-                <li key={entry.key} className="flex items-baseline justify-between border-b border-ink/30 py-3">
-                  <Link href={`/archive/${entry.key}`} className="font-display text-lg capitalize hover:underline">
-                    {dayLabel} <span className="text-sm normal-case text-sepia">— {timeLabel}</span>
-                  </Link>
-                  <span className="text-sm italic text-sepia">
-                    {entry.count} article{entry.count > 1 ? "s" : ""}
-                  </span>
+                <li key={entry.key} className="border-b border-ink/30 py-3">
+                  <div className="flex items-baseline justify-between">
+                    <Link href={`/archive/${entry.key}`} className="font-display text-lg capitalize hover:underline">
+                      {dayLabel} <span className="text-sm normal-case text-sepia">— {timeLabel}</span>
+                    </Link>
+                    <span className="text-sm italic text-sepia">
+                      {entry.count} article{entry.count > 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  {(modelTag || styleTag || costTag) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {modelTag && (
+                        <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                          {modelTag}
+                        </span>
+                      )}
+                      {styleTag && (
+                        <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                          Style : {styleTag}
+                        </span>
+                      )}
+                      {costTag && (
+                        <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                          {costTag}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

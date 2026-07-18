@@ -43,14 +43,18 @@ const EMPTY: SettingsForm = {
 
 // Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
 // journalistique neutre, comportement historique), "ackboo" (sarcastique/
-// passif-agressif façon Ackboo, Canard PC) ou "darksasuke" (cynique,
+// passif-agressif façon Ackboo, Canard PC), "darksasuke" (cynique,
 // associal, jamais content, coloration nationaliste assumée — voir
-// WRITING_STYLES dans src/lib/ai.ts pour les garde-fous). Sans effet sur
-// /direct.
+// WRITING_STYLES dans src/lib/ai.ts pour les garde-fous) ou "random" (tire un
+// style au hasard parmi les 3 précédents à CHAQUE génération — voir
+// resolveWritingStyle dans src/lib/ai.ts ; le style effectivement tiré est
+// figé sur l'édition et visible dans /archive, jamais "random" tel quel).
+// Sans effet sur /direct.
 const WRITING_STYLE_OPTIONS = [
   { value: "normal", label: "Normal" },
   { value: "ackboo", label: "Ackboo" },
-  { value: "darksasuke", label: "Dark Sasuke" }
+  { value: "darksasuke", label: "Dark Sasuke" },
+  { value: "random", label: "Aléatoire" }
 ];
 
 // 6 mois à 5 ans, puis illimité (0 = jamais purgé). Les favoris échappent
@@ -331,7 +335,9 @@ export default function AdminSettingsPage() {
             <p className="text-xs italic text-sepia">
               « Ackboo » : ton sarcastique, passif-agressif et cynique façon Canard PC — appliqué aux
               titres et résumés réécrits par l’IA. « Normal » garde le ton journalistique neutre
-              habituel. Sans effet sur /direct, toujours sans IA.
+              habituel. « Aléatoire » tire un style au hasard parmi les précédents à chaque
+              impression (le style réellement tiré reste visible dans /archive). Sans effet sur
+              /direct, toujours sans IA.
             </p>
 
             <div className="space-y-3 border-t border-ink/20 pt-3">

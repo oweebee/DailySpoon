@@ -217,6 +217,17 @@ model Edition {
   inputTokens      Int?
   outputTokens     Int?
   estimatedCostUsd Float?
+  // Métadonnées IA figées pour CETTE génération précise (affichées dans
+  // /archive à côté de la date) — jamais recalculées après coup, contrairement
+  // à Settings qui ne reflète que le réglage ACTUEL. null en mode "Aspirer les
+  // news" (forceNoAi, aucune IA) ou pour les éditions générées avant ces
+  // champs. aiProvider : "anthropic" | "gemini". aiModel : nom exact du modèle
+  // utilisé (anthropicModel ou geminiModel selon aiProvider). writingStyle :
+  // valeur RÉSOLUE ("normal"/"ackboo"/"darksasuke"...), jamais "random" tel
+  // quel — voir resolveWritingStyle dans src/lib/ai.ts.
+  aiProvider       String?
+  aiModel          String?
+  writingStyle     String?
   articles    Article[]
   snapshot    EditionArticle[]
 }
