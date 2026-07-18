@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
 import { FrontPageView } from "@/components/FrontPageView";
+import { DeleteEditionButton } from "@/components/DeleteEditionButton";
 import { usdToEur } from "@/lib/aiPricing";
 
 export const dynamic = "force-dynamic";
@@ -91,6 +92,12 @@ export default async function ArchiveEditionPage({ params }: { params: { id: str
         {edition.sourcePoolCount != null && edition.sourcePoolCount !== articles.length && (
           <> (sur {edition.sourcePoolCount} récupéré{edition.sourcePoolCount > 1 ? "s" : ""})</>
         )}
+        {" · "}
+        <DeleteEditionButton
+          editionId={edition.id}
+          label={new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(edition.date) + ` — ${timeLabel}`}
+          redirectTo="/archive"
+        />
       </p>
       {(edition.aiProvider || edition.writingStyle || (edition.inputTokens !== null && edition.estimatedCostUsd !== null)) && (
         <div className="mb-6 flex flex-wrap justify-center gap-1.5">

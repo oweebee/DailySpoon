@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
 import { SpoonDivider } from "@/components/SpoonDivider";
 import { ArchiveSearch } from "@/components/ArchiveSearch";
+import { DeleteEditionButton } from "@/components/DeleteEditionButton";
 import { usdToEur } from "@/lib/aiPricing";
 
 export const dynamic = "force-dynamic";
@@ -196,8 +197,9 @@ export default async function ArchivePage({
                     <Link href={`/archive/${entry.key}`} className="font-display text-lg capitalize hover:underline">
                       {dayLabel} <span className="text-sm normal-case text-sepia">— {timeLabel}</span>
                     </Link>
-                    <span className="text-sm italic text-sepia">
+                    <span className="flex items-center gap-3 text-sm italic text-sepia">
                       {entry.count} article{entry.count > 1 ? "s" : ""}
+                      <DeleteEditionButton editionId={entry.key} label={`${dayLabel} — ${timeLabel}`} />
                     </span>
                   </div>
                   {(modelTag || styleTag || costTag) && (
