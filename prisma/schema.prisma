@@ -184,6 +184,23 @@ model Article {
   @@index([favorite])
   @@index([medal])
   @@index([included])
+  // Index de perf ajoutés avant que la table ne grossisse (migration
+  // 20260719000000_perf_indexes) :
+  // - feedId : tous les updateMany/groupBy par flux (exclusion, médaille,
+  //   recompute des flux perso, suppression) filtrent dessus ;
+  // - categoryLabel : bascules de catégorie (/api/admin/categories POST) et
+  //   nettoyage à la suppression d'une catégorie perso ;
+  // - publishedAt : tri principal de /direct, bornes de jour de la
+  //   génération et de la recherche par date ;
+  // - (included, publishedAt) : la requête exacte de /direct
+  //   (where included orderBy publishedAt desc take 1000) ;
+  // - sourceUrl : lookup de l'Article à CHAQUE ouverture d'article via
+  //   /api/article-proxy (findFirst par sourceUrl — full scan sinon).
+  @@index([feedId])
+  @@index([categoryLabel])
+  @@index([publishedAt])
+  @@index([included, publishedAt])
+  @@index([sourceUrl])
   // headline/summary/sourceTitle/feedTitle/category ont chacun un index GIN
   // trigram (pg_trgm), créé en SQL brut dans la migration
   // 20260716100000_article_search_trgm — non représentable ici sans le
@@ -230,6 +247,13 @@ model Edition {
   writingStyle     String?
   articles    Article[]
   snapshot    EditionArticle[]
+
+  // (date, generatedAt) : "dernière édition" de l'accueil//direct
+  // (orderBy date desc, generatedAt desc) ; (status, date) : recherche de la
+  // dernière édition PUBLIÉE du jour (anti-doublon de generateEdition,
+  // accueil, archives).
+  @@index([date, generatedAt])
+  @@index([status, date])
 }
 
 // Photo figée du contenu de la une IA tel qu'il était EXACTEMENT au moment de

@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import Parser from "rss-parser";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { customFeedFreshrssId, createCustomCategoryRecord, resolveFeedCategory, safeTitle } from "@/lib/customFeeds";
+import {
+  customFeedFreshrssId,
+  createCustomCategoryRecord,
+  resolveFeedCategory,
+  safeTitle,
+  recomputeAllCustomFeedIncluded
+} from "@/lib/customFeeds";
 
 async function assertAuthed(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -241,6 +247,17 @@ export async function PATCH(req: NextRequest) {
     }
 
     const feed = await prisma.customFeed.update({ where: { id }, data });
+
+    // Changement de catégorie : répercuter IMMÉDIATEMENT sur les articles
+    // déjà en base (categoryLabel + included), au lieu d'attendre le prochain
+    // tick du worker — sans ça, les articles gardaient l'ancien libellé et
+    // "En direct" affichait une colonne fantôme au nom de l'ancienne
+    // catégorie (voir recomputeAllCustomFeedIncluded, qui synchronise
+    // désormais aussi categoryLabel).
+    if (hasCategoryChoice) {
+      await recomputeAllCustomFeedIncluded();
+    }
+
     return NextResponse.json({ feed: { id: feed.id, url: feed.url, title: feed.title } });
   } catch (err: any) {
     console.error("[admin/custom-feeds] PATCH failed:", err);

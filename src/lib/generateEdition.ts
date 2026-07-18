@@ -125,46 +125,67 @@ function capPerCategory(items: RawItem[], max: number): { aiItems: RawItem[]; ov
  * les réécrivant.
  */
 export async function ingestRawItems(rawItems: RawItem[], editionId: string | null): Promise<void> {
-  for (const raw of rawItems) {
-    const fallback = fallbackProcess(raw);
+  if (rawItems.length === 0) return;
 
-    // try/catch PAR ARTICLE : vu en usage réel, un seul item malformé (ex.
-    // une date de publication illisible dans le flux source, rejetée par
-    // Prisma avec "Provided Date object is invalid") faisait planter cette
-    // boucle en plein milieu — sans ce try/catch, TOUS les articles
-    // restants du même lot (potentiellement d'autres flux entièrement
-    // valides) n'étaient alors jamais enregistrés non plus, silencieusement.
-    try {
-      await prisma.article.upsert({
-        where: { freshrssItemId: raw.freshrssItemId },
-        update: {},
-        create: {
-          freshrssItemId: raw.freshrssItemId,
-          feedId: raw.feedId,
-          feedTitle: raw.feedTitle,
-          categoryLabel: raw.categoryLabel,
-          sourceUrl: raw.sourceUrl,
-          sourceTitle: raw.sourceTitle,
-          sourceExcerpt: raw.sourceExcerpt,
-          imageUrl: raw.imageUrl,
-          publishedAt: raw.publishedAt,
-          processed: true,
-          included: raw.included,
-          headline: fallback.headline,
-          summary: fallback.summary,
-          category: fallback.category,
-          priorityScore: fallback.priorityScore,
-          aiRewritten: false,
-          editionId: editionId ?? undefined
-        }
-      });
-    } catch (err) {
-      await writeLog(
-        "error",
-        "edition",
-        `Article ignoré : "${raw.sourceTitle}"`,
-        `${raw.freshrssItemId} — ${(err as Error)?.message}`
-      );
+  // Dates assainies AVANT insertion : une date illisible ("Invalid Date")
+  // rejetée par Prisma faisait planter l'insertion — on la remplace par null
+  // plutôt que de perdre l'article (même logique que safePublishedAt côté
+  // flux perso, appliquée ici en dernier filet quel que soit le chemin
+  // d'ingestion).
+  const rows = rawItems.map((raw) => {
+    const fallback = fallbackProcess(raw);
+    const publishedAt =
+      raw.publishedAt && !isNaN(new Date(raw.publishedAt).getTime()) ? raw.publishedAt : null;
+    return {
+      freshrssItemId: raw.freshrssItemId,
+      feedId: raw.feedId,
+      feedTitle: raw.feedTitle,
+      categoryLabel: raw.categoryLabel,
+      sourceUrl: raw.sourceUrl,
+      sourceTitle: raw.sourceTitle,
+      sourceExcerpt: raw.sourceExcerpt,
+      imageUrl: raw.imageUrl,
+      publishedAt,
+      processed: true,
+      included: raw.included,
+      headline: fallback.headline,
+      summary: fallback.summary,
+      category: fallback.category,
+      priorityScore: fallback.priorityScore,
+      aiRewritten: false,
+      editionId: editionId ?? undefined
+    };
+  });
+
+  // UNE requête pour tout le lot au lieu d'un upsert PAR article (des
+  // centaines de requêtes séquentielles sur une grosse journée) :
+  // createMany + skipDuplicates est strictement équivalent à l'ancien
+  // upsert `update: {}` (les articles déjà en base ne sont jamais retouchés,
+  // pour ne pas écraser le travail éditorial — voir le commentaire au-dessus).
+  try {
+    await prisma.article.createMany({ data: rows, skipDuplicates: true });
+  } catch (batchErr) {
+    // Repli : si le lot ENTIER est rejeté (un item malformé passé entre les
+    // mailles de l'assainissement ci-dessus), on réinsère item par item pour
+    // ne perdre QUE le coupable — même garantie qu'avant, le coût par item
+    // n'est payé que dans ce cas rare.
+    await writeLog(
+      "warn",
+      "edition",
+      `Insertion groupée rejetée (${rows.length} article(s)) — repli item par item.`,
+      (batchErr as Error)?.message
+    );
+    for (const row of rows) {
+      try {
+        await prisma.article.createMany({ data: [row], skipDuplicates: true });
+      } catch (err) {
+        await writeLog(
+          "error",
+          "edition",
+          `Article ignoré : "${row.sourceTitle}"`,
+          `${row.freshrssItemId} — ${(err as Error)?.message}`
+        );
+      }
     }
   }
 }
@@ -561,6 +582,21 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
  * seul.
  */
 async function pruneOldArticles(): Promise<void> {
+  // TOUJOURS purger les brouillons VIDES (aucune photo figée) de plus de 2
+  // jours, indépendamment du réglage de rétention : chaque passage
+  // d'aspiration sans IA (potentiellement toutes les heures en mode manuel)
+  // crée sa propre ligne Edition "draft" — sans cette purge, des dizaines de
+  // coquilles vides s'accumulaient chaque jour pour toujours. Les brouillons
+  // récents (< 2 jours) sont conservés : le plus frais sert encore de
+  // référence de date au masthead de /direct.
+  const draftCutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  const { count: emptyDraftCount } = await prisma.edition.deleteMany({
+    where: { status: "draft", generatedAt: { lt: draftCutoff }, snapshot: { none: {} } }
+  });
+  if (emptyDraftCount > 0) {
+    await writeLog("info", "edition", `${emptyDraftCount} brouillon(s) vide(s) purgé(s).`);
+  }
+
   const { retentionDays } = await getSettings();
   if (!retentionDays || retentionDays <= 0) return; // illimité
 
@@ -573,6 +609,41 @@ async function pruneOldArticles(): Promise<void> {
   });
   if (count > 0) {
     await writeLog("info", "edition", `Rétention (${retentionDays} j) : ${count} article(s) purgé(s).`);
+  }
+
+  // Les ÉDITIONS aussi suivent la rétention : chaque génération crée sa
+  // propre ligne Edition (voir generateDailyEdition), donc sans purge la
+  // table grossit indéfiniment — y compris les brouillons vides d'un passage
+  // sans nouveauté. La cascade EditionArticle suit automatiquement ;
+  // Article.editionId passe à null (SET NULL) sans toucher à l'article.
+  const { count: editionCount } = await prisma.edition.deleteMany({
+    where: { date: { lt: cutoff } }
+  });
+  if (editionCount > 0) {
+    await writeLog("info", "edition", `Rétention (${retentionDays} j) : ${editionCount} édition(s) purgée(s).`);
+  }
+
+  await pruneOrphanSnapshotContents();
+}
+
+/**
+ * Supprime les contenus figés (ArticleSnapshotContent) que plus AUCUNE
+ * EditionArticle ne référence — ils deviennent orphelins quand la dernière
+ * édition qui pointait dessus est supprimée (purge de rétention ci-dessus, ou
+ * suppression manuelle dans /archive), et restaient sinon en base pour
+ * toujours puisqu'aucune FK ne les rattache à rien d'autre.
+ */
+export async function pruneOrphanSnapshotContents(): Promise<void> {
+  try {
+    const { count } = await prisma.articleSnapshotContent.deleteMany({
+      where: { editionArticles: { none: {} } }
+    });
+    if (count > 0) {
+      await writeLog("info", "edition", `${count} contenu(s) d'archive orphelin(s) purgé(s).`);
+    }
+  } catch (err) {
+    // Best-effort : un raté ici ne doit jamais bloquer l'opération appelante.
+    console.error("[edition] Échec de la purge des contenus orphelins :", (err as Error)?.message);
   }
 }
 
@@ -694,7 +765,38 @@ function isFaviconFallback(url: string | null): boolean {
 }
 
 async function cleanExistingHtmlArtifacts(): Promise<void> {
+  // Ne charge plus TOUTE la table (texte complet de chaque article transféré
+  // vers Node à chaque génération — de plus en plus coûteux à mesure que la
+  // base grossit) : seuls les articles susceptibles d'avoir quelque chose à
+  // corriger sont remontés. Trois familles de candidats :
+  //   1. image manquante ou favicon de repli (rattrapage og:image) —
+  //      détectable en SQL directement ;
+  //   2. HTML résiduel (looksLikeHtml cherche "<balise" ou "&lt;") —
+  //      préfiltré en SQL par un simple "contient < ou &lt;" (léger
+  //      sur-ensemble, le test JS précis retranche ensuite) ;
+  //   3. chrome de tête (stripLeadingChrome, pur JS, non exprimable en SQL) —
+  //      couvert par une fenêtre récente sur fetchedAt : ce nettoyage tourne
+  //      à chaque génération (au moins quotidienne), donc tout article plus
+  //      vieux que la fenêtre est déjà passé plusieurs fois par ici et est
+  //      forcément propre.
+  const RECENT_WINDOW_DAYS = 14;
+  const recentCutoff = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const candidates = await prisma.article.findMany({
+    where: {
+      OR: [
+        { imageUrl: null },
+        { imageUrl: { contains: "google.com/s2/favicons" } },
+        { sourceTitle: { contains: "<" } },
+        { sourceExcerpt: { contains: "<" } },
+        { headline: { contains: "<" } },
+        { summary: { contains: "<" } },
+        { sourceTitle: { contains: "&lt;" } },
+        { sourceExcerpt: { contains: "&lt;" } },
+        { headline: { contains: "&lt;" } },
+        { summary: { contains: "&lt;" } },
+        { fetchedAt: { gte: recentCutoff } }
+      ]
+    },
     select: {
       id: true,
       sourceTitle: true,

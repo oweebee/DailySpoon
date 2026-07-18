@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { REDLIB_INSTANCES, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
 import { isAlreadyMorssUrl } from "@/lib/text";
+import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -923,6 +924,10 @@ export async function GET(req: NextRequest) {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("protocole invalide");
   } catch {
     return new NextResponse("URL invalide", { status: 400 });
+  }
+  // Anti-SSRF : jamais de fetch serveur vers une cible interne (voir urlGuard).
+  if (isForbiddenProxyTarget(parsed)) {
+    return new NextResponse("Cible non autorisée", { status: 403 });
   }
   const originalUrl = parsed.toString();
   const fetchUrl = originalUrl;

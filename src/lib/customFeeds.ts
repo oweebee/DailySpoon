@@ -143,7 +143,7 @@ export async function recomputeAllCustomFeedIncluded(): Promise<void> {
 
   for (const feed of feeds) {
     const feedFreshrssId = customFeedFreshrssId(feed.id);
-    const { categoryFreshrssId } = resolveFeedCategory(feed);
+    const { categoryFreshrssId, categoryLabel } = resolveFeedCategory(feed);
     const groupDisabled = Boolean(feed.freshrssCategoryId) && disabledCategoryIds.has(feed.freshrssCategoryId!);
     const included = selectedIds.has(categoryFreshrssId) && !excludedIds.has(feedFreshrssId) && !groupDisabled;
     // "included: { not: included }" : n'écrit rien si déjà cohérent, pour ne
@@ -151,6 +151,20 @@ export async function recomputeAllCustomFeedIncluded(): Promise<void> {
     await prisma.article.updateMany({
       where: { feedId: feedFreshrssId, included: { not: included } },
       data: { included }
+    });
+    // Synchronise aussi categoryLabel : quand un flux est DÉPLACÉ vers une
+    // autre catégorie (PATCH /api/admin/custom-feeds), ses articles déjà en
+    // base gardaient l'ANCIEN libellé pour toujours — "En direct" (qui groupe
+    // par categoryLabel, voir EditionView) continuait alors d'afficher une
+    // colonne fantôme au nom de l'ancienne catégorie, y compris une catégorie
+    // perso SUPPRIMÉE depuis (le bug "catégorie supprimée toujours visible").
+    // Même garde "n'écrit que si différent" que ci-dessus. Le OR couvre
+    // aussi categoryLabel NULL : en SQL, NOT(categoryLabel = x) est faux
+    // pour NULL, donc sans cette branche un article sans libellé ne serait
+    // jamais rattrapé.
+    await prisma.article.updateMany({
+      where: { feedId: feedFreshrssId, OR: [{ categoryLabel: null }, { NOT: { categoryLabel } }] },
+      data: { categoryLabel }
     });
   }
 }
@@ -364,14 +378,29 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
       }
 
+      // Dédoublonnage en UNE requête pour tout le flux (au lieu d'un
+      // findUnique PAR item, soit potentiellement des dizaines de requêtes
+      // par flux à chaque balayage) : on calcule d'abord tous les ids
+      // candidats, puis un seul `IN (...)` remonte ceux déjà en base.
+      const candidateIds = parsed.items
+        .map((item) => item.guid || item.link || safeTitle(item.title))
+        .filter(Boolean)
+        .map((guid) => `${feedFreshrssId}:${guid}`);
+      const existing = candidateIds.length
+        ? await prisma.article.findMany({
+            where: { freshrssItemId: { in: candidateIds } },
+            select: { freshrssItemId: true }
+          })
+        : [];
+      const existingIds = new Set(existing.map((a) => a.freshrssItemId));
+
       let newForThisFeed = 0;
       for (const item of parsed.items) {
         const guid = item.guid || item.link || safeTitle(item.title);
         if (!guid) continue;
         const freshrssItemId = `${feedFreshrssId}:${guid}`;
 
-        const exists = await prisma.article.findUnique({ where: { freshrssItemId }, select: { id: true } });
-        if (exists) continue;
+        if (existingIds.has(freshrssItemId)) continue;
 
         const rawContent = bestRawContent(item);
         let excerpt = rawContent ? stripHtml(rawContent).trim() : (item.contentSnippet || "").trim();

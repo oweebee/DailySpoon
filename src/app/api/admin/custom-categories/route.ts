@@ -110,6 +110,22 @@ export async function DELETE(req: NextRequest) {
       prisma.excludedFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
       prisma.medalFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
       prisma.article.updateMany({ where: { feedId: { in: feedFreshrssIds } }, data: { included: false } }),
+      // Filet complémentaire : masque AUSSI les articles de flux perso qui
+      // portent encore le LIBELLÉ de cette catégorie mais dont le flux n'est
+      // plus (ou pas) dans category.feeds — cas typique : un flux qui a
+      // appartenu à cette catégorie puis a été déplacé/supprimé, ses articles
+      // gardant l'ancien categoryLabel. Sans ça, "En direct" (groupé par
+      // categoryLabel) continuait d'afficher la colonne de la catégorie
+      // supprimée avec ces articles-là dedans. Limité aux flux perso
+      // ("custom-feed:") : on ne touche jamais aux articles FreshRSS d'une
+      // catégorie homonyme. Si un de ces articles appartient en fait à un
+      // flux perso encore actif dans une AUTRE catégorie, la passe
+      // d'auto-correction du worker (recomputeAllCustomFeedIncluded) le
+      // réaffiche au tick suivant avec son BON libellé à jour.
+      prisma.article.updateMany({
+        where: { categoryLabel: category.label, feedId: { startsWith: "custom-feed:" }, included: true },
+        data: { included: false }
+      }),
       prisma.customCategory.delete({ where: { id } }) // cascade -> CustomFeed
     ]);
 

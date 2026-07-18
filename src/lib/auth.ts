@@ -30,18 +30,32 @@ export async function sessionTokenForPassword(password: string): Promise<string>
   return hmacHex(password, secret());
 }
 
+// Comparaison à temps constant : un simple "===" s'arrête au premier
+// caractère différent, ce qui laisse (en théorie) mesurer combien de
+// caractères du début sont corrects via le temps de réponse. XOR cumulé sur
+// toute la longueur — le temps ne dépend plus du contenu.
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  if (ab.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
+  return diff === 0;
+}
+
 export function isCorrectPassword(password: string): boolean {
   const expected = process.env.ADMIN_PASSWORD;
   if (!expected) {
     console.warn("[auth] ADMIN_PASSWORD is not set — admin area is effectively unlocked.");
     return true;
   }
-  return password === expected;
+  return timingSafeEqual(password, expected);
 }
 
 export async function isValidSessionToken(token: string | undefined): Promise<boolean> {
   if (!process.env.ADMIN_PASSWORD) return true; // no password configured -> open (dev convenience)
   if (!token) return false;
   const expected = await sessionTokenForPassword(process.env.ADMIN_PASSWORD);
-  return token === expected;
+  return timingSafeEqual(token, expected);
 }

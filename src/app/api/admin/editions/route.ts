@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { pruneOrphanSnapshotContents } from "@/lib/generateEdition";
 
 async function assertAuthed(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -26,6 +27,11 @@ export async function DELETE(req: NextRequest) {
     if (!edition) return NextResponse.json({ error: "Édition introuvable" }, { status: 404 });
 
     await prisma.edition.delete({ where: { id } });
+
+    // Les liens EditionArticle viennent de partir en cascade — nettoie les
+    // contenus figés que plus aucune autre édition ne référence (sinon
+    // orphelins en base pour toujours, voir pruneOrphanSnapshotContents).
+    await pruneOrphanSnapshotContents();
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {

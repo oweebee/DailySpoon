@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 
 // Certains sites (TechCrunch, Numerama, ...) bloquent le hotlinking : une
 // requête envoyée directement par le navigateur du visiteur échoue (referer
@@ -18,6 +19,10 @@ export async function GET(req: NextRequest) {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("protocole invalide");
   } catch {
     return NextResponse.json({ error: "url invalide" }, { status: 400 });
+  }
+  // Anti-SSRF : jamais de fetch serveur vers une cible interne (voir urlGuard).
+  if (isForbiddenProxyTarget(parsed)) {
+    return NextResponse.json({ error: "cible non autorisée" }, { status: 403 });
   }
 
   try {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 
 // Même principe que /api/image-proxy, mais pour la vidéo (utilisé pour les
 // liens v.redd.it — voir article-proxy) : on relaie la requête depuis notre
@@ -17,6 +18,10 @@ export async function GET(req: NextRequest) {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("protocole invalide");
   } catch {
     return NextResponse.json({ error: "url invalide" }, { status: 400 });
+  }
+  // Anti-SSRF : jamais de fetch serveur vers une cible interne (voir urlGuard).
+  if (isForbiddenProxyTarget(parsed)) {
+    return NextResponse.json({ error: "cible non autorisée" }, { status: 403 });
   }
 
   const range = req.headers.get("range") || undefined;
