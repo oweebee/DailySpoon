@@ -11,7 +11,7 @@ import { syncCustomFeeds } from "../src/lib/customFeeds";
 // immediately — no restart or redeploy needed.
 
 let lastRunDate: string | null = null;
-let lastFallbackSlot: string | null = null;
+let lastFallbackRunAt: number | null = null;
 
 function currentHourMinuteInTz(tz: string): { hour: number; minute: number; dateKey: string } {
   const now = new Date();
@@ -60,14 +60,15 @@ async function runOnce() {
 // Filet de sécurité en mode manuel : PAS de génération IA automatique (celle-
 // là ne se déclenche jamais toute seule si le planning est désactivé — c'est
 // voulu). Ici on parle uniquement de l'aspiration brute des flux RSS
-// ("Aspirer les news" sur /direct, forceNoAi — zéro coût IA), relancée
-// toutes les FALLBACK_INTERVAL_HOURS heures pour que la base d'articles
-// continue de s'étoffer même si personne ne passe sur le site pendant
-// longtemps. fetchNewItemsFromSelectedCategories dédoublonne déjà par
-// freshrssItemId, donc relancer souvent ne coûte rien de plus qu'un appel
-// réseau vers FreshRSS si rien de neuf n'est paru entre-temps.
-const FALLBACK_INTERVAL_HOURS = 3;
-
+// ("Aspirer les news" sur /direct, forceNoAi — zéro coût IA), relancée au
+// même rythme que Settings.customFeedsIntervalMinutes (réglage "Intervalle
+// de récupération" dans /admin/settings) — PLUS de durée fixe codée en dur
+// séparément : un seul réglage pilote maintenant à la fois cette aspiration
+// de secours FreshRSS ET les flux personnalisés (voir maybeSyncCustomFeeds
+// plus bas), sur demande explicite. fetchNewItemsFromSelectedCategories
+// dédoublonne déjà par freshrssItemId, donc relancer souvent ne coûte rien
+// de plus qu'un appel réseau vers FreshRSS si rien de neuf n'est paru
+// entre-temps.
 async function runOnceNoAi() {
   console.log(`[worker] Aspiration RSS de secours (sans IA) — ${new Date().toISOString()}`);
   try {
@@ -134,12 +135,17 @@ async function tick() {
   }
 
   // Planning désactivé (mode manuel, bouton sur l'accueil) : aspiration de
-  // secours à chaque créneau de FALLBACK_INTERVAL_HOURS heures (00h, 03h,
-  // 06h...), une seule fois par créneau.
-  const { hour, minute, dateKey } = currentHourMinuteInTz(settings.editionTz);
-  const slot = `${dateKey}-${Math.floor(hour / FALLBACK_INTERVAL_HOURS)}`;
-  if (minute === 0 && hour % FALLBACK_INTERVAL_HOURS === 0 && lastFallbackSlot !== slot) {
-    lastFallbackSlot = slot;
+  // secours dès que Settings.customFeedsIntervalMinutes (réglage "Intervalle
+  // de récupération", /admin/settings) est écoulé depuis la dernière fois —
+  // même mécanique à base d'écart de temps que fetchCustomFeedItems (voir
+  // customFeeds.ts), plus de créneaux alignés sur l'horloge (00h/03h/06h...).
+  // "lastFallbackRunAt" est en mémoire (pas persisté en base) : redémarre à
+  // null à chaque redéploiement, donc la toute première aspiration après un
+  // déploiement se relance immédiatement plutôt que d'attendre un créneau —
+  // déjà le comportement de fetchCustomFeedItems pour un tout premier flux.
+  const fallbackIntervalMs = settings.customFeedsIntervalMinutes * 60_000;
+  if (!lastFallbackRunAt || Date.now() - lastFallbackRunAt >= fallbackIntervalMs) {
+    lastFallbackRunAt = Date.now();
     await runOnceNoAi();
   }
 }

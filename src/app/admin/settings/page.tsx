@@ -65,9 +65,11 @@ const RETENTION_OPTIONS = [
   { value: "0", label: "Illimité" }
 ];
 
-// Intervalle GLOBAL de récupération des flux RSS personnalisés (catégories
-// personnalisées, /admin/categories) — un seul intervalle pour tous les flux
-// à la fois, pas de réglage par flux ni par catégorie (voir customFeeds.ts).
+// Intervalle GLOBAL de récupération RSS — gouverne à la fois les flux
+// personnalisés (catégories personnalisées, /admin/categories, voir
+// customFeeds.ts) ET l'aspiration RSS de secours FreshRSS en mode manuel
+// (voir worker/index.ts, plus de durée fixe séparée pour cette dernière) —
+// un seul intervalle pour tout ça, pas de réglage par flux ni par catégorie.
 const CUSTOM_FEEDS_INTERVAL_OPTIONS = [
   { value: "5", label: "5 minutes" },
   { value: "15", label: "15 minutes" },
@@ -499,7 +501,7 @@ export default function AdminSettingsPage() {
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">
             <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">
-              Flux RSS personnalisés
+              Récupération RSS
             </legend>
             <label className="block space-y-1">
               <span className="font-display text-xs uppercase tracking-[0.15em] text-sepia">
@@ -518,9 +520,12 @@ export default function AdminSettingsPage() {
               </select>
             </label>
             <p className="text-xs italic text-sepia">
-              S’applique à tous les flux ajoutés depuis « Catégories personnalisées »
-              (/admin/categories), sans passer par FreshRSS — un seul intervalle pour l’ensemble de
-              ces flux. Aucun coût IA : simple aspiration RSS, comme « Aspirer les news ».
+              Un seul réglage pour DEUX choses : les flux ajoutés depuis « Catégories personnalisées »
+              (/admin/categories, sans passer par FreshRSS), ET l’aspiration RSS de secours FreshRSS
+              qui tourne toute seule quand le planning automatique est désactivé (mode manuel, bouton
+              sur l’accueil) — plus de durée fixe séparée pour cette dernière, elle suit maintenant ce
+              même intervalle. Aucun coût IA dans les deux cas : simple aspiration RSS, comme « Aspirer
+              les news ».
             </p>
           </fieldset>
 
