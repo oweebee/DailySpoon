@@ -2,7 +2,7 @@ import Parser from "rss-parser";
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
 import { stripHtml, extractFirstImageSrc, stripLeadingChrome } from "./text";
-import { fetchOgImage, faviconFallback, type RawItem } from "./freshrss";
+import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
 import { ingestRawItems } from "./generateEdition";
 
 /**
@@ -187,6 +187,21 @@ function bestRawContent(item: Parser.Item): string {
   return withEncoded["content:encoded"] || item.content || item.summary || "";
 }
 
+/** Titre de secours pour un item sans <title> exploitable (dépêches AFP
+ *  redistribuées, vu en usage réel) : première phrase de l'extrait, coupée
+ *  à un mot entier si trop longue — pas de troncature en plein mot. Renvoie
+ *  "" si l'extrait lui-même est vide (rien à en tirer). */
+function deriveTitleFromExcerpt(excerpt: string): string {
+  if (!excerpt) return "";
+  const MAX_LEN = 100;
+  const sentenceEnd = excerpt.search(/[.!?](?:\s|$)/);
+  let candidate = sentenceEnd > 0 && sentenceEnd < MAX_LEN ? excerpt.slice(0, sentenceEnd + 1) : excerpt;
+  if (candidate.length > MAX_LEN) {
+    candidate = candidate.slice(0, MAX_LEN).replace(/\s+\S*$/, "") + "…";
+  }
+  return candidate.trim();
+}
+
 /** Certains flux (balisage Atom/RSS non standard, titre en CDATA imbriqué...)
  *  font remonter un `item.title` qui n'est PAS une chaîne malgré le typage
  *  de rss-parser (objet, tableau...) — appeler `.trim()` dessus plante alors
@@ -327,7 +342,21 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
 
         const canonicalUrl = item.link || "";
         let imageUrl = bestImageUrl(item, rawContent);
-        if (!imageUrl && canonicalUrl && included) imageUrl = await fetchOgImage(canonicalUrl);
+        const rawTitle = safeTitle(item.title);
+
+        // Un seul aller-retour réseau (fetchOgMeta) couvre les deux besoins
+        // à la fois : l'image manquante ET/OU le titre manquant (voir plus
+        // bas) — évite de fetcher deux fois la même page. Demandé pour les
+        // flux comme les dépêches AFP redistribuées (fonction-publique.gouv.fr)
+        // qui n'ont AUCUN <title> par item : on veut alors EXACTEMENT le même
+        // titre que celui affiché en ouvrant l'article en grand (qui vient de
+        // ce même scraping de page), pas une phrase devinée dans l'extrait.
+        let ogTitle: string | null = null;
+        if ((!imageUrl || !rawTitle) && canonicalUrl && included) {
+          const meta = await fetchOgMeta(canonicalUrl);
+          if (!imageUrl) imageUrl = meta.imageUrl;
+          ogTitle = meta.title;
+        }
         if (!imageUrl && canonicalUrl) imageUrl = faviconFallback(canonicalUrl);
 
         items.push({
@@ -336,7 +365,7 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
           feedTitle: feed.title,
           categoryLabel,
           sourceUrl: canonicalUrl,
-          sourceTitle: safeTitle(item.title) || "(sans titre)",
+          sourceTitle: rawTitle || ogTitle || deriveTitleFromExcerpt(excerpt) || "(sans titre)",
           sourceExcerpt: excerpt || null,
           imageUrl,
           publishedAt: safePublishedAt(item),

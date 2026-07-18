@@ -163,8 +163,28 @@ function extractImageUrl(item: any): string | null {
  * ou refuse la requête — une image manquante reste acceptable, un import
  * bloqué ne l'est pas.
  */
-export async function fetchOgImage(url: string): Promise<string | null> {
-  if (!url) return null;
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;/gi, "'")
+    .replace(/&nbsp;/gi, " ");
+}
+
+/**
+ * Récupère og:image ET le VRAI titre de la page (og:title, sinon
+ * twitter:title, sinon <title>) en UN SEUL aller-retour réseau — utilisé
+ * quand un flux ne fournit ni image ni titre exploitable par item (ex.
+ * dépêches AFP redistribuées, vu en usage réel sur fonction-publique.gouv.fr :
+ * l'article ouvert en grand affiche bien un titre correct puisqu'il vient de
+ * ce même scraping, alors que le flux RSS lui-même n'a aucun <title>).
+ * fetchOgImage ci-dessous reste un simple alias pour les appelants qui n'ont
+ * besoin que de l'image.
+ */
+export async function fetchOgMeta(url: string): Promise<{ imageUrl: string | null; title: string | null }> {
+  if (!url) return { imageUrl: null, title: null };
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -186,7 +206,7 @@ export async function fetchOgImage(url: string): Promise<string | null> {
     } finally {
       clearTimeout(timeout);
     }
-    if (!res.ok) return null;
+    if (!res.ok) return { imageUrl: null, title: null };
 
     // On ne s'arrête plus à la fin du <head> : certains sites (ex.
     // Geekzone/WordPress sans plugin SEO configuré sur tous les articles)
@@ -212,36 +232,51 @@ export async function fetchOgImage(url: string): Promise<string | null> {
       html = await res.text();
     }
 
-    const match =
+    const imageMatch =
       html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i) ||
       html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i) ||
       html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
       html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
 
-    if (match) {
-      let imageUrl = match[1].trim();
+    let imageUrl: string | null = null;
+    if (imageMatch) {
+      imageUrl = imageMatch[1].trim();
       if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
-      return imageUrl || null;
+    } else {
+      // Filet de secours WordPress : pas de balise og:image, mais l'image de
+      // l'article est presque toujours servie depuis /wp-content/uploads/
+      // (contenu réellement uploadé pour ce post), contrairement aux images
+      // de thème/logo/icônes qui viennent de /wp-content/themes/ ou
+      // /plugins/ — heuristique fiable pour cibler la vraie image
+      // d'illustration sans risquer d'attraper un logo ou une icône de nav.
+      const wpMatch = html.match(/<img[^>]+src=["']([^"']*\/wp-content\/uploads\/[^"']+)["']/i);
+      if (wpMatch) {
+        imageUrl = wpMatch[1].trim();
+        if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
+      }
     }
 
-    // Filet de secours WordPress : pas de balise og:image, mais l'image de
-    // l'article est presque toujours servie depuis /wp-content/uploads/
-    // (contenu réellement uploadé pour ce post), contrairement aux images de
-    // thème/logo/icônes qui viennent de /wp-content/themes/ ou /plugins/ —
-    // heuristique fiable pour cibler la vraie image d'illustration sans
-    // risquer d'attraper un logo ou une icône de navigation.
-    const wpMatch = html.match(/<img[^>]+src=["']([^"']*\/wp-content\/uploads\/[^"']+)["']/i);
-    if (wpMatch) {
-      let imageUrl = wpMatch[1].trim();
-      if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
-      return imageUrl || null;
-    }
+    const titleMatch =
+      html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i) ||
+      html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:title["']/i) ||
+      html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? decodeHtmlEntities(titleMatch[1]).trim() : null;
 
-    return null;
+    return { imageUrl: imageUrl || null, title: title || null };
   } catch (err) {
-    console.warn(`[freshrss] og:image indisponible pour ${url}:`, (err as Error)?.message);
-    return null;
+    console.warn(`[freshrss] og:image/og:title indisponible pour ${url}:`, (err as Error)?.message);
+    return { imageUrl: null, title: null };
   }
+}
+
+/**
+ * Alias historique pour les appelants qui n'ont besoin que de l'image (voir
+ * fetchOgMeta ci-dessus pour récupérer aussi le titre en un seul aller-retour).
+ */
+export async function fetchOgImage(url: string): Promise<string | null> {
+  return (await fetchOgMeta(url)).imageUrl;
 }
 
 /**

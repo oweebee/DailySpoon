@@ -556,7 +556,14 @@ export default function AdminCategoriesPage() {
   // catégorie), plus de liste à plat dupliquant l'arborescence. Le badge
   // "TEST · PERSO" reste affiché sur chaque ligne pour se repérer
   // visuellement d'un coup d'œil, même niché dans l'arbre.
-  function renderCustomFeedRow(feed: CustomFeedItem) {
+  // showPersoBadge : true seulement dans l'arborescence "Catégories & flux"
+  // (vraie catégorie FreshRSS pouvant mélanger flux réels ET flux perso) —
+  // là, la mention doit se lire À CÔTÉ DU FLUX précis, pas sur l'en-tête de
+  // catégorie (qui induirait en erreur : la catégorie elle-même n'est pas
+  // perso). Dans l'arborescence "Catégories & flux personnalisés" (catégorie
+  // perso pure), le badge reste sur la catégorie — inutile de le répéter sur
+  // chaque flux puisque TOUTE la catégorie y est déjà perso.
+  function renderCustomFeedRow(feed: CustomFeedItem, showPersoBadge = false) {
     if (editingFeedId === feed.id) {
       return (
         <li key={feed.id} className="rounded-sm bg-ink/5 p-3">
@@ -620,7 +627,12 @@ export default function AdminCategoriesPage() {
         className="flex flex-wrap items-center justify-between gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
       >
         <span className="text-sm">
-          {feed.title}
+          {feed.title}{" "}
+          {showPersoBadge && (
+            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+              perso
+            </span>
+          )}
           {/* Compte réel des articles déjà en base pour ce flux (total /
               visibles en direct) — seul moyen fiable de distinguer "le flux
               n'a jamais rien remonté" (0 articles, feed vide ou items sans
@@ -885,11 +897,11 @@ export default function AdminCategoriesPage() {
                           ({childFeeds.length + childCustomFeeds.length})
                         </span>
                       )}
-                      {childCustomFeeds.length > 0 && (
-                        <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
-                          perso
-                        </span>
-                      )}
+                      {/* Plus de badge "perso" ICI : cette catégorie est une
+                          vraie catégorie FreshRSS, la mention doit se lire à
+                          côté de chaque flux (voir plus bas), pas laisser
+                          penser que la catégorie entière serait perso alors
+                          qu'elle mélange flux FreshRSS réels et flux perso. */}
                     </button>
                     <div className="flex shrink-0 flex-wrap items-center gap-4">
                       {childCustomFeeds.length > 0 && (
@@ -923,7 +935,16 @@ export default function AdminCategoriesPage() {
                           className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
                         >
                           <span className="text-sm">
-                            {feed.title}
+                            {feed.title}{" "}
+                            {/* Tag "FreshRSS" à côté de CE flux précis — pour
+                                le distinguer d'un flux perso mélangé dans la
+                                même catégorie (voir childCustomFeeds
+                                ci-dessous, tag "perso"), maintenant que la
+                                distinction se lit par flux et non plus par
+                                catégorie entière. */}
+                            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                              freshrss
+                            </span>
                             {/* Même compte réel qu'en /admin, section flux
                                 personnalisés — cohérence entre les deux
                                 sections, et utile pour diagnostiquer un flux
@@ -956,7 +977,7 @@ export default function AdminCategoriesPage() {
                           </div>
                         </li>
                       ))}
-                      {childCustomFeeds.map((feed) => renderCustomFeedRow(feed))}
+                      {childCustomFeeds.map((feed) => renderCustomFeedRow(feed, true))}
                       {childFeeds.length === 0 && childCustomFeeds.length === 0 && (
                         <p className="py-1.5 text-xs italic text-sepia">
                           Aucun flux trouvé pour cette catégorie.
