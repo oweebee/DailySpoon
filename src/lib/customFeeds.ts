@@ -124,13 +124,15 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
 
   const feeds = await prisma.customFeed.findMany({ include: { customCategory: true } });
   if (feeds.length === 0) {
-    // Rien à faire, mais on marque quand même le passage pour ne pas
-    // re-tester à chaque tick tant qu'aucun flux personnalisé n'existe.
-    await prisma.settings.upsert({
-      where: { id: "singleton" },
-      update: { customFeedsLastFetchedAt: new Date() },
-      create: { id: "singleton", customFeedsLastFetchedAt: new Date() }
-    });
+    // Rien à faire — surtout NE PAS marquer le passage ici : le vérifier
+    // coûte une seule requête DB (pas de réseau), donc autant réessayer à
+    // chaque tick. Marquer customFeedsLastFetchedAt à "maintenant" alors
+    // qu'aucun flux n'existe encore piégeait le TOUT PREMIER flux jamais créé
+    // : l'horodatage restait "frais" (rafraîchi chaque minute par le worker
+    // tant qu'il n'y avait aucun flux), donc dès qu'un flux apparaissait,
+    // l'intervalle semblait déjà écoulé... alors qu'aucune récupération
+    // réelle n'avait jamais eu lieu — le premier flux ajouté attendait alors
+    // bêtement un intervalle complet avant sa toute première récupération.
     return [];
   }
 

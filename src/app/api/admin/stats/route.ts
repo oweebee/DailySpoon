@@ -92,6 +92,12 @@ export async function GET(req: NextRequest) {
       prisma.edition.count({ where: { status: "published" } }),
       prisma.edition.count(),
       prisma.edition.findFirst({
+        // "published" seulement : une aspiration de secours sans IA
+        // (forceNoAi, toutes les 3h en mode manuel) crée aussi une ligne
+        // Edition (status "draft", 0 token/0€) pour simplement suivre le
+        // vivier d'articles — ce n'est PAS une impression, elle ne doit pas
+        // apparaître comme "Dernière impression" dans les statistiques.
+        where: { status: "published" },
         orderBy: [{ date: "desc" }, { generatedAt: "desc" }],
         select: {
           date: true,
