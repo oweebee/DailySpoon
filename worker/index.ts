@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { generateDailyEdition, todayDateOnly } from "../src/lib/generateEdition";
 import { getSettings } from "../src/lib/settings";
 import { prisma } from "../src/lib/prisma";
+import { healthCheckRedditFeeds } from "../src/lib/redditFeedHealth";
 
 // Self-hosted daily scheduler (no Vercel cron needed).
 // Checked every minute against the current /admin/settings (or env var
@@ -76,8 +77,33 @@ async function runOnceNoAi() {
   }
 }
 
+// Bascule automatique des flux Reddit vers un miroir Redlib (voir
+// redditFeedHealth.ts) — pure maintenance réseau, ZÉRO coût IA, tourne donc
+// dans tous les cas (mode auto ou manuel), à un intervalle plus espacé
+// qu'un simple tick puisqu'il ne s'agit que de vérifier que les flux
+// répondent toujours.
+const REDDIT_HEALTH_INTERVAL_HOURS = 6;
+let lastRedditHealthSlot: string | null = null;
+
+async function maybeRunRedditHealthCheck(tz: string) {
+  const { hour, minute, dateKey } = currentHourMinuteInTz(tz);
+  const slot = `${dateKey}-${Math.floor(hour / REDDIT_HEALTH_INTERVAL_HOURS)}`;
+  if (minute !== 5 || hour % REDDIT_HEALTH_INTERVAL_HOURS !== 0 || lastRedditHealthSlot === slot) return;
+  lastRedditHealthSlot = slot;
+  try {
+    const result = await healthCheckRedditFeeds();
+    if (result.switched.length > 0) {
+      console.log(`[worker] Flux Reddit basculés vers Redlib : ${result.switched.join(", ")}`);
+    }
+  } catch (err) {
+    console.error("[worker] Vérification des flux Reddit échouée:", err);
+  }
+}
+
 async function tick() {
   const settings = await getSettings();
+
+  await maybeRunRedditHealthCheck(settings.editionTz);
 
   if (settings.editionScheduleEnabled) {
     const { hour, minute, dateKey } = currentHourMinuteInTz(settings.editionTz);

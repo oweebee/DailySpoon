@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import { REDLIB_INSTANCES, isRedditHostname } from "@/lib/reddit";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -57,7 +58,14 @@ const TRAILING_JUNK_PHRASES = [
   "google actualités",
   "google news",
   "notre chaîne whatsapp",
-  "sur whatsapp"
+  "sur whatsapp",
+  // Bandeau "soutenez-nous / sans publicité" en tête de page (ex. Gamekult)
+  // — sinon assez long pour passer isSubstantiveParagraph comme "vrai"
+  // premier paragraphe et empêcher trimLeadingJunk de couper le menu qui
+  // suit (voir plus bas).
+  "soutenez",
+  "sans publicité",
+  "découvrez tous nos contenus"
 ];
 
 // Un "vrai" paragraphe peut être un <p> classique ou un <blockquote> (souvent
@@ -135,6 +143,61 @@ function trimTrailingJunk(root: Element): void {
   if (cutFrom >= children.length) return; // rien à couper
 
   for (let i = children.length - 1; i >= cutFrom; i--) {
+    children[i].remove();
+  }
+}
+
+// Symétrique de trimTrailingJunk, mais en tête d'article : certains sites
+// (ex. Gamekult) glissent tout le chrome de la page — bandeau
+// "soutenez-nous", menu (liste de rubriques), "Menu"/"Recherche"/"Abonnés",
+// fil "Accueil > News > <titre répété>" — À L'INTÉRIEUR du bloc que
+// Readability extrait comme contenu d'article, avant le vrai texte. On
+// repère le premier paragraphe "réel" (même détection que trimTrailingJunk)
+// et on supprime tout ce qui le précède, à condition d'y reconnaître un
+// signal de chrome connu (sinon on ne touche à rien, par sécurité — un
+// article dont le premier paragraphe est simplement court n'est pas
+// forcément pollué).
+const LEADING_JUNK_EXACT_PHRASES = [
+  "menu",
+  "recherche",
+  "rechercher",
+  "abonnés",
+  "abonnements",
+  "l'actualité",
+  "accueil",
+  "news",
+  "se connecter",
+  "s'inscrire",
+  "sommaire"
+];
+
+function isLeadingJunkElement(el: Element): boolean {
+  if (el.tagName === "UL" || el.tagName === "OL" || el.tagName === "NAV") return true;
+  const text = (el.textContent || "").trim().toLowerCase();
+  return LEADING_JUNK_EXACT_PHRASES.includes(text);
+}
+
+function trimLeadingJunk(root: Element): void {
+  const children = Array.from(root.children);
+  let firstRealIdx = -1;
+  for (let i = 0; i < children.length; i++) {
+    if (isSubstantiveParagraph(children[i])) {
+      firstRealIdx = i;
+      break;
+    }
+  }
+  if (firstRealIdx <= 0) return; // rien avant le premier paragraphe réel, ou aucun trouvé
+
+  const before = children.slice(0, firstRealIdx);
+  if (!before.some((el) => isLeadingJunkElement(el))) return; // pas de signal de chrome reconnu : on ne touche à rien
+
+  // Garde la dernière image/figure juste avant le texte réel : presque
+  // toujours la photo d'illustration de l'article, pas du chrome.
+  let cutTo = firstRealIdx;
+  const prev = children[cutTo - 1];
+  if (prev && /^(IMG|FIGURE|PICTURE)$/.test(prev.tagName)) cutTo -= 1;
+
+  for (let i = cutTo - 1; i >= 0; i--) {
     children[i].remove();
   }
 }
@@ -563,12 +626,8 @@ async function translateArticle(title: string, bodyHtml: string): Promise<{ titl
 // blocage réseau/IP, pas seulement JS. La seule voie qui reste fiable est
 // l'API JSON publique (pas d'auth requise pour un post public) : on la
 // préfère pour les URLs de post ("/comments/...").
-function isRedditUrl(hostname: string): boolean {
-  return /(^|\.)reddit\.com$/i.test(hostname);
-}
-
 function isRedditPostUrl(u: URL): boolean {
-  return isRedditUrl(u.hostname) && /\/comments\//.test(u.pathname);
+  return isRedditHostname(u.hostname) && /\/comments\//.test(u.pathname);
 }
 
 // Reddit renvoie le corps d'un self-post déjà en HTML (sain, rendu depuis
@@ -582,19 +641,8 @@ function decodeRedditHtml(encoded: string): string {
   return dom.window.document.getElementById("tmp")?.textContent || "";
 }
 
-// Instances publiques Redlib (front-end alternatif à Reddit, scrape sa
-// propre infrastructure) — essai best-effort avant l'API JSON officielle.
-// Non garanti dans la durée : une instance publique peut tomber, changer de
-// politique anti-bot, etc. Celles listées ici ont été vérifiées comme ne
-// posant pas de challenge JS (Anubis/Cloudflare) au moment de l'écriture ;
-// si toutes échouent, on retombe sur l'API JSON puis sur la page de repli.
-const REDLIB_INSTANCES = [
-  "https://redlib.catsarch.com",
-  "https://redlib.privacyredirect.com",
-  "https://redlib.orangenet.cc",
-  "https://redlib.privadency.com"
-];
-
+// REDLIB_INSTANCES (essai best-effort avant l'API JSON officielle) vit
+// désormais dans src/lib/reddit.ts, partagé avec redditFeedHealth.ts.
 async function fetchViaRedlib(parsed: URL): Promise<{ html: string; baseUrl: string } | null> {
   const path = parsed.pathname + parsed.search;
   for (const instance of REDLIB_INSTANCES) {
@@ -919,7 +967,10 @@ export async function GET(req: NextRequest) {
     contentDom.window.document.querySelectorAll("script, style, iframe").forEach((el) => el.remove());
 
     const rootEl = contentDom.window.document.getElementById("root");
-    if (rootEl) trimTrailingJunk(rootEl);
+    if (rootEl) {
+      trimTrailingJunk(rootEl);
+      trimLeadingJunk(rootEl);
+    }
 
     let finalTitle = article.title || "Article";
     let finalBody = rootEl?.innerHTML || "";
