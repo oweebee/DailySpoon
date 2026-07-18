@@ -53,7 +53,7 @@ export function Masthead({ date }: { date: Date }) {
               place à droite du titre en mobile). */}
           <Link
             href="/direct"
-            className="stamp-live stamp-bg-sm relative mx-auto mt-4 flex w-fit items-center justify-center px-4 font-display text-xs uppercase tracking-[0.25em] text-white md:hidden"
+            className="stamp-live stamp-bg-sm relative mx-auto mt-4 flex h-12 items-center justify-center px-4 font-display text-xs uppercase tracking-[0.25em] text-white md:hidden"
           >
             <span className="stamp-live-text">En direct</span>
           </Link>
@@ -72,7 +72,7 @@ export function Masthead({ date }: { date: Date }) {
             dans .stamp-live-text, garde l'inclinaison. */}
         <Link
           href="/direct"
-          className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 my-auto hidden h-fit items-center justify-center px-5 font-display text-sm uppercase tracking-[0.25em] text-white md:flex"
+          className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 my-auto hidden h-16 items-center justify-center px-5 font-display text-sm uppercase tracking-[0.25em] text-white md:flex"
         >
           <span className="stamp-live-text">En direct</span>
         </Link>

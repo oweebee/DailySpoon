@@ -288,15 +288,6 @@ export default function AdminCategoriesPage() {
     });
   }
 
-  // Depuis l'arborescence "Catégories & flux" (où un flux perso rattaché à
-  // une catégorie FreshRSS est aussi affiché), le formulaire d'édition reste
-  // dans "Flux personnalisés" plus bas — on y scrolle pour ne pas laisser
-  // le clic sans effet visible.
-  function startEditFeedFromTree(feed: CustomFeedItem) {
-    startEditFeed(feed);
-    document.getElementById(`custom-feed-${feed.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
   function cancelEditFeed() {
     setEditingFeedId(null);
     setEditFeedForm(EMPTY_FEED_FORM);
@@ -526,6 +517,121 @@ export default function AdminCategoriesPage() {
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.href = "/admin/login";
+  }
+
+  // Ligne d'un flux personnalisé (vue OU édition inline) — partagée entre
+  // l'arborescence "Catégories & flux" (flux perso rattachés à une vraie
+  // catégorie FreshRSS) et l'arborescence "Catégories & flux personnalisés"
+  // (flux perso rattachés à une catégorie perso) : chaque flux n'a
+  // désormais QU'UN SEUL endroit où s'afficher (celui qui correspond à sa
+  // catégorie), plus de liste à plat dupliquant l'arborescence. Le badge
+  // "TEST · PERSO" reste affiché sur chaque ligne pour se repérer
+  // visuellement d'un coup d'œil, même niché dans l'arbre.
+  function renderCustomFeedRow(feed: CustomFeedItem) {
+    if (editingFeedId === feed.id) {
+      return (
+        <li key={feed.id} className="rounded-sm bg-ink/5 p-3">
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="url"
+                value={editFeedForm.url}
+                onChange={(e) => setEditFeedForm((prev) => ({ ...prev, url: e.target.value }))}
+                placeholder="URL du flux"
+                className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-1.5 text-sm"
+              />
+              <input
+                type="text"
+                value={editFeedForm.title}
+                onChange={(e) => setEditFeedForm((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Nom personnalisé"
+                className="w-48 border border-ink/40 bg-transparent px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <CategorySelectField
+                value={editFeedForm.categoryChoice}
+                onChange={(v) => setEditFeedForm((prev) => ({ ...prev, categoryChoice: v }))}
+                newLabel={editFeedForm.newCategoryLabel}
+                onNewLabelChange={(v) => setEditFeedForm((prev) => ({ ...prev, newCategoryLabel: v }))}
+                freshrssCategories={categories}
+                customCats={customCategories}
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => saveEditFeed(feed)}
+                disabled={
+                  savingFeedEdit ||
+                  !editFeedForm.url.trim() ||
+                  !editFeedForm.categoryChoice ||
+                  (editFeedForm.categoryChoice === "new" && !editFeedForm.newCategoryLabel.trim())
+                }
+                className="stamp-button stamp-bg-md inline-flex items-center justify-center px-3 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+              >
+                {savingFeedEdit ? "Enregistrement..." : "Enregistrer"}
+              </button>
+              <button
+                type="button"
+                onClick={cancelEditFeed}
+                className="text-xs uppercase tracking-[0.2em] text-sepia hover:underline"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </li>
+      );
+    }
+
+    return (
+      <li
+        key={feed.id}
+        className="flex flex-wrap items-center justify-between gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+      >
+        <span className="text-sm">
+          {feed.title}{" "}
+          <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+            {feed.categoryLabel} · {feed.isFreshrssCategory ? "FreshRSS" : "perso"}
+          </span>
+        </span>
+        <div className="flex shrink-0 flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-xs italic text-sepia">
+            <input
+              type="checkbox"
+              checked={feed.medal}
+              onChange={() => toggleCustomFeedMedal(feed)}
+              className="accent-journal"
+            />
+            médaille
+          </label>
+          <label className="flex items-center gap-2 text-xs italic text-sepia">
+            <input
+              type="checkbox"
+              checked={feed.included}
+              onChange={() => toggleCustomFeedIncluded(feed)}
+              className="accent-ink"
+            />
+            inclure le flux
+          </label>
+          <button
+            type="button"
+            onClick={() => startEditFeed(feed)}
+            className="text-xs uppercase tracking-[0.2em] hover:underline"
+          >
+            Modifier
+          </button>
+          <button
+            type="button"
+            onClick={() => deleteCustomFeed(feed)}
+            className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
+          >
+            Supprimer
+          </button>
+        </div>
+      </li>
+    );
   }
 
   return (
@@ -788,46 +894,7 @@ export default function AdminCategoriesPage() {
                           </div>
                         </li>
                       ))}
-                      {childCustomFeeds.map((feed) => (
-                        <li
-                          key={feed.id}
-                          className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
-                        >
-                          <span className="text-sm">
-                            {feed.title}{" "}
-                            <span className="rounded-sm border border-ink/30 px-1 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
-                              perso
-                            </span>
-                          </span>
-                          <div className="flex shrink-0 items-center gap-4">
-                            <label className="flex items-center gap-2 text-xs italic text-sepia">
-                              <input
-                                type="checkbox"
-                                checked={feed.medal}
-                                onChange={() => toggleCustomFeedMedal(feed)}
-                                className="accent-journal"
-                              />
-                              médaille
-                            </label>
-                            <label className="flex items-center gap-2 text-xs italic text-sepia">
-                              <input
-                                type="checkbox"
-                                checked={feed.included}
-                                onChange={() => toggleCustomFeedIncluded(feed)}
-                                className="accent-ink"
-                              />
-                              inclure le flux
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => startEditFeedFromTree(feed)}
-                              className="text-xs uppercase tracking-[0.2em] hover:underline"
-                            >
-                              Modifier
-                            </button>
-                          </div>
-                        </li>
-                      ))}
+                      {childCustomFeeds.map((feed) => renderCustomFeedRow(feed))}
                       {childFeeds.length === 0 && childCustomFeeds.length === 0 && (
                         <p className="py-1.5 text-xs italic text-sepia">
                           Aucun flux trouvé pour cette catégorie.
@@ -898,19 +965,40 @@ export default function AdminCategoriesPage() {
       )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Flux personnalisés">
+      <CollapsibleSection title="Catégories & flux personnalisés">
       <p className="newsprint mb-6 text-sm text-neutral-700">
-        Ajoute directement une URL de flux RSS/Atom, sans passer par FreshRSS. À la création, choisis
-        où le ranger : dans une catégorie FreshRSS existante (il est alors traité en tout point comme
-        un flux FreshRSS de cette catégorie — affichage En direct, génération IA), dans une catégorie
-        personnalisée déjà créée, ou dans une toute nouvelle catégorie personnalisée créée à la volée.
-        Mêmes cases qu’un flux FreshRSS (inclure, médaille), même filtrage/mise en forme. Récupéré à
-        l’intervalle global réglable dans{" "}
+        Crée d’abord une catégorie personnalisée si besoin, ajoute ensuite un flux RSS/Atom (sans
+        passer par FreshRSS) en choisissant où le ranger — une catégorie FreshRSS existante (le flux
+        est alors traité en tout point comme un flux FreshRSS de cette catégorie, affichage En direct
+        et génération IA compris), une catégorie personnalisée déjà créée, ou une toute nouvelle
+        catégorie créée à la volée. Mêmes cases qu’un flux FreshRSS (inclure, médaille), même
+        filtrage/mise en forme, récupérés à l’intervalle global réglable dans{" "}
         <a href="/admin/settings" className="underline">
           /admin/settings
         </a>
-        .
+        . Gestion centralisée ci-dessous : chaque flux n’apparaît qu’une seule fois, sous sa
+        catégorie (perso rattachée à une vraie catégorie FreshRSS : voir aussi « Catégories & flux »
+        plus haut).
       </p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-ink/30 pb-4">
+        <input
+          type="text"
+          value={newCategoryLabel}
+          onChange={(e) => setNewCategoryLabel(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && createCustomCategory()}
+          placeholder="Nom de la nouvelle catégorie"
+          className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
+        />
+        <button
+          type="button"
+          onClick={createCustomCategory}
+          disabled={creatingCategory || !newCategoryLabel.trim()}
+          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
+        >
+          {creatingCategory ? "Création..." : "Créer la catégorie"}
+        </button>
+      </div>
 
       <div className="mb-6 space-y-2 border-b-2 border-ink pb-4">
         <div className="flex flex-wrap gap-2">
@@ -955,150 +1043,8 @@ export default function AdminCategoriesPage() {
       </div>
 
       {customFeedsError && <p className="mb-3 text-sm text-journal">{customFeedsError}</p>}
-      {customFeedsLoading ? (
-        <p className="italic text-sepia">Chargement...</p>
-      ) : customFeeds.length === 0 ? (
-        <p className="py-4 text-center italic text-sepia">Aucun flux personnalisé pour l’instant.</p>
-      ) : (
-        <ul className="mb-10 border-t-2 border-ink">
-          {customFeeds.map((feed) => (
-            <li key={feed.id} id={`custom-feed-${feed.id}`} className="border-b border-ink/30 py-3">
-              {editingFeedId === feed.id ? (
-                <div className="space-y-2 rounded-sm bg-ink/5 p-3">
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      type="url"
-                      value={editFeedForm.url}
-                      onChange={(e) => setEditFeedForm((prev) => ({ ...prev, url: e.target.value }))}
-                      placeholder="URL du flux"
-                      className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-1.5 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={editFeedForm.title}
-                      onChange={(e) => setEditFeedForm((prev) => ({ ...prev, title: e.target.value }))}
-                      placeholder="Nom personnalisé"
-                      className="w-48 border border-ink/40 bg-transparent px-3 py-1.5 text-sm"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <CategorySelectField
-                      value={editFeedForm.categoryChoice}
-                      onChange={(v) => setEditFeedForm((prev) => ({ ...prev, categoryChoice: v }))}
-                      newLabel={editFeedForm.newCategoryLabel}
-                      onNewLabelChange={(v) => setEditFeedForm((prev) => ({ ...prev, newCategoryLabel: v }))}
-                      freshrssCategories={categories}
-                      customCats={customCategories}
-                    />
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <button
-                      type="button"
-                      onClick={() => saveEditFeed(feed)}
-                      disabled={
-                        savingFeedEdit ||
-                        !editFeedForm.url.trim() ||
-                        !editFeedForm.categoryChoice ||
-                        (editFeedForm.categoryChoice === "new" && !editFeedForm.newCategoryLabel.trim())
-                      }
-                      className="stamp-button stamp-bg-md inline-flex items-center justify-center px-3 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
-                    >
-                      {savingFeedEdit ? "Enregistrement..." : "Enregistrer"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelEditFeed}
-                      className="text-xs uppercase tracking-[0.2em] text-sepia hover:underline"
-                    >
-                      Annuler
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-bold">{feed.title}</span>
-                      <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.6rem] uppercase tracking-[0.15em] text-sepia">
-                        {feed.categoryLabel} · {feed.isFreshrssCategory ? "FreshRSS" : "perso"}
-                      </span>
-                    </div>
-                    <div className="truncate text-xs italic text-sepia">{feed.url}</div>
-                    <div className="text-xs italic text-sepia">
-                      {feed.lastFetchedAt
-                        ? `récupéré ${formatDateTime(feed.lastFetchedAt)}`
-                        : "pas encore récupéré"}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 text-xs italic text-sepia">
-                      <input
-                        type="checkbox"
-                        checked={feed.medal}
-                        onChange={() => toggleCustomFeedMedal(feed)}
-                        className="accent-journal"
-                      />
-                      médaille
-                    </label>
-                    <label className="flex items-center gap-2 text-xs italic text-sepia">
-                      <input
-                        type="checkbox"
-                        checked={feed.included}
-                        onChange={() => toggleCustomFeedIncluded(feed)}
-                        className="accent-ink"
-                      />
-                      inclure le flux
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => startEditFeed(feed)}
-                      className="text-xs uppercase tracking-[0.2em] hover:underline"
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteCustomFeed(feed)}
-                      className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Catégories personnalisées">
-      <p className="newsprint mb-4 text-xs italic text-neutral-600">
-        Gestion des catégories elles-mêmes, secondaire par rapport à l’ajout de flux ci-dessus — la
-        créer ici revient au même que choisir « + Créer une nouvelle catégorie » dans son formulaire.
-      </p>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <input
-          type="text"
-          value={newCategoryLabel}
-          onChange={(e) => setNewCategoryLabel(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && createCustomCategory()}
-          placeholder="Nom de la nouvelle catégorie"
-          className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
-        />
-        <button
-          type="button"
-          onClick={createCustomCategory}
-          disabled={creatingCategory || !newCategoryLabel.trim()}
-          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
-        >
-          {creatingCategory ? "Création..." : "Créer la catégorie"}
-        </button>
-      </div>
-
       {customCategoriesError && <p className="mb-3 text-sm text-journal">{customCategoriesError}</p>}
-      {customCategoriesLoading ? (
+      {customFeedsLoading || customCategoriesLoading ? (
         <p className="italic text-sepia">Chargement...</p>
       ) : customCategories.length === 0 ? (
         <p className="py-4 text-center italic text-sepia">Aucune catégorie personnalisée pour l’instant.</p>
@@ -1150,48 +1096,7 @@ export default function AdminCategoriesPage() {
 
                 {!isCollapsed && (
                   <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
-                    {catFeeds.map((feed) => (
-                      <li
-                        key={feed.id}
-                        className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
-                      >
-                        <span className="text-sm">{feed.title}</span>
-                        <div className="flex shrink-0 items-center gap-4">
-                          <label className="flex items-center gap-2 text-xs italic text-sepia">
-                            <input
-                              type="checkbox"
-                              checked={feed.medal}
-                              onChange={() => toggleCustomFeedMedal(feed)}
-                              className="accent-journal"
-                            />
-                            médaille
-                          </label>
-                          <label className="flex items-center gap-2 text-xs italic text-sepia">
-                            <input
-                              type="checkbox"
-                              checked={feed.included}
-                              onChange={() => toggleCustomFeedIncluded(feed)}
-                              className="accent-ink"
-                            />
-                            inclure le flux
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => startEditFeedFromTree(feed)}
-                            className="text-xs uppercase tracking-[0.2em] hover:underline"
-                          >
-                            Modifier
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteCustomFeed(feed)}
-                            className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </li>
-                    ))}
+                    {catFeeds.map((feed) => renderCustomFeedRow(feed))}
                     {catFeeds.length === 0 && (
                       <p className="py-1.5 text-xs italic text-sepia">Aucun flux dans cette catégorie.</p>
                     )}

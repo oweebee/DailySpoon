@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateDailyEdition } from "@/lib/generateEdition";
+import { syncCustomFeeds } from "@/lib/customFeeds";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 
 // Triggered either by:
@@ -21,6 +22,16 @@ export async function POST(req: NextRequest) {
   const forceNoAi = body?.noAi === true;
 
   try {
+    // Balayage des flux personnalisés AVANT la génération, pour que leurs
+    // nouveaux articles (zéro coût IA, voir customFeeds.ts) fassent partie
+    // du même vivier que celui que generateDailyEdition va afficher/traiter
+    // — sinon un clic sur "Aspirer les news" ne rafraîchirait pas un flux
+    // perso tout juste ajouté, qui devrait sinon attendre le prochain tick
+    // du worker (jusqu'à 1mn) ET son propre intervalle de récupération.
+    await syncCustomFeeds().catch((err) => {
+      console.error("[cron/generate] Synchronisation des flux personnalisés échouée:", err);
+    });
+
     const result = await generateDailyEdition({ forceNoAi });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
