@@ -187,13 +187,17 @@ function bestImageUrl(item: Parser.Item, rawContent: string): string | null {
  * Peut donc être appelé souvent (chaque tick du worker) sans surcharger les
  * flux sources.
  */
-export async function fetchCustomFeedItems(): Promise<RawItem[]> {
+export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
   const settings = await getSettings();
   const settingsRow = await prisma.settings.findUnique({ where: { id: "singleton" } });
   const lastFetchedAt = settingsRow?.customFeedsLastFetchedAt ?? null;
   const intervalMs = settings.customFeedsIntervalMinutes * 60_000;
 
-  if (lastFetchedAt && Date.now() - lastFetchedAt.getTime() < intervalMs) {
+  // "force" (voir /api/admin/custom-feeds/sync, bouton "Forcer maintenant"
+  // dans l'admin) contourne UNIQUEMENT ce gate d'intervalle global — sert à
+  // diagnostiquer/tester immédiatement sans attendre, plutôt que de deviner
+  // si le blocage vient de l'intervalle ou d'autre chose.
+  if (!force && lastFetchedAt && Date.now() - lastFetchedAt.getTime() < intervalMs) {
     return []; // pas encore l'heure
   }
 
@@ -301,8 +305,8 @@ export async function fetchCustomFeedItems(): Promise<RawItem[]> {
  * intervalle, potentiellement bien plus fréquent que le cycle normal
  * d'impression (IA ou aspiration de secours), zéro coût IA dans tous les cas.
  */
-export async function syncCustomFeeds(): Promise<{ fetched: number }> {
-  const items = await fetchCustomFeedItems();
+export async function syncCustomFeeds(force = false): Promise<{ fetched: number }> {
+  const items = await fetchCustomFeedItems(force);
   if (items.length > 0) await ingestRawItems(items, null);
   // Passe d'auto-correction à CHAQUE appel (donc chaque tick du worker, ~1x/
   // minute), indépendamment du gating réseau ci-dessus — coût DB seul, voir

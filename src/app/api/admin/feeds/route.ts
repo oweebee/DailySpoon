@@ -22,13 +22,39 @@ export async function GET(req: NextRequest) {
     const excludedIds = new Set(excluded.map((e) => e.freshrssId));
     const medaledIds = new Set(medaled.map((m) => m.freshrssId));
 
-    const feeds = freshrssFeeds.map((f) => ({
-      freshrssId: f.freshrssId,
-      title: f.title,
-      categoryLabels: f.categoryLabels,
-      included: !excludedIds.has(f.freshrssId),
-      medal: medaledIds.has(f.freshrssId)
-    }));
+    // Même compte réel (total / visibles en direct) que pour les flux
+    // personnalisés — affiché à côté de chaque flux FreshRSS pour une lecture
+    // cohérente entre les deux sections de l'admin (voir /api/admin/custom-feeds).
+    const feedIds = freshrssFeeds.map((f) => f.freshrssId);
+    const grouped =
+      feedIds.length > 0
+        ? await prisma.article.groupBy({
+            by: ["feedId", "included"],
+            where: { feedId: { in: feedIds } },
+            _count: { _all: true }
+          })
+        : [];
+    const countsByFeed = new Map<string, { total: number; included: number }>();
+    for (const row of grouped) {
+      const key = row.feedId as string;
+      const entry = countsByFeed.get(key) ?? { total: 0, included: 0 };
+      entry.total += row._count._all;
+      if (row.included) entry.included += row._count._all;
+      countsByFeed.set(key, entry);
+    }
+
+    const feeds = freshrssFeeds.map((f) => {
+      const counts = countsByFeed.get(f.freshrssId) ?? { total: 0, included: 0 };
+      return {
+        freshrssId: f.freshrssId,
+        title: f.title,
+        categoryLabels: f.categoryLabels,
+        included: !excludedIds.has(f.freshrssId),
+        medal: medaledIds.has(f.freshrssId),
+        articleCount: counts.total,
+        visibleArticleCount: counts.included
+      };
+    });
 
     return NextResponse.json({ feeds });
   } catch (err: any) {

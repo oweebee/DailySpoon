@@ -40,6 +40,8 @@ type Feed = {
   categoryLabels: string[];
   included: boolean;
   medal: boolean;
+  articleCount: number;
+  visibleArticleCount: number;
 };
 
 type CustomFeedItem = {
@@ -152,6 +154,8 @@ export default function AdminCategoriesPage() {
   const [customFeeds, setCustomFeeds] = useState<CustomFeedItem[]>([]);
   const [customFeedsLoading, setCustomFeedsLoading] = useState(true);
   const [customFeedsError, setCustomFeedsError] = useState<string | null>(null);
+  const [forcingSync, setForcingSync] = useState(false);
+  const [forceSyncMessage, setForceSyncMessage] = useState<string | null>(null);
 
   const [customCategories, setCustomCategories] = useState<CustomCategoryItem[]>([]);
   const [customCategoriesLoading, setCustomCategoriesLoading] = useState(true);
@@ -194,6 +198,28 @@ export default function AdminCategoriesPage() {
       setCustomFeeds(body.feeds || []);
     }
     setCustomFeedsLoading(false);
+  }
+
+  // Bouton "Forcer la récupération maintenant" — contourne l'intervalle
+  // global (voir /api/admin/custom-feeds/sync) pour tester immédiatement au
+  // lieu d'attendre le prochain tick du worker, puis recharge les compteurs
+  // d'articles ci-dessous pour voir tout de suite le résultat.
+  async function forceSyncCustomFeeds() {
+    setForcingSync(true);
+    setForceSyncMessage(null);
+    const res = await fetch("/api/admin/custom-feeds/sync", { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setForceSyncMessage(
+        body.fetched > 0
+          ? `${body.fetched} nouvel(aux) article(s) récupéré(s).`
+          : "Terminé — aucun nouvel article (voir le détail par flux ci-dessous)."
+      );
+      await loadCustomFeeds();
+    } else {
+      setForceSyncMessage(body.error || "Échec de la synchronisation forcée.");
+    }
+    setForcingSync(false);
   }
 
   async function loadCustomCategories() {
@@ -896,7 +922,18 @@ export default function AdminCategoriesPage() {
                           key={feed.freshrssId}
                           className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
                         >
-                          <span className="text-sm">{feed.title}</span>
+                          <span className="text-sm">
+                            {feed.title}
+                            {/* Même compte réel qu'en /admin, section flux
+                                personnalisés — cohérence entre les deux
+                                sections, et utile pour diagnostiquer un flux
+                                FreshRSS silencieusement vide côté DailySpoon. */}
+                            <span className="mt-0.5 block text-xs italic text-sepia">
+                              {feed.articleCount === 0
+                                ? "0 article récupéré pour l'instant"
+                                : `${feed.articleCount} article${feed.articleCount > 1 ? "s" : ""} récupéré${feed.articleCount > 1 ? "s" : ""}, ${feed.visibleArticleCount} visible${feed.visibleArticleCount > 1 ? "s" : ""} en direct`}
+                            </span>
+                          </span>
                           <div className="flex shrink-0 items-center gap-4">
                             <label className="flex items-center gap-2 text-xs italic text-sepia">
                               <input
@@ -1005,6 +1042,18 @@ export default function AdminCategoriesPage() {
         catégorie (perso rattachée à une vraie catégorie FreshRSS : voir aussi « Catégories & flux »
         plus haut).
       </p>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3 border-b-2 border-ink pb-4">
+        <button
+          type="button"
+          onClick={forceSyncCustomFeeds}
+          disabled={forcingSync}
+          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
+        >
+          {forcingSync ? "Récupération en cours..." : "Forcer la récupération maintenant"}
+        </button>
+        {forceSyncMessage && <p className="text-sm italic text-sepia">{forceSyncMessage}</p>}
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-ink/30 pb-4">
         <input
