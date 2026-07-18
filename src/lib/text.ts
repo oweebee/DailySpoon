@@ -51,7 +51,17 @@ const LEADING_CHROME_MARKERS: RegExp[] = [
   /min(?:ute)?s?\s+de\s+lecture/,
   /[àa]\s+lire\s+plus\s+tard/,
   /cat[ée]gories?\s+connexes/,
-  /[ée]couter\s+cet\s+article(?:\s*[~≈]?\s*\d+\s*min)?/
+  /[ée]couter\s+cet\s+article(?:\s*[~≈]?\s*\d+\s*min)?/,
+  // Gamekult (et probablement d'autres sites au même gabarit de page) :
+  // bannière de soutien ("Soutenez Gamekult et découvrez tous nos contenus
+  // sans publicité"), suivie de la liste des plateformes puis du menu
+  // complet ("Menu Recherche Abonnés L'actualité Accueil News") puis d'un
+  // fil d'ariane qui RÉPÈTE le titre de l'article avant un tag "news" — vu
+  // en usage réel, tout ce bloc arrivait collé en tête du vrai texte. Le
+  // ".+?" entre "News" et le "news" suivant avale ce titre répété quel qu'il
+  // soit, sans avoir besoin de le connaître à l'avance.
+  /soutenez\s+\S+\s+et\s+d[ée]couvrez\s+tous\s+nos\s+contenus/,
+  /menu\s+recherche\s+abonn[ée]s\s+l['’]actualit[ée]\s+accueil\s+news\s+.+?\s+news\b/
 ];
 // On ne cherche que dans le tout début du texte : un repère qui apparaît
 // plus loin a de bonnes chances d'être du vrai contenu (un article qui

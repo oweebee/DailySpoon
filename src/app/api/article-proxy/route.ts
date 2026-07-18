@@ -28,6 +28,59 @@ function proxyVideoUrl(absoluteUrl: string): string {
   return `/api/video-proxy?url=${encodeURIComponent(absoluteUrl)}`;
 }
 
+/** "src" vide, data-URI minuscule (souvent un pixel transparent en base64)
+ *  ou nom de fichier explicitement "placeholder"/"blank"/"spacer" — signe
+ *  quasi certain d'une image en lazy-load dont le VRAI chemin est ailleurs
+ *  (data-src...), pas encore chargé puisqu'on ne fait QUE parser le HTML
+ *  brut ici (aucun JS n'a jamais tourné pour remplir "src"). */
+function looksLikeLazyPlaceholder(src: string): boolean {
+  if (!src.trim()) return true;
+  if (src.startsWith("data:image") && src.length < 200) return true;
+  return /placeholder|blank\.gif|spacer\.gif|1x1\.(?:gif|png)/i.test(src);
+}
+
+/** Beaucoup de sites (Gamekult confirmé en usage réel) chargent leurs
+ *  images en lazy-load : le vrai chemin n'est présent que dans un attribut
+ *  data-* (data-src, data-lazy-src, data-original, ou le premier candidat
+ *  d'un data-srcset), tant que "src" ne contient qu'un pixel/placeholder —
+ *  sans ce repli, l'image proxifiée pointe vers ce placeholder et reste
+ *  invisible. Retourne l'URL à utiliser, ou null si vraiment aucune trouvée. */
+function resolveImgSrc(el: Element): string | null {
+  const src = el.getAttribute("src");
+  if (src && !looksLikeLazyPlaceholder(src)) return src;
+  const lazyCandidate =
+    el.getAttribute("data-src") ||
+    el.getAttribute("data-lazy-src") ||
+    el.getAttribute("data-original") ||
+    el.getAttribute("data-srcset")?.split(",")[0]?.trim().split(/\s+/)[0] ||
+    null;
+  return lazyCandidate || src || null;
+}
+
+/** Réécrit tous les src d'images/sources d'un fragment de contenu déjà
+ *  extrait (Readability...) pour passer par notre proxy d'images (contourne
+ *  le hotlinking), avec repli lazy-load (voir resolveImgSrc) — factorisé ici
+ *  car appliqué de façon identique aux trois chemins d'extraction (générique,
+ *  Redlib, self-post Reddit).
+ */
+function rewriteContentImages(contentDom: JSDOM, baseUrl: string): void {
+  contentDom.window.document.querySelectorAll("img, source").forEach((el) => {
+    const resolved = resolveImgSrc(el);
+    if (resolved) {
+      try {
+        el.setAttribute("src", proxyImageUrl(new URL(resolved, baseUrl).toString()));
+      } catch {
+        // URL déjà relative/invalide, on laisse tel quel plutôt que de planter.
+      }
+    }
+    el.removeAttribute("srcset");
+    el.removeAttribute("data-src");
+    el.removeAttribute("data-lazy-src");
+    el.removeAttribute("data-original");
+    el.removeAttribute("data-srcset");
+  });
+}
+
 // Beaucoup de sites glissent, après le vrai texte de l'article mais toujours
 // à l'intérieur du bloc que Readability extrait, un rebus de fin d'article :
 // pub pour l'appli mobile, bandeau newsletter, liste "à lire aussi" — pas du
@@ -968,17 +1021,7 @@ export async function GET(req: NextRequest) {
       const redlibArticle = new Readability(redlibDom.window.document as unknown as Document).parse();
       if (redlibArticle && redlibArticle.content) {
         const contentDom = new JSDOM(`<div id="root">${redlibArticle.content}</div>`);
-        contentDom.window.document.querySelectorAll("img, source").forEach((el) => {
-          const src = el.getAttribute("src");
-          if (src) {
-            try {
-              el.setAttribute("src", proxyImageUrl(new URL(src, redlib.baseUrl).toString()));
-            } catch {
-              // ignore
-            }
-          }
-          el.removeAttribute("srcset");
-        });
+        rewriteContentImages(contentDom, redlib.baseUrl);
         contentDom.window.document.querySelectorAll("script, style, iframe").forEach((el) => el.remove());
         const rootEl = contentDom.window.document.getElementById("root");
         if (rootEl) trimTrailingJunk(rootEl);
@@ -1014,17 +1057,7 @@ export async function GET(req: NextRequest) {
       // Même traitement des images que le chemin générique : passage par
       // le proxy d'images pour les éventuelles illustrations du self-post.
       const contentDom = new JSDOM(`<div id="root">${redditPost.bodyHtml}</div>`);
-      contentDom.window.document.querySelectorAll("img, source").forEach((el) => {
-        const src = el.getAttribute("src");
-        if (src) {
-          try {
-            el.setAttribute("src", proxyImageUrl(new URL(src, "https://www.reddit.com").toString()));
-          } catch {
-            // ignore
-          }
-        }
-        el.removeAttribute("srcset");
-      });
+      rewriteContentImages(contentDom, "https://www.reddit.com");
       let finalTitle = redditPost.title;
       let finalBody = contentDom.window.document.getElementById("root")?.innerHTML || "";
       if (wantsTranslation) {
@@ -1119,17 +1152,7 @@ export async function GET(req: NextRequest) {
     // source — même souci de hotlinking que pour la vignette de la liste,
     // donc même traitement : on les fait passer par notre proxy d'images.
     const contentDom = new JSDOM(`<div id="root">${article.content}</div>`);
-    contentDom.window.document.querySelectorAll("img, source").forEach((el) => {
-      const src = el.getAttribute("src");
-      if (src) {
-        try {
-          el.setAttribute("src", proxyImageUrl(new URL(src, fetchUrl).toString()));
-        } catch {
-          // URL déjà relative/invalide, on laisse tel quel plutôt que de planter.
-        }
-      }
-      el.removeAttribute("srcset");
-    });
+    rewriteContentImages(contentDom, fetchUrl);
     contentDom.window.document.querySelectorAll("script, style, iframe").forEach((el) => el.remove());
 
     const rootEl = contentDom.window.document.getElementById("root");
