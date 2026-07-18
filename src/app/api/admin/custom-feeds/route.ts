@@ -97,9 +97,33 @@ export async function GET(req: NextRequest) {
     const excludedIds = new Set(excluded.map((e) => e.freshrssId));
     const medaledIds = new Set(medaled.map((m) => m.freshrssId));
 
+    // Compte réel des articles déjà en base pour chaque flux perso (total +
+    // combien sont "included") — sans ça, aucun moyen de distinguer depuis
+    // l'admin "le flux n'a jamais rien remonté" (feed vide, items sans
+    // guid/link/title, tous filtrés à l'ingestion) de "des articles existent
+    // mais restent cachés" (included=false). Un seul groupBy, pas de N+1.
+    const feedFreshrssIds = rows.map((feed) => customFeedFreshrssId(feed.id));
+    const grouped =
+      feedFreshrssIds.length > 0
+        ? await prisma.article.groupBy({
+            by: ["feedId", "included"],
+            where: { feedId: { in: feedFreshrssIds } },
+            _count: { _all: true }
+          })
+        : [];
+    const countsByFeed = new Map<string, { total: number; included: number }>();
+    for (const row of grouped) {
+      const key = row.feedId as string;
+      const entry = countsByFeed.get(key) ?? { total: 0, included: 0 };
+      entry.total += row._count._all;
+      if (row.included) entry.included += row._count._all;
+      countsByFeed.set(key, entry);
+    }
+
     const feeds = rows.map((feed) => {
       const feedFreshrssId = customFeedFreshrssId(feed.id);
       const { categoryLabel, isFreshrssCategory } = resolveFeedCategory(feed);
+      const counts = countsByFeed.get(feedFreshrssId) ?? { total: 0, included: 0 };
       return {
         id: feed.id,
         url: feed.url,
@@ -112,7 +136,9 @@ export async function GET(req: NextRequest) {
         freshrssCategoryId: feed.freshrssCategoryId,
         freshrssCategoryLabel: feed.freshrssCategoryLabel,
         categoryLabel,
-        isFreshrssCategory
+        isFreshrssCategory,
+        articleCount: counts.total,
+        visibleArticleCount: counts.included
       };
     });
 

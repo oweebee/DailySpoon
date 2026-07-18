@@ -50,6 +50,8 @@ type CustomFeedItem = {
   medal: boolean;
   lastFetchedAt: string | null;
   lastFetchError: string | null;
+  articleCount: number;
+  visibleArticleCount: number;
   customCategoryId: string | null;
   freshrssCategoryId: string | null;
   freshrssCategoryLabel: string | null;
@@ -593,6 +595,17 @@ export default function AdminCategoriesPage() {
       >
         <span className="text-sm">
           {feed.title}
+          {/* Compte réel des articles déjà en base pour ce flux (total /
+              visibles en direct) — seul moyen fiable de distinguer "le flux
+              n'a jamais rien remonté" (0 articles, feed vide ou items sans
+              guid/link/titre exploitable) de "des articles existent mais
+              restent cachés" (visibles < total). */}
+          <span className="mt-0.5 block text-xs italic text-sepia">
+            {feed.articleCount === 0
+              ? "0 article récupéré pour l'instant"
+              : `${feed.articleCount} article${feed.articleCount > 1 ? "s" : ""} récupéré${feed.articleCount > 1 ? "s" : ""}, ${feed.visibleArticleCount} visible${feed.visibleArticleCount > 1 ? "s" : ""} en direct`}
+            {feed.lastFetchedAt && ` · dernière récupération ${new Date(feed.lastFetchedAt).toLocaleString("fr-FR")}`}
+          </span>
           {/* Dernier échec de récupération (parsing RSS impossible, hôte
               injoignable...) — sans ça, un flux qui échoue en boucle côté
               worker n'affiche jamais rien nulle part, sans aucune explication
