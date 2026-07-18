@@ -155,14 +155,27 @@ export async function recomputeAllCustomFeedIncluded(): Promise<void> {
 }
 
 const parser = new Parser({
-  // 10s s'est révélé trop court pour certains flux plus lents à répondre
-  // depuis ce serveur (ex. "Libération" : "Request timed out after 10000ms"
-  // en usage réel) — 20s laisse la marge nécessaire sans bloquer
-  // indéfiniment un flux réellement injoignable.
-  timeout: 20000,
+  // Certaines URL de flux perso pointent DIRECTEMENT vers une instance morss
+  // (voir /admin/categories, champ URL du flux) plutôt que vers la source
+  // d'origine — morss scrape/reformate le contenu à la volée avant de
+  // répondre, donc nettement plus lent qu'un flux RSS brut. 10s puis 20s se
+  // sont révélés trop courts en usage réel ("Libération" via morss :
+  // "Request timed out"). 45s laisse la marge nécessaire à morss sans
+  // bloquer indéfiniment un flux réellement injoignable, et reste sous le
+  // timeout par défaut d'un reverse proxy typique (60s).
+  timeout: 45000,
   headers: {
     "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    // Vu en usage réel sur un flux passant par une instance morss : le
+    // serveur logue bien "200" avec tout le contenu envoyé quasi
+    // instantanément, mais le client restait bloqué jusqu'au timeout —
+    // symptôme classique d'une connexion keep-alive/chunked mal terminée
+    // côté serveur (le client attend une fin de flux qui ne vient jamais
+    // alors que les données utiles sont déjà toutes arrivées). Demander
+    // explicitement la fermeture de la connexion évite de rester bloqué sur
+    // ce genre de socket qui ne se referme pas proprement.
+    Connection: "close"
   }
 });
 
@@ -277,11 +290,11 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         parsed = await parser.parseURL(feed.url);
       } catch (directErr) {
         // Repli via morss (réglé dans /admin/settings), même mécanisme que
-        // pour le fetch d'un article individuel (voir article-proxy) : morss
-        // relaie la requête depuis SA propre IP, ce qui peut réussir là où
-        // une requête directe échoue (timeout, blocage) — utile pour un flux
-        // lent/bloqué comme "Libération" vu en usage réel
-        // ("Request timed out after 20000ms" en direct).
+        // pour le fetch d'un article individuel (voir article-proxy) — utile
+        // seulement pour un flux dont l'URL n'est PAS déjà elle-même une URL
+        // morss (dans ce cas, l'échec vient de morss lui-même, voir le
+        // timeout augmenté ci-dessus, ce repli n'aidera pas). Ne fait rien si
+        // ce réglage est vide.
         if (!settings.morssBaseUrl) throw directErr;
         const strippedUrl = feed.url.replace(/^https?:\/\//, "");
         parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
