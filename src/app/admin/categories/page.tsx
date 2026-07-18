@@ -1,7 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SpoonDivider } from "@/components/SpoonDivider";
+
+// Bloc pliable/dépliable réutilisé pour CHAQUE grande section de la page
+// admin (Statistiques, Impression IA, Catégories & flux, Flux personnalisés,
+// Catégories personnalisées) — à ne pas confondre avec le pli PAR CATÉGORIE
+// à l'intérieur de "Catégories & flux" (toggleExpanded/collapsed), qui reste
+// indépendant. Ouvert par défaut à chaque chargement de page.
+function CollapsibleSection({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="mb-3 flex w-full items-center justify-center gap-2 border-y-2 border-ink py-1.5 font-display text-sm font-bold uppercase tracking-[0.3em] hover:bg-ink/5"
+      >
+        <span className="text-xs text-sepia">{open ? "▾" : "▸"}</span>
+        {title}
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 type Category = {
   freshrssId: string;
@@ -104,6 +126,14 @@ export default function AdminCategoriesPage() {
       else next.add(freshrssId);
       return next;
     });
+  }
+
+  function expandAllCategories() {
+    setCollapsed(new Set());
+  }
+
+  function collapseAllCategories() {
+    setCollapsed(new Set(categories.map((c) => c.freshrssId)));
   }
 
   // Flux personnalisés (hors FreshRSS) — section PRIMAIRE de l'admin
@@ -241,6 +271,15 @@ export default function AdminCategoriesPage() {
       categoryChoice: categoryChoiceValue(feed),
       newCategoryLabel: ""
     });
+  }
+
+  // Depuis l'arborescence "Catégories & flux" (où un flux perso rattaché à
+  // une catégorie FreshRSS est aussi affiché), le formulaire d'édition reste
+  // dans "Flux personnalisés" plus bas — on y scrolle pour ne pas laisser
+  // le clic sans effet visible.
+  function startEditFeedFromTree(feed: CustomFeedItem) {
+    startEditFeed(feed);
+    document.getElementById(`custom-feed-${feed.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   function cancelEditFeed() {
@@ -476,9 +515,7 @@ export default function AdminCategoriesPage() {
       {/* Statistiques de l'app — vue d'ensemble rapide en haut du menu admin.
           Chargé à part (loadStats) : ne bloque jamais l'affichage des
           catégories/flux si /api/admin/stats est lent ou en erreur. */}
-      <h2 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-        Statistiques
-      </h2>
+      <CollapsibleSection title="Statistiques">
       {statsLoading ? (
         <p className="mb-10 text-center italic text-sepia">Calcul en cours...</p>
       ) : !stats ? (
@@ -542,6 +579,7 @@ export default function AdminCategoriesPage() {
           </div>
         </div>
       )}
+      </CollapsibleSection>
 
       <h1 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-[0.15em]">
         Catégories & flux FreshRSS
@@ -555,10 +593,7 @@ export default function AdminCategoriesPage() {
       </p>
 
       {!loading && !error && categories.length > 0 && (
-        <>
-          <h2 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-            Impression IA
-          </h2>
+        <CollapsibleSection title="Impression IA">
           <p className="newsprint mb-4 text-sm text-neutral-700">
             L’impression IA (la une générée sur la page d’accueil, uniquement les news du jour) est
             indépendante d’« En direct » : elle liste ici TOUTES les catégories FreshRSS, cochées ou
@@ -586,12 +621,21 @@ export default function AdminCategoriesPage() {
               </li>
             ))}
           </ul>
-        </>
+        </CollapsibleSection>
       )}
 
-      <h2 className="mb-4 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-        Catégories & flux
-      </h2>
+      <CollapsibleSection title="Catégories & flux">
+      {!loading && !error && categories.length > 0 && (
+        <div className="mb-3 flex justify-end gap-3 text-xs uppercase tracking-[0.2em] text-sepia">
+          <button type="button" onClick={expandAllCategories} className="hover:underline">
+            Tout déplier
+          </button>
+          <span>·</span>
+          <button type="button" onClick={collapseAllCategories} className="hover:underline">
+            Tout replier
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <p className="italic text-sepia">Chargement depuis FreshRSS...</p>
@@ -617,6 +661,14 @@ export default function AdminCategoriesPage() {
           <ul className="border-t-2 border-ink">
             {categories.map((cat) => {
               const childFeeds = feeds.filter((f) => f.categoryLabels.includes(cat.label));
+              // Flux personnalisés rattachés directement à CETTE catégorie
+              // FreshRSS (voir /admin/categories, formulaire "Flux
+              // personnalisés") — affichés ici, mêlés aux vrais flux
+              // FreshRSS, pour une arborescence fidèle à leur traitement en
+              // aval (même catégorie = mêmes réglages En direct/Impression
+              // IA). Toujours listés aussi dans "Flux personnalisés" plus
+              // bas, qui reste le point d'entrée pour les modifier/supprimer.
+              const childCustomFeeds = customFeeds.filter((f) => f.freshrssCategoryId === cat.freshrssId);
               const isCollapsed = collapsed.has(cat.freshrssId);
               return (
                 <li
@@ -643,7 +695,7 @@ export default function AdminCategoriesPage() {
                       {cat.label}
                       {!feedsLoading && (
                         <span className="text-xs font-normal italic text-sepia">
-                          ({childFeeds.length})
+                          ({childFeeds.length + childCustomFeeds.length})
                         </span>
                       )}
                     </button>
@@ -688,7 +740,47 @@ export default function AdminCategoriesPage() {
                           </div>
                         </li>
                       ))}
-                      {childFeeds.length === 0 && (
+                      {childCustomFeeds.map((feed) => (
+                        <li
+                          key={feed.id}
+                          className="flex items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+                        >
+                          <span className="text-sm">
+                            {feed.title}{" "}
+                            <span className="rounded-sm border border-ink/30 px-1 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                              perso
+                            </span>
+                          </span>
+                          <div className="flex shrink-0 items-center gap-4">
+                            <label className="flex items-center gap-2 text-xs italic text-sepia">
+                              <input
+                                type="checkbox"
+                                checked={feed.medal}
+                                onChange={() => toggleCustomFeedMedal(feed)}
+                                className="accent-journal"
+                              />
+                              médaille
+                            </label>
+                            <label className="flex items-center gap-2 text-xs italic text-sepia">
+                              <input
+                                type="checkbox"
+                                checked={feed.included}
+                                onChange={() => toggleCustomFeedIncluded(feed)}
+                                className="accent-ink"
+                              />
+                              inclure le flux
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => startEditFeedFromTree(feed)}
+                              className="text-xs uppercase tracking-[0.2em] hover:underline"
+                            >
+                              Modifier
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                      {childFeeds.length === 0 && childCustomFeeds.length === 0 && (
                         <p className="py-1.5 text-xs italic text-sepia">
                           Aucun flux trouvé pour cette catégorie.
                         </p>
@@ -756,10 +848,9 @@ export default function AdminCategoriesPage() {
             })()}
         </>
       )}
+      </CollapsibleSection>
 
-      <h2 className="mb-4 mt-10 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
-        Flux personnalisés
-      </h2>
+      <CollapsibleSection title="Flux personnalisés">
       <p className="newsprint mb-6 text-sm text-neutral-700">
         Ajoute directement une URL de flux RSS/Atom, sans passer par FreshRSS. À la création, choisis
         où le ranger : dans une catégorie FreshRSS existante (il est alors traité en tout point comme
@@ -823,7 +914,7 @@ export default function AdminCategoriesPage() {
       ) : (
         <ul className="mb-10 border-t-2 border-ink">
           {customFeeds.map((feed) => (
-            <li key={feed.id} className="border-b border-ink/30 py-3">
+            <li key={feed.id} id={`custom-feed-${feed.id}`} className="border-b border-ink/30 py-3">
               {editingFeedId === feed.id ? (
                 <div className="space-y-2 rounded-sm bg-ink/5 p-3">
                   <div className="flex flex-wrap gap-2">
@@ -931,10 +1022,9 @@ export default function AdminCategoriesPage() {
           ))}
         </ul>
       )}
+      </CollapsibleSection>
 
-      <h2 className="mb-3 border-y-2 border-ink py-1.5 text-center font-display text-xs font-bold uppercase tracking-[0.3em] text-sepia">
-        Catégories personnalisées
-      </h2>
+      <CollapsibleSection title="Catégories personnalisées">
       <p className="newsprint mb-4 text-xs italic text-neutral-600">
         Gestion des catégories elles-mêmes, secondaire par rapport à l’ajout de flux ci-dessus — la
         créer ici revient au même que choisir « + Créer une nouvelle catégorie » dans son formulaire.
@@ -1006,6 +1096,7 @@ export default function AdminCategoriesPage() {
           ))}
         </ul>
       )}
+      </CollapsibleSection>
 
       <SpoonDivider />
     </main>
