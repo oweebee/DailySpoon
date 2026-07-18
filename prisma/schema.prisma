@@ -57,6 +57,42 @@ model MedalFeed {
   createdAt  DateTime @default(now())
 }
 
+// Catégorie personnalisée créée directement depuis /admin/categories (par
+// opposition aux catégories FreshRSS, gérées côté FreshRSS) — un seul niveau
+// (catégorie -> flux), pas de sous-catégories imbriquées, pour rester
+// cohérent avec la structure FreshRSS existante. Traitée EXACTEMENT comme
+// une catégorie FreshRSS partout en aval (En direct, Impression IA...) via
+// un id synthétique "custom-cat:<id>" réutilisé directement comme
+// SelectedCategory.freshrssId/AiPrintCategory.freshrssId — pas de table de
+// réglages parallèle à maintenir.
+model CustomCategory {
+  id        String       @id @default(cuid())
+  label     String
+  order     Int          @default(0)
+  createdAt DateTime     @default(now())
+  feeds     CustomFeed[]
+}
+
+// Flux RSS/Atom ajouté à la main (URL directe, pas géré par FreshRSS) sous
+// une CustomCategory. Récupéré par src/lib/customFeeds.ts, au même
+// intervalle GLOBAL pour tous les flux personnalisés (Settings.
+// customFeedsIntervalMinutes) — pas de réglage par flux. Les articles
+// récupérés subissent EXACTEMENT le même traitement que ceux de FreshRSS
+// (stripHtml/stripLeadingChrome/fallbackProcess...), stockés avec un
+// feedId synthétique "custom-feed:<id>" réutilisé directement comme
+// ExcludedFeed.freshrssId/MedalFeed.freshrssId.
+model CustomFeed {
+  id            String         @id @default(cuid())
+  url           String
+  title         String
+  categoryId    String
+  category      CustomCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  lastFetchedAt DateTime?
+  createdAt     DateTime       @default(now())
+
+  @@index([categoryId])
+}
+
 model Article {
   id             String    @id @default(cuid())
   freshrssItemId String    @unique // FreshRSS item id, used for dedupe
@@ -242,5 +278,15 @@ model Settings {
   // utilisée en repli par /api/article-proxy quand le fetch direct d'un
   // article échoue (403, anti-bot NYTimes/Cloudflare...) — voir settings.ts.
   morssBaseUrl        String?
+  // Intervalle GLOBAL (en minutes) de récupération des flux RSS
+  // personnalisés (voir CustomFeed/customFeeds.ts) — un seul réglage pour
+  // tous les flux personnalisés, pas par flux/catégorie. null = défaut
+  // (60 minutes, voir settings.ts). Valeurs proposées dans /admin/settings :
+  // 5/15/30/60/180/360/480/1440/10080 (5mn à 1 semaine).
+  customFeedsIntervalMinutes Int?
+  // Horodatage du dernier balayage complet des flux personnalisés — permet
+  // à fetchCustomFeedItems() de savoir si l'intervalle ci-dessus est déjà
+  // écoulé, indépendamment de la cadence à laquelle le worker l'appelle.
+  customFeedsLastFetchedAt  DateTime?
   updatedAt           DateTime @default(now()) @updatedAt
 }

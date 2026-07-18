@@ -36,6 +36,11 @@ export type AppSettings = {
    *  flux déjà proxifiés via morss côté FreshRSS (réglage indépendant, fait
    *  directement dans l'URL du flux). */
   morssBaseUrl: string;
+  /** Intervalle GLOBAL (minutes) de récupération des flux RSS personnalisés
+   *  (voir CustomFeed/src/lib/customFeeds.ts) — un seul réglage pour tous
+   *  les flux personnalisés confondus, pas par flux/catégorie. Défaut :
+   *  60 minutes. */
+  customFeedsIntervalMinutes: number;
 };
 
 /**
@@ -63,7 +68,8 @@ export async function getSettings(): Promise<AppSettings> {
     editionScheduleEnabled:
       row?.editionScheduleEnabled ?? process.env.EDITION_SCHEDULE_ENABLED !== "false",
     writingStyle: row?.writingStyle || process.env.WRITING_STYLE || "normal",
-    morssBaseUrl: (row?.morssBaseUrl || process.env.MORSS_BASE_URL || "").replace(/\/+$/, "")
+    morssBaseUrl: (row?.morssBaseUrl || process.env.MORSS_BASE_URL || "").replace(/\/+$/, ""),
+    customFeedsIntervalMinutes: row?.customFeedsIntervalMinutes ?? 60
   };
 }
 
@@ -97,6 +103,7 @@ export type SettingsInput = Partial<{
   editionScheduleEnabled: boolean | null;
   writingStyle: string | null;
   morssBaseUrl: string | null;
+  customFeedsIntervalMinutes: number | null;
 }>;
 
 /**
@@ -132,6 +139,10 @@ export async function updateSettings(input: SettingsInput): Promise<void> {
     // false est une valeur volontaire (désactivé) — à bien distinguer de
     // null/undefined (pas réglé -> retombe sur activé par défaut).
     data.editionScheduleEnabled = input.editionScheduleEnabled === false ? false : input.editionScheduleEnabled;
+  }
+  if ("customFeedsIntervalMinutes" in input) {
+    const v = input.customFeedsIntervalMinutes;
+    data.customFeedsIntervalMinutes = v === null || v === undefined || Number.isNaN(v) ? null : v;
   }
 
   await prisma.settings.upsert({

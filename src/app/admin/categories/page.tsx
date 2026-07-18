@@ -19,6 +19,23 @@ type Feed = {
   medal: boolean;
 };
 
+type CustomFeedItem = {
+  id: string;
+  url: string;
+  title: string;
+  included: boolean;
+  medal: boolean;
+  lastFetchedAt: string | null;
+};
+
+type CustomCategoryItem = {
+  id: string;
+  label: string;
+  selected: boolean;
+  frontPageEnabled: boolean;
+  feeds: CustomFeedItem[];
+};
+
 type Stats = {
   totalArticles: number;
   favoriteCount: number;
@@ -74,6 +91,163 @@ export default function AdminCategoriesPage() {
     });
   }
 
+  // Catégories personnalisées (hors FreshRSS) — flux RSS ajoutés à la main.
+  // Id synthétiques "custom-cat:<id>"/"custom-feed:<id>" réutilisés
+  // directement dans les MÊMES routes que les catégories/flux FreshRSS
+  // (/api/admin/categories, /api/admin/feeds) pour le réglage
+  // selected/frontPageEnabled/included/medal — traitées "au même titre",
+  // aucune logique de bascule dupliquée ici.
+  const [customCategories, setCustomCategories] = useState<CustomCategoryItem[]>([]);
+  const [customLoading, setCustomLoading] = useState(true);
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [customCollapsed, setCustomCollapsed] = useState<Set<string>>(new Set());
+  const [newCategoryLabel, setNewCategoryLabel] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [newFeedInputs, setNewFeedInputs] = useState<Record<string, { url: string; title: string }>>({});
+  const [addingFeedFor, setAddingFeedFor] = useState<string | null>(null);
+
+  function toggleCustomExpanded(id: string) {
+    setCustomCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function loadCustomCategories() {
+    setCustomLoading(true);
+    setCustomError(null);
+    const res = await fetch("/api/admin/custom-categories");
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setCustomError(body.error || "Impossible de charger les catégories personnalisées");
+      setCustomCategories([]);
+    } else {
+      setCustomCategories(body.categories || []);
+    }
+    setCustomLoading(false);
+  }
+
+  async function createCustomCategory() {
+    const label = newCategoryLabel.trim();
+    if (!label) return;
+    setCreatingCategory(true);
+    try {
+      const res = await fetch("/api/admin/custom-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label })
+      });
+      if (res.ok) {
+        setNewCategoryLabel("");
+        await loadCustomCategories();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error || "Échec de la création de la catégorie");
+      }
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
+  async function deleteCustomCategory(cat: CustomCategoryItem) {
+    if (!window.confirm(`Supprimer « ${cat.label} » et ses ${cat.feeds.length} flux ?`)) return;
+    await fetch("/api/admin/custom-categories", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: cat.id })
+    });
+    await loadCustomCategories();
+  }
+
+  async function addCustomFeed(categoryId: string) {
+    const input = newFeedInputs[categoryId] || { url: "", title: "" };
+    const url = input.url.trim();
+    if (!url) return;
+    setAddingFeedFor(categoryId);
+    try {
+      const res = await fetch("/api/admin/custom-feeds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId, url, title: input.title.trim() })
+      });
+      if (res.ok) {
+        setNewFeedInputs((prev) => ({ ...prev, [categoryId]: { url: "", title: "" } }));
+        await loadCustomCategories();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error || "Échec de l'ajout du flux");
+      }
+    } finally {
+      setAddingFeedFor(null);
+    }
+  }
+
+  async function deleteCustomFeed(feed: CustomFeedItem) {
+    if (!window.confirm(`Supprimer le flux « ${feed.title} » ?`)) return;
+    await fetch("/api/admin/custom-feeds", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: feed.id })
+    });
+    await loadCustomCategories();
+  }
+
+  async function toggleCustomSelected(cat: CustomCategoryItem) {
+    setCustomCategories((prev) => prev.map((c) => (c.id === cat.id ? { ...c, selected: !c.selected } : c)));
+    await fetch("/api/admin/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: `custom-cat:${cat.id}`, label: cat.label, selected: !cat.selected })
+    });
+  }
+
+  async function toggleCustomFrontPage(cat: CustomCategoryItem) {
+    setCustomCategories((prev) =>
+      prev.map((c) => (c.id === cat.id ? { ...c, frontPageEnabled: !c.frontPageEnabled } : c))
+    );
+    await fetch("/api/admin/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        freshrssId: `custom-cat:${cat.id}`,
+        label: cat.label,
+        frontPageEnabled: !cat.frontPageEnabled
+      })
+    });
+  }
+
+  async function toggleCustomFeedIncluded(catId: string, feed: CustomFeedItem) {
+    setCustomCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId
+          ? { ...c, feeds: c.feeds.map((f) => (f.id === feed.id ? { ...f, included: !f.included } : f)) }
+          : c
+      )
+    );
+    await fetch("/api/admin/feeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: `custom-feed:${feed.id}`, title: feed.title, included: !feed.included })
+    });
+  }
+
+  async function toggleCustomFeedMedal(catId: string, feed: CustomFeedItem) {
+    setCustomCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId
+          ? { ...c, feeds: c.feeds.map((f) => (f.id === feed.id ? { ...f, medal: !f.medal } : f)) }
+          : c
+      )
+    );
+    await fetch("/api/admin/feeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: `custom-feed:${feed.id}`, title: feed.title, medal: !feed.medal })
+    });
+  }
+
   async function loadCategories() {
     setLoading(true);
     setError(null);
@@ -114,6 +288,7 @@ export default function AdminCategoriesPage() {
     loadCategories();
     loadFeeds();
     loadStats();
+    loadCustomCategories();
   }, []);
 
   async function toggle(cat: Category) {
@@ -502,6 +677,176 @@ export default function AdminCategoriesPage() {
               );
             })()}
         </>
+      )}
+
+      <h2 className="mb-4 mt-10 border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em]">
+        Catégories personnalisées
+      </h2>
+      <p className="newsprint mb-6 text-sm text-neutral-700">
+        Crée tes propres catégories et ajoute-y directement des flux RSS/Atom, sans passer par
+        FreshRSS. Traités exactement comme les catégories/flux ci-dessus : mêmes cases (inclure,
+        médaille, impression IA), même filtrage/mise en forme. Récupérés tous ensemble, à
+        l’intervalle global réglable dans{" "}
+        <a href="/admin/settings" className="underline">
+          /admin/settings
+        </a>
+        .
+      </p>
+
+      <div className="mb-6 flex flex-wrap items-center gap-2 border-b-2 border-ink pb-4">
+        <input
+          type="text"
+          value={newCategoryLabel}
+          onChange={(e) => setNewCategoryLabel(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && createCustomCategory()}
+          placeholder="Nom de la nouvelle catégorie"
+          className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
+        />
+        <button
+          type="button"
+          onClick={createCustomCategory}
+          disabled={creatingCategory || !newCategoryLabel.trim()}
+          className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+        >
+          {creatingCategory ? "Création..." : "Créer la catégorie"}
+        </button>
+      </div>
+
+      {customError && <p className="mb-3 text-sm text-journal">{customError}</p>}
+      {customLoading ? (
+        <p className="italic text-sepia">Chargement...</p>
+      ) : customCategories.length === 0 ? (
+        <p className="py-4 text-center italic text-sepia">Aucune catégorie personnalisée pour l’instant.</p>
+      ) : (
+        <ul className="border-t-2 border-ink">
+          {customCategories.map((cat) => {
+            const isCollapsed = customCollapsed.has(cat.id);
+            const feedInput = newFeedInputs[cat.id] || { url: "", title: "" };
+            return (
+              <li key={cat.id} className="border-b border-ink/30">
+                <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleCustomExpanded(cat.id)}
+                    className="flex items-center gap-2 text-left font-display font-bold hover:underline"
+                  >
+                    <span className="inline-block w-3 text-xs text-sepia">{isCollapsed ? "▸" : "▾"}</span>
+                    {cat.label}
+                    <span className="text-xs font-normal italic text-sepia">({cat.feeds.length})</span>
+                  </button>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 text-xs italic text-sepia">
+                      <input
+                        type="checkbox"
+                        checked={cat.frontPageEnabled}
+                        onChange={() => toggleCustomFrontPage(cat)}
+                        className="accent-ink"
+                      />
+                      impression IA
+                    </label>
+                    <label className="flex items-center gap-2 text-xs italic text-sepia">
+                      <input
+                        type="checkbox"
+                        checked={cat.selected}
+                        onChange={() => toggleCustomSelected(cat)}
+                        className="accent-ink"
+                      />
+                      inclure la catégorie
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => deleteCustomCategory(cat)}
+                      className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                </div>
+
+                {!isCollapsed && (
+                  <div className="ml-2 border-l border-dashed border-ink/40 pb-4 pl-5">
+                    <ul>
+                      {cat.feeds.map((feed) => (
+                        <li
+                          key={feed.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+                        >
+                          <span className="text-sm">
+                            {feed.title}
+                            <span className="ml-2 text-xs italic text-sepia">
+                              {feed.lastFetchedAt
+                                ? `récupéré ${formatDateTime(feed.lastFetchedAt)}`
+                                : "pas encore récupéré"}
+                            </span>
+                          </span>
+                          <div className="flex shrink-0 items-center gap-4">
+                            <label className="flex items-center gap-2 text-xs italic text-sepia">
+                              <input
+                                type="checkbox"
+                                checked={feed.medal}
+                                onChange={() => toggleCustomFeedMedal(cat.id, feed)}
+                                className="accent-journal"
+                              />
+                              médaille
+                            </label>
+                            <label className="flex items-center gap-2 text-xs italic text-sepia">
+                              <input
+                                type="checkbox"
+                                checked={feed.included}
+                                onChange={() => toggleCustomFeedIncluded(cat.id, feed)}
+                                className="accent-ink"
+                              />
+                              inclure le flux
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => deleteCustomFeed(feed)}
+                              className="text-xs uppercase tracking-[0.2em] text-journal hover:underline"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                      {cat.feeds.length === 0 && (
+                        <p className="py-1.5 text-xs italic text-sepia">Aucun flux dans cette catégorie.</p>
+                      )}
+                    </ul>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <input
+                        type="url"
+                        value={feedInput.url}
+                        onChange={(e) =>
+                          setNewFeedInputs((prev) => ({ ...prev, [cat.id]: { ...feedInput, url: e.target.value } }))
+                        }
+                        placeholder="URL du flux RSS/Atom"
+                        className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-1.5 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={feedInput.title}
+                        onChange={(e) =>
+                          setNewFeedInputs((prev) => ({ ...prev, [cat.id]: { ...feedInput, title: e.target.value } }))
+                        }
+                        placeholder="Nom (optionnel)"
+                        className="w-40 border border-ink/40 bg-transparent px-3 py-1.5 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addCustomFeed(cat.id)}
+                        disabled={addingFeedFor === cat.id || !feedInput.url.trim()}
+                        className="border border-ink px-3 py-1.5 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
+                      >
+                        {addingFeedFor === cat.id ? "Ajout..." : "Ajouter le flux"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       <SpoonDivider />

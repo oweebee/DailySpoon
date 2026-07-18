@@ -104,6 +104,49 @@ function capPerCategory(items: RawItem[], max: number): { aiItems: RawItem[]; ov
 }
 
 /**
+ * Stocke une liste de RawItem en traitement brut (fallbackProcess, aucun
+ * coût IA), dédupliqué par freshrssItemId — extrait de generateDailyEdition
+ * pour être réutilisable par un balayage indépendant qui n'a pas besoin
+ * d'une Edition à proprement parler (voir syncCustomFeeds dans
+ * customFeeds.ts, appelé par le worker sur son propre intervalle, plus
+ * fréquent que le cycle normal d'impression). editionId reste optionnel
+ * (Article.editionId est nullable) : un balayage de fond n'a pas besoin de
+ * créer une ligne Edition juste pour rattacher ses articles — ils restent
+ * "aiRewritten: false" et seront de toute façon repris par la prochaine
+ * vraie impression (IA ou pas), qui les rattachera à SA propre édition en
+ * les réécrivant.
+ */
+export async function ingestRawItems(rawItems: RawItem[], editionId: string | null): Promise<void> {
+  for (const raw of rawItems) {
+    const fallback = fallbackProcess(raw);
+
+    await prisma.article.upsert({
+      where: { freshrssItemId: raw.freshrssItemId },
+      update: {},
+      create: {
+        freshrssItemId: raw.freshrssItemId,
+        feedId: raw.feedId,
+        feedTitle: raw.feedTitle,
+        categoryLabel: raw.categoryLabel,
+        sourceUrl: raw.sourceUrl,
+        sourceTitle: raw.sourceTitle,
+        sourceExcerpt: raw.sourceExcerpt,
+        imageUrl: raw.imageUrl,
+        publishedAt: raw.publishedAt,
+        processed: true,
+        included: raw.included,
+        headline: fallback.headline,
+        summary: fallback.summary,
+        category: fallback.category,
+        priorityScore: fallback.priorityScore,
+        aiRewritten: false,
+        editionId: editionId ?? undefined
+      }
+    });
+  }
+}
+
+/**
  * Empreinte des champs figés dans une photo d'archive (ArticleSnapshotContent)
  * — deux articles (ou deux régénérations du même article) avec exactement les
  * mêmes valeurs ici partagent la même ligne de contenu au lieu d'en dupliquer
@@ -222,33 +265,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // dans la journée par la veille sans IA (toutes les 3h) doit pouvoir être
   // choisi par l'IA lors d'une impression complète plus tard, pas seulement
   // les items tout juste récupérés par CET appel précis.
-  for (const raw of rawItems) {
-    const fallback = fallbackProcess(raw);
-
-    await prisma.article.upsert({
-      where: { freshrssItemId: raw.freshrssItemId },
-      update: {},
-      create: {
-        freshrssItemId: raw.freshrssItemId,
-        feedId: raw.feedId,
-        feedTitle: raw.feedTitle,
-        categoryLabel: raw.categoryLabel,
-        sourceUrl: raw.sourceUrl,
-        sourceTitle: raw.sourceTitle,
-        sourceExcerpt: raw.sourceExcerpt,
-        imageUrl: raw.imageUrl,
-        publishedAt: raw.publishedAt,
-        processed: true,
-        included: raw.included,
-        headline: fallback.headline,
-        summary: fallback.summary,
-        category: fallback.category,
-        priorityScore: fallback.priorityScore,
-        aiRewritten: false,
-        editionId: edition.id
-      }
-    });
-  }
+  await ingestRawItems(rawItems, edition.id);
 
   await syncMedalFlags();
 

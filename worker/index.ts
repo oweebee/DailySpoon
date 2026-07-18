@@ -3,6 +3,7 @@ import { generateDailyEdition, todayDateOnly } from "../src/lib/generateEdition"
 import { getSettings } from "../src/lib/settings";
 import { prisma } from "../src/lib/prisma";
 import { healthCheckRedditFeeds } from "../src/lib/redditFeedHealth";
+import { syncCustomFeeds } from "../src/lib/customFeeds";
 
 // Self-hosted daily scheduler (no Vercel cron needed).
 // Checked every minute against the current /admin/settings (or env var
@@ -100,10 +101,28 @@ async function maybeRunRedditHealthCheck(tz: string) {
   }
 }
 
+// Flux RSS personnalisés (voir customFeeds.ts, CustomCategory/CustomFeed) —
+// zéro coût IA, tourne dans tous les cas (mode auto ou manuel). Appelé à
+// CHAQUE tick (chaque minute) : syncCustomFeeds()/fetchCustomFeedItems()
+// s'auto-gate en interne sur Settings.customFeedsIntervalMinutes (5mn à 1
+// semaine, réglable dans /admin/settings) — un appel qui n'est pas encore
+// dû ne fait qu'une lecture DB, pas de requête réseau vers les flux.
+async function maybeSyncCustomFeeds() {
+  try {
+    const result = await syncCustomFeeds();
+    if (result.fetched > 0) {
+      console.log(`[worker] Flux personnalisés : ${result.fetched} nouvel(aux) article(s).`);
+    }
+  } catch (err) {
+    console.error("[worker] Synchronisation des flux personnalisés échouée:", err);
+  }
+}
+
 async function tick() {
   const settings = await getSettings();
 
   await maybeRunRedditHealthCheck(settings.editionTz);
+  await maybeSyncCustomFeeds();
 
   if (settings.editionScheduleEnabled) {
     const { hour, minute, dateKey } = currentHourMinuteInTz(settings.editionTz);

@@ -19,6 +19,7 @@ type SettingsForm = {
   editionScheduleEnabled: boolean;
   writingStyle: string;
   morssBaseUrl: string;
+  customFeedsIntervalMinutes: string;
 };
 
 const EMPTY: SettingsForm = {
@@ -36,7 +37,8 @@ const EMPTY: SettingsForm = {
   retentionDays: "730",
   editionScheduleEnabled: true,
   writingStyle: "normal",
-  morssBaseUrl: ""
+  morssBaseUrl: "",
+  customFeedsIntervalMinutes: "60"
 };
 
 // Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
@@ -61,6 +63,21 @@ const RETENTION_OPTIONS = [
   { value: "1460", label: "4 ans" },
   { value: "1825", label: "5 ans" },
   { value: "0", label: "Illimité" }
+];
+
+// Intervalle GLOBAL de récupération des flux RSS personnalisés (catégories
+// personnalisées, /admin/categories) — un seul intervalle pour tous les flux
+// à la fois, pas de réglage par flux ni par catégorie (voir customFeeds.ts).
+const CUSTOM_FEEDS_INTERVAL_OPTIONS = [
+  { value: "5", label: "5 minutes" },
+  { value: "15", label: "15 minutes" },
+  { value: "30", label: "30 minutes" },
+  { value: "60", label: "1 heure (défaut)" },
+  { value: "180", label: "3 heures" },
+  { value: "360", label: "6 heures" },
+  { value: "480", label: "8 heures" },
+  { value: "1440", label: "24 heures" },
+  { value: "10080", label: "1 semaine" }
 ];
 
 type TestResult = { ok: boolean; message: string };
@@ -101,7 +118,11 @@ export default function AdminSettingsPage() {
           retentionDays: s.retentionDays !== undefined && s.retentionDays !== null ? s.retentionDays.toString() : "730",
           editionScheduleEnabled: s.editionScheduleEnabled ?? true,
           writingStyle: s.writingStyle || "normal",
-          morssBaseUrl: s.morssBaseUrl || ""
+          morssBaseUrl: s.morssBaseUrl || "",
+          customFeedsIntervalMinutes:
+            s.customFeedsIntervalMinutes !== undefined && s.customFeedsIntervalMinutes !== null
+              ? s.customFeedsIntervalMinutes.toString()
+              : "60"
         });
         // Clé déjà enregistrée : charge tout de suite la liste des moteurs
         // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
@@ -174,7 +195,9 @@ export default function AdminSettingsPage() {
       retentionDays: form.retentionDays === "" ? null : Number(form.retentionDays),
       editionScheduleEnabled: form.editionScheduleEnabled,
       writingStyle: form.writingStyle,
-      morssBaseUrl: form.morssBaseUrl
+      morssBaseUrl: form.morssBaseUrl,
+      customFeedsIntervalMinutes:
+        form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes)
     };
   }
 
@@ -471,6 +494,33 @@ export default function AdminSettingsPage() {
               ex. NYTimes, Cloudflare) : la requête repart depuis morss plutôt que directement depuis
               ce serveur. Laisse vide pour désactiver ce repli. Sans lien avec un flux déjà proxifié
               via morss côté FreshRSS, réglage indépendant.
+            </p>
+          </fieldset>
+
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">
+              Flux RSS personnalisés
+            </legend>
+            <label className="block space-y-1">
+              <span className="font-display text-xs uppercase tracking-[0.15em] text-sepia">
+                Intervalle de récupération
+              </span>
+              <select
+                value={form.customFeedsIntervalMinutes}
+                onChange={(e) => set("customFeedsIntervalMinutes", e.target.value)}
+                className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
+              >
+                {CUSTOM_FEEDS_INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs italic text-sepia">
+              S’applique à tous les flux ajoutés depuis « Catégories personnalisées »
+              (/admin/categories), sans passer par FreshRSS — un seul intervalle pour l’ensemble de
+              ces flux. Aucun coût IA : simple aspiration RSS, comme « Aspirer les news ».
             </p>
           </fieldset>
 
