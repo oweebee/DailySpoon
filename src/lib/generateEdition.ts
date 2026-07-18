@@ -410,25 +410,62 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // à Article, ces lignes ne seront plus jamais modifiées ni réattribuées à
   // une autre édition, donc cette génération reste consultable telle quelle
   // dans les archives même après d'autres régénérations le même jour.
-  const qualifyingArticles = await prisma.article.findMany({
-    where: {
-      publishedAt: contentRange,
-      processed: true,
-      aiRewritten: true,
-      ...aiPrintWhere
+  //
+  // JAMAIS en mode "Aspirer les news" (forceNoAi) : aiRewritten vit sur
+  // l'ARTICLE, pas sur l'édition — un article déjà réécrit par l'IA plus tôt
+  // dans la journée reste "aiRewritten: true" indéfiniment, donc CHAQUE passage
+  // sans IA (toutes les quelques minutes/heures selon l'intervalle réglé)
+  // retrouvait les mêmes articles déjà qualifiés et photographiait une
+  // NOUVELLE édition "published" identique à la précédente — vu en usage réel :
+  // /archive se remplissait de dizaines d'entrées dupliquées à "0 tokens", une
+  // par passage, sans aucun contenu réellement nouveau. Un passage sans IA ne
+  // doit qu'ingérer les articles bruts (déjà fait plus haut), jamais réimprimer
+  // une édition.
+  const qualifyingArticles = options.forceNoAi
+    ? []
+    : await prisma.article.findMany({
+        where: {
+          publishedAt: contentRange,
+          processed: true,
+          aiRewritten: true,
+          ...aiPrintWhere
+        }
+      });
+
+  // Second verrou anti-doublon (voir celui sur forceNoAi juste au-dessus) :
+  // même en génération IA normale, si le jeu d'articles qualifiés est
+  // EXACTEMENT le même (mêmes empreintes de contenu, voir
+  // ArticleSnapshotContent.contentHash) que la dernière édition déjà publiée
+  // CE JOUR-LÀ, on ne republie pas un doublon strictement identique — un
+  // déclenchement répété ("Lancer l'impression" cliqué plusieurs fois, ou un
+  // planning trop rapproché) sans rien de nouveau entre les deux ne doit pas
+  // non plus empiler des entrées identiques dans /archive.
+  let isDuplicateOfLastPublished = false;
+  if (qualifyingArticles.length > 0) {
+    const newHashes = qualifyingArticles.map((a) => snapshotContentHash(a)).sort();
+    const lastPublished = await prisma.edition.findFirst({
+      where: { date, status: "published", id: { not: edition.id } },
+      orderBy: { generatedAt: "desc" },
+      include: { snapshot: { include: { content: true } } }
+    });
+    if (lastPublished) {
+      const oldHashes = lastPublished.snapshot.map((s) => s.content.contentHash).sort();
+      isDuplicateOfLastPublished =
+        oldHashes.length === newHashes.length && oldHashes.every((h, i) => h === newHashes[i]);
     }
-  });
+  }
 
   // "published" exige au moins un article RÉELLEMENT réécrit par l'IA (donc
-  // au moins une ligne EditionArticle créée juste après) — pas seulement un
-  // articleCount brut positif. Sans ce garde-fou, un passage où TOUS les
-  // appels IA échouent (mauvais modèle Gemini, clé invalide, panne...)
-  // marquait quand même l'édition "published" (des articles bruts existent
-  // bien pour le jour), avec une photo figée totalement VIDE : la page
-  // d'accueil affiche alors "Aucune édition générée", ou pire, une édition
-  // précédente non vide disparaît de la une au profit de cette coquille
-  // vide qui devient la plus récente "published".
-  const status = qualifyingArticles.length > 0 ? "published" : "draft";
+  // au moins une ligne EditionArticle créée juste après), ET que ce ne soit
+  // pas un doublon strict de la dernière édition publiée (voir ci-dessus).
+  // Sans le premier garde-fou, un passage où TOUS les appels IA échouent
+  // (mauvais modèle Gemini, clé invalide, panne...) marquait quand même
+  // l'édition "published" (des articles bruts existent bien pour le jour),
+  // avec une photo figée totalement VIDE : la page d'accueil affiche alors
+  // "Aucune édition générée", ou pire, une édition précédente non vide
+  // disparaît de la une au profit de cette coquille vide qui devient la plus
+  // récente "published".
+  const status = qualifyingArticles.length > 0 && !isDuplicateOfLastPublished ? "published" : "draft";
 
   // Coût estimé à partir des tokens réellement consommés (usage, rempli au
   // fil des appels IA ci-dessus) et du modèle réglé pour CETTE génération —
@@ -464,10 +501,14 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   });
 
   await writeLog(
-    status === "published" ? "info" : "warn",
+    status === "published" ? "info" : isDuplicateOfLastPublished ? "info" : "warn",
     "edition",
     `Génération terminée — statut "${status}", ${qualifyingArticles.length} article(s) sur la une` +
-      (options.forceNoAi ? " (mode Aspirer les news, sans IA)." : ` (${usage.inputTokens + usage.outputTokens} tokens).`)
+      (options.forceNoAi
+        ? " (mode Aspirer les news, sans IA)."
+        : isDuplicateOfLastPublished
+          ? " (identique à la dernière édition publiée — non republiée, pas de doublon dans les archives)."
+          : ` (${usage.inputTokens + usage.outputTokens} tokens).`)
   );
 
   // Le contenu réel (texte, image, score...) est stocké une seule fois par
@@ -477,7 +518,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   // régénération du jour (même score IA, même résumé, même médaille...), sa
   // nouvelle ligne EditionArticle réutilise le contenu déjà existant au lieu
   // d'en dupliquer une copie complète.
-  for (const a of qualifyingArticles) {
+  for (const a of isDuplicateOfLastPublished ? [] : qualifyingArticles) {
     const hash = snapshotContentHash(a);
     const content = await prisma.articleSnapshotContent.upsert({
       where: { contentHash: hash },
