@@ -502,12 +502,12 @@ function renderPage(opts: {
     text-decoration: none;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
     transform: rotate(-1.5deg);
-    box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
+    transition: transform 0.15s ease, filter 0.15s ease;
   }
   .stamp-link:hover {
     transform: rotate(0deg) scale(1.03);
-    box-shadow: 3px 5px 10px rgba(26, 26, 26, 0.32);
+    filter: drop-shadow(3px 5px 10px rgba(26, 26, 26, 0.32));
   }
   .stamp-wrap { text-align: center; margin-top: 2.6em; }
   .colophon { text-align: center; margin-top: 3.2em; color: #5c5c5c; }

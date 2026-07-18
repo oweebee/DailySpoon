@@ -53,9 +53,9 @@ export function Masthead({ date }: { date: Date }) {
               place à droite du titre en mobile). */}
           <Link
             href="/direct"
-            className="stamp-live stamp-bg-sm relative mx-auto mt-4 flex w-fit items-center justify-center px-4 font-display text-xs font-bold uppercase tracking-[0.25em] text-white md:hidden"
+            className="stamp-live stamp-bg-sm relative mx-auto mt-4 flex w-fit items-center justify-center px-4 font-display text-xs uppercase tracking-[0.25em] text-white md:hidden"
           >
-            En direct
+            <span className="stamp-live-text">En direct</span>
           </Link>
         </div>
 
@@ -67,12 +67,14 @@ export function Masthead({ date }: { date: Date }) {
             "transform" (rotation vs centrage vertical), ce qui empêchait la
             rotation de s'afficher. Centré verticalement sur toute la zone
             "bandeau + titre + filet" ci-dessus via inset-y-0/my-auto (sans
-            transform, donc aucun conflit avec la rotation de .stamp-live). */}
+            transform, donc aucun conflit avec la rotation de .stamp-live).
+            Le fond (.stamp-live) reste droit ; seul le texte, enveloppé
+            dans .stamp-live-text, garde l'inclinaison. */}
         <Link
           href="/direct"
-          className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 my-auto hidden h-fit items-center justify-center px-5 font-display text-sm font-bold uppercase tracking-[0.25em] text-white md:flex"
+          className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 my-auto hidden h-fit items-center justify-center px-5 font-display text-sm uppercase tracking-[0.25em] text-white md:flex"
         >
-          En direct
+          <span className="stamp-live-text">En direct</span>
         </Link>
       </div>
 

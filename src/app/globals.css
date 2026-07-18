@@ -76,21 +76,26 @@ body {
    redressent légèrement au survol comme si on décollait le timbre. Trois
    fonds (stamp-sm/md/lg, voir .stamp-bg-*) selon la longueur du texte du
    bouton — attribué au cas par cas côté JSX. */
+/* "filter: drop-shadow(...)" plutôt que "box-shadow" : box-shadow suit
+   TOUJOURS le rectangle de la boîte, pas la vraie silhouette (transparente,
+   perforée) de l'image de fond — ça laissait voir un halo rectangulaire
+   derrière le timbre, à travers ses propres perforations. drop-shadow suit
+   le canal alpha réel du contenu (donc de l'image), silhouette comprise. */
 .stamp-button {
   position: relative;
   transform: rotate(-1.5deg);
-  box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
+  transition: transform 0.15s ease, filter 0.15s ease;
 }
 
 .stamp-button:hover {
   transform: rotate(0deg) scale(1.03);
-  box-shadow: 3px 5px 10px rgba(26, 26, 26, 0.32);
+  filter: drop-shadow(3px 5px 10px rgba(26, 26, 26, 0.32));
 }
 
 .stamp-button:active {
   transform: rotate(0deg) scale(0.97);
-  box-shadow: 1px 2px 4px rgba(26, 26, 26, 0.28);
+  filter: drop-shadow(1px 2px 4px rgba(26, 26, 26, 0.28));
 }
 
 /* Timbre "EN DIRECT" du masthead — règle 100% autonome, ne réutilise PAS
@@ -108,10 +113,21 @@ body {
    en JSX (Masthead.tsx), transformant le timbre en bloc pleine largeur qui,
    une fois pivoté, traversait tout l'écran en diagonale. La position se
    règle donc entièrement via les classes Tailwind côté JSX (relative en
-   mobile, absolute en desktop). */
+   mobile, absolute en desktop).
+   PAS de rotation ici (contrairement à .stamp-button) : le FOND du timbre
+   "En direct" reste bien droit, sur demande explicite — seul le texte à
+   l'intérieur garde l'inclinaison (voir .stamp-live-text plus bas et
+   Masthead.tsx, qui l'enveloppe dans un <span> séparé). drop-shadow (pas
+   box-shadow) pour la même raison que .stamp-button — voir plus haut. */
 .stamp-live {
+  filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
+}
+
+/* Texte "En direct" — pivoté indépendamment du fond de timbre (voir
+   .stamp-live juste au-dessus, plus de rotation sur le conteneur). */
+.stamp-live-text {
+  display: inline-block;
   transform: rotate(-9deg);
-  box-shadow: 2px 4px 8px rgba(26, 26, 26, 0.28);
 }
 
 /* Fonds de timbre — 3 tailles/ratios (voir public/stamps/). Le ratio RÉEL de
