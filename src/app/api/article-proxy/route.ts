@@ -462,6 +462,19 @@ function renderPage(opts: {
     font-weight: 800;
     margin: 1.4em 0 0.5em;
   }
+  /* Encadré d'avertissement (repli texte Reddit/extraction échouée) — même
+     esprit que les cases d'article de l'appli React (bordure pleine + fond
+     gris clair), placé APRÈS le texte récupéré plutôt qu'avant, sur toute
+     la largeur de la zone de texte. */
+  .notice-box {
+    margin-top: 2.4em;
+    border: 2px solid #1a1a1a;
+    background: rgba(26, 26, 26, 0.07);
+    padding: 1em 1.2em;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #3a3a3a;
+  }
   .colophon { text-align: center; margin-top: 3.2em; color: #5c5c5c; }
   .colophon svg { display: inline-block; vertical-align: middle; margin: 0 9px; fill: currentColor; }
   /* Repli iframe (fetch serveur bloqué) : occupe la hauteur visible de la
@@ -802,16 +815,25 @@ export async function GET(req: NextRequest) {
   const articleRecord = await prisma.article
     .findFirst({
       where: { sourceUrl: originalUrl },
-      select: { id: true, favorite: true, sourceExcerpt: true, summary: true }
+      select: { id: true, favorite: true, sourceExcerpt: true, summary: true, sourceTitle: true }
     })
     .catch(() => null);
   const articleId = articleRecord?.id ?? null;
   const favorite = articleRecord?.favorite ?? false;
   const fallbackExcerpt = articleRecord?.summary?.trim() || articleRecord?.sourceExcerpt?.trim() || null;
+  // Même titre que celui déjà affiché en vignette (accueil, En direct) —
+  // plus parlant que "Reddit indisponible..."/"Article non extrait" quand
+  // on a un vrai texte de repli à montrer en dessous.
+  const fallbackTitle = articleRecord?.sourceTitle?.trim() || null;
 
-  function excerptFallbackBodyHtml(intro: string): string {
-    if (!fallbackExcerpt) return `<p>${escapeHtml(intro)}</p>`;
-    return `<p>${escapeHtml(intro)}</p><p>${escapeHtml(fallbackExcerpt)}</p>`;
+  // Le message d'avertissement passe APRÈS le texte récupéré (pas avant) et
+  // dans un encadré grisé sur toute la largeur de la zone de texte — même
+  // esprit que les cases d'article de l'appli (bordure + fond gris clair),
+  // pour bien le distinguer visuellement du texte de l'article lui-même.
+  function excerptFallbackBodyHtml(notice: string): string {
+    const noticeBox = `<div class="notice-box">${escapeHtml(notice)}</div>`;
+    if (!fallbackExcerpt) return noticeBox;
+    return `<p>${escapeHtml(fallbackExcerpt)}</p>${noticeBox}`;
   }
 
   // Certains posts Reddit à média donnent, dans le flux RSS (surtout via un
@@ -970,7 +992,7 @@ export async function GET(req: NextRequest) {
     // tronqué, contrairement à la vignette limitée à 10 lignes.
     return htmlResponse(
       renderPage({
-        title: "Reddit indisponible depuis ce serveur",
+        title: fallbackTitle || "Reddit indisponible depuis ce serveur",
         bodyHtml: excerptFallbackBodyHtml(
           "Reddit bloque les requêtes venant de ce serveur (IP d'hébergeur), y compris via son API publique et les miroirs de secours essayés. Utilise « Ouvrir dans un nouvel onglet » pour lire ce post directement" +
             (fallbackExcerpt ? " ou lire les commentaires." : ".")
@@ -1020,7 +1042,7 @@ export async function GET(req: NextRequest) {
     if (!article || !article.content) {
       return htmlResponse(
         renderPage({
-          title: "Article non extrait",
+          title: fallbackTitle || "Article non extrait",
           bodyHtml: excerptFallbackBodyHtml(
             "Impossible d'extraire proprement le contenu de cet article. Utilise « Ouvrir dans un nouvel onglet » pour le lire directement sur le site source" +
               (fallbackExcerpt ? " — voici néanmoins l'aperçu récupéré depuis le flux." : ".")
