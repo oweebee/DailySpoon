@@ -193,6 +193,19 @@ function bestRawContent(item: Parser.Item): string {
  *  ("title?.trim is not a function", vu en usage réel sur un flux réel).
  *  Convertit explicitement en chaîne avant de nettoyer, quel que soit le
  *  type réellement reçu. */
+/** Convertit `item.isoDate`/`item.pubDate` en Date valide, ou null si le
+ *  flux fournit une date illisible (vu en usage réel : `new Date(...)`
+ *  produisait un "Invalid Date" passé tel quel à Prisma, qui rejette
+ *  l'upsert ENTIER avec "Provided Date object is invalid" — et donc, avant
+ *  le fix de résilience sur ingestRawItems, bloquait aussi tous les autres
+ *  articles du même lot). */
+function safePublishedAt(item: Parser.Item): Date | null {
+  const raw = item.isoDate || item.pubDate;
+  if (!raw) return null;
+  const date = new Date(raw);
+  return isNaN(date.getTime()) ? null : date;
+}
+
 export function safeTitle(value: unknown): string {
   if (typeof value === "string") return value.trim();
   if (value == null) return "";
@@ -326,7 +339,7 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
           sourceTitle: safeTitle(item.title) || "(sans titre)",
           sourceExcerpt: excerpt || null,
           imageUrl,
-          publishedAt: item.isoDate ? new Date(item.isoDate) : item.pubDate ? new Date(item.pubDate) : null,
+          publishedAt: safePublishedAt(item),
           included
         });
       }

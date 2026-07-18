@@ -120,29 +120,42 @@ export async function ingestRawItems(rawItems: RawItem[], editionId: string | nu
   for (const raw of rawItems) {
     const fallback = fallbackProcess(raw);
 
-    await prisma.article.upsert({
-      where: { freshrssItemId: raw.freshrssItemId },
-      update: {},
-      create: {
-        freshrssItemId: raw.freshrssItemId,
-        feedId: raw.feedId,
-        feedTitle: raw.feedTitle,
-        categoryLabel: raw.categoryLabel,
-        sourceUrl: raw.sourceUrl,
-        sourceTitle: raw.sourceTitle,
-        sourceExcerpt: raw.sourceExcerpt,
-        imageUrl: raw.imageUrl,
-        publishedAt: raw.publishedAt,
-        processed: true,
-        included: raw.included,
-        headline: fallback.headline,
-        summary: fallback.summary,
-        category: fallback.category,
-        priorityScore: fallback.priorityScore,
-        aiRewritten: false,
-        editionId: editionId ?? undefined
-      }
-    });
+    // try/catch PAR ARTICLE : vu en usage réel, un seul item malformé (ex.
+    // une date de publication illisible dans le flux source, rejetée par
+    // Prisma avec "Provided Date object is invalid") faisait planter cette
+    // boucle en plein milieu — sans ce try/catch, TOUS les articles
+    // restants du même lot (potentiellement d'autres flux entièrement
+    // valides) n'étaient alors jamais enregistrés non plus, silencieusement.
+    try {
+      await prisma.article.upsert({
+        where: { freshrssItemId: raw.freshrssItemId },
+        update: {},
+        create: {
+          freshrssItemId: raw.freshrssItemId,
+          feedId: raw.feedId,
+          feedTitle: raw.feedTitle,
+          categoryLabel: raw.categoryLabel,
+          sourceUrl: raw.sourceUrl,
+          sourceTitle: raw.sourceTitle,
+          sourceExcerpt: raw.sourceExcerpt,
+          imageUrl: raw.imageUrl,
+          publishedAt: raw.publishedAt,
+          processed: true,
+          included: raw.included,
+          headline: fallback.headline,
+          summary: fallback.summary,
+          category: fallback.category,
+          priorityScore: fallback.priorityScore,
+          aiRewritten: false,
+          editionId: editionId ?? undefined
+        }
+      });
+    } catch (err) {
+      console.error(
+        `[ingestRawItems] Échec pour "${raw.sourceTitle}" (${raw.freshrssItemId}), article ignoré :`,
+        (err as Error)?.message
+      );
+    }
   }
 }
 
