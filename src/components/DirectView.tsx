@@ -89,7 +89,7 @@ export function DirectView({
             // lignes réduit la largeur "naturelle" (ligne la plus longue au
             // lieu du texte entier), donc écraserait aussi la hauteur, trop
             // juste pour 2 lignes.
-            className="stamp-button stamp-bg-lg inline-flex min-w-[13rem] flex-col items-center justify-center gap-0.5 px-6 font-display text-xs uppercase leading-tight tracking-[0.25em] text-paper disabled:opacity-50"
+            className="stamp-button stamp-bg-lg inline-flex min-w-[17rem] flex-col items-center justify-center gap-0.5 px-8 font-display text-sm uppercase leading-tight tracking-[0.25em] text-paper disabled:opacity-50"
           >
             {pulling ? (
               <>
