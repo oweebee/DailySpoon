@@ -83,9 +83,25 @@ export function DirectView({
           <button
             onClick={pull}
             disabled={pulling}
-            className="stamp-button stamp-bg-lg inline-flex items-center justify-center px-6 font-display text-xs uppercase tracking-[0.25em] text-paper disabled:opacity-50"
+            // min-w fixe : le fond du timbre (stamp-bg-lg) impose sa hauteur
+            // à partir de la largeur du bouton (aspect-ratio, voir
+            // globals.css) — sans largeur plancher, un texte replié sur 2
+            // lignes réduit la largeur "naturelle" (ligne la plus longue au
+            // lieu du texte entier), donc écraserait aussi la hauteur, trop
+            // juste pour 2 lignes.
+            className="stamp-button stamp-bg-lg inline-flex min-w-[13rem] flex-col items-center justify-center gap-0.5 px-6 font-display text-xs uppercase leading-tight tracking-[0.25em] text-paper disabled:opacity-50"
           >
-            {pulling ? "Télégraphie en cours..." : "Télégraphier les news"}
+            {pulling ? (
+              <>
+                <span>Télégraphie</span>
+                <span>en cours...</span>
+              </>
+            ) : (
+              <>
+                <span>Télégraphier</span>
+                <span>les nouvelles</span>
+              </>
+            )}
           </button>
           {message && <p className="text-sm italic text-sepia">{message}</p>}
         </div>
