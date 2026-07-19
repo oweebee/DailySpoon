@@ -315,8 +315,8 @@ export default function AdminSettingsPage() {
               </select>
             </label>
             <p className="text-xs italic text-sepia">
-              Ne change que le moteur utilisé pour l’édition IA — « Aspirer les news » sur /direct
-              reste toujours sans IA, quel que soit ce choix.
+              Ne change que le moteur utilisé pour l’édition IA — « Télégraphier les news » sur
+              /direct reste toujours sans IA, quel que soit ce choix.
             </p>
 
             <label className="block">
@@ -533,8 +533,8 @@ export default function AdminSettingsPage() {
               (/admin/categories, sans passer par FreshRSS), ET l’aspiration RSS de secours FreshRSS
               qui tourne toute seule quand le planning automatique est désactivé (mode manuel, bouton
               sur l’accueil) — plus de durée fixe séparée pour cette dernière, elle suit maintenant ce
-              même intervalle. Aucun coût IA dans les deux cas : simple aspiration RSS, comme « Aspirer
-              les news ».
+              même intervalle. Aucun coût IA dans les deux cas : simple aspiration RSS, comme
+              « Télégraphier les news ».
             </p>
           </fieldset>
 

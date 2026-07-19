@@ -6,7 +6,7 @@ FreshRSS.
 Chaque jour, DailySpoon récupère les articles des catégories FreshRSS que tu as choisies, fait
 réécrire/résumer/classer/prioriser les articles par une IA, et publie une édition (façon une de
 journal). Autour de cette une : **En direct** (`/direct`, tous les articles récents groupés par
-catégorie, avec recherche dans tout l'historique et bouton « Aspirer les news » sans IA), les
+catégorie, avec recherche dans tout l'historique et bouton « Télégraphier les news » sans IA), les
 **favoris** (`/favoris`, étoile shérif), et les **archives** (`/archive`, chaque impression figée
 telle quelle, consultable par date).
 
@@ -121,7 +121,7 @@ Une fois déployé :
    ajoute si tu veux des flux RSS personnalisés (avec leurs catégories personnalisées) et des
    flux « médaillés » (mis en avant à la une d'En direct).
 4. Lance une première impression sans attendre le lendemain : bouton de génération sur l'accueil
-   (si le planning auto est désactivé) ou « Aspirer les news » sur `/direct` pour un premier
+   (si le planning auto est désactivé) ou « Télégraphier les news » sur `/direct` pour un premier
    remplissage sans IA.
 5. Le worker prend ensuite le relais tout seul : édition quotidienne à l'heure réglée (si le
    planning est actif) et balayage des flux personnalisés à l'intervalle choisi.
@@ -140,8 +140,9 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
 ## Notes
 
 - Sans clé IA (Anthropic ou Gemini), les articles sont quand même récupérés et publiés, mais sans
-  réécriture/résumé/priorisation par IA (mode dégradé, texte brut des flux). Le bouton « Aspirer
-  les news » de `/direct` ne consomme JAMAIS de tokens IA, même si une clé est configurée.
+  réécriture/résumé/priorisation par IA (mode dégradé, texte brut des flux). Le bouton
+  « Télégraphier les news » de `/direct` ne consomme JAMAIS de tokens IA, même si une clé est
+  configurée.
 - Chaque génération crée sa propre édition, figée telle quelle dans `/archive` (avec le modèle, le
   style et les tokens consommés de cette impression précise) — régénérer le même jour n'écrase
   jamais une impression précédente. Les doublons stricts et les brouillons vides ne sont pas

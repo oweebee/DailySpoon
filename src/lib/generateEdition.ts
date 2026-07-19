@@ -526,7 +526,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     "edition",
     `Génération terminée — statut "${status}", ${qualifyingArticles.length} article(s) sur la une` +
       (options.forceNoAi
-        ? " (mode Aspirer les news, sans IA)."
+        ? " (mode Télégraphier les news, sans IA)."
         : isDuplicateOfLastPublished
           ? " (identique à la dernière édition publiée — non republiée, pas de doublon dans les archives)."
           : ` (${usage.inputTokens + usage.outputTokens} tokens).`)

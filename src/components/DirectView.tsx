@@ -83,9 +83,9 @@ export function DirectView({
           <button
             onClick={pull}
             disabled={pulling}
-            className="stamp-button stamp-bg-md inline-flex items-center justify-center px-5 font-display text-xs uppercase tracking-[0.25em] text-paper disabled:opacity-50"
+            className="stamp-button stamp-bg-lg inline-flex items-center justify-center px-6 font-display text-xs uppercase tracking-[0.25em] text-paper disabled:opacity-50"
           >
-            {pulling ? "Aspiration en cours..." : "Aspirer les news"}
+            {pulling ? "Télégraphie en cours..." : "Télégraphier les news"}
           </button>
           {message && <p className="text-sm italic text-sepia">{message}</p>}
         </div>
@@ -108,8 +108,8 @@ export function DirectView({
         <SearchResults results={searchResults} searching={searching} />
       ) : initialArticles.length === 0 ? (
         <p className="py-24 text-center italic text-sepia">
-          Rien pour l’instant — clique sur « Aspirer les news » pour aller chercher les derniers
-          articles.
+          Rien pour l’instant — clique sur « Télégraphier les news » pour aller chercher les
+          derniers articles.
         </p>
       ) : (
         <EditionView articles={initialArticles} categoryOrder={categoryOrder} clampSummary date={date} />
