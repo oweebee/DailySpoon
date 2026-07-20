@@ -20,11 +20,13 @@ export default async function DirectPage() {
   // interroge la table sans ce filtre) mais n'apparaissent plus ici — sur
   // demande explicite, pour ne pas mélanger du contenu "figé" (plus jamais
   // rafraîchi tant que c'est désactivé) avec les flux perso toujours actifs.
-  // Un article FreshRSS a un feedId = item.origin.streamId (voir
-  // fetchNewItemsFromSelectedCategories) ; un article de flux perso a
-  // toujours un feedId préfixé "custom-feed:" (voir customFeedFreshrssId) —
-  // feedId null (rare, cas dégradé) reste affiché par prudence, plutôt que
-  // de risquer de cacher un article dont l'origine est ambiguë.
+  // Un article de flux perso a TOUJOURS un feedId préfixé "custom-feed:"
+  // (voir customFeedFreshrssId / customFeeds.ts, feedId jamais null pour eux)
+  // — c'est le SEUL marqueur fiable d'un article perso, donc on ne garde QUE
+  // ceux-là. Tout le reste (feedId FreshRSS, ou feedId null quand
+  // item.origin.streamId manquait à l'ingestion) est du FreshRSS et doit
+  // disparaître : un feedId null n'est jamais un flux perso, l'inclure "par
+  // prudence" laissait justement passer tous les vieux articles FreshRSS.
   const [latestEdition, articles, selectedCategories] = await Promise.all([
     // "generatedAt" en second critère : plusieurs éditions peuvent désormais
     // partager la même date (une par régénération), sinon l'ordre entre
@@ -35,7 +37,7 @@ export default async function DirectPage() {
       where: {
         processed: true,
         included: true,
-        ...(freshrssEnabled ? {} : { OR: [{ feedId: null }, { feedId: { startsWith: "custom-feed:" } }] })
+        ...(freshrssEnabled ? {} : { feedId: { startsWith: "custom-feed:" } })
       },
       orderBy: { publishedAt: "desc" },
       take: 1000
