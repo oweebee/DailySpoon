@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { SpoonDivider } from "@/components/SpoonDivider";
 
 type SettingsForm = {
@@ -111,6 +111,10 @@ export default function AdminSettingsPage() {
   const [geminiModels, setGeminiModels] = useState<GeminiModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/settings")
@@ -244,6 +248,72 @@ export default function AdminSettingsPage() {
     const body = await res.json().catch(() => ({}));
     setTesting(false);
     setTestResults(body);
+  }
+
+  // Export : télécharge un fichier JSON avec toute la config (réglages,
+  // catégories, flux, options par flux) — PAS les articles/éditions, voir le
+  // commentaire de /api/admin/backup. Génère le fichier côté navigateur (pas
+  // de lien statique) pour horodater le nom du fichier au moment du clic.
+  async function exportConfig() {
+    setExporting(true);
+    setBackupMessage(null);
+    try {
+      const res = await fetch("/api/admin/backup");
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBackupMessage(body.error || "Échec de l'export.");
+        return;
+      }
+      const blob = new Blob([JSON.stringify(body, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dailyspoon-config-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupMessage("Export téléchargé.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // Import : fusionne (upsert) le fichier choisi dans la config actuelle —
+  // ne supprime jamais rien qui existerait déjà mais pas dans le fichier
+  // (voir /api/admin/backup, POST). Confirmation explicite avant d'écraser
+  // quoi que ce soit, puisque ça touche potentiellement mots de passe/clés.
+  async function importConfig(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permet de re-choisir le même fichier ensuite
+    if (!file) return;
+    if (
+      !window.confirm(
+        "Importer ce fichier va fusionner (ajouter/écraser) sa config dans les réglages, catégories et flux actuels. Rien n'est supprimé, mais des champs existants peuvent être remplacés (y compris mots de passe/clés). Continuer ?"
+      )
+    ) {
+      return;
+    }
+    setImporting(true);
+    setBackupMessage(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const res = await fetch("/api/admin/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed)
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBackupMessage(body.error || "Échec de l'import.");
+        return;
+      }
+      setBackupMessage("Import terminé — rechargement...");
+      setTimeout(() => window.location.reload(), 900);
+    } catch {
+      setBackupMessage("Fichier illisible (JSON invalide).");
+    } finally {
+      setImporting(false);
+    }
   }
 
   async function logout() {
@@ -594,6 +664,39 @@ export default function AdminSettingsPage() {
               même intervalle. Aucun coût IA dans les deux cas : simple aspiration RSS, comme
               « Télégraphier les news ».
             </p>
+          </fieldset>
+
+          <fieldset className="space-y-3 border border-journal/30 p-4">
+            <legend className="px-1 font-display text-xs uppercase tracking-[0.15em] text-journal">
+              Sauvegarde
+            </legend>
+            <p className="text-xs italic text-sepia">
+              Exporte les réglages, catégories, flux personnalisés et options associées (médaille,
+              notification...) dans un fichier JSON, réimportable en cas de besoin. N'inclut PAS les
+              articles ni les éditions déjà générées. Le fichier contient les mots de passe/clés en
+              clair — à garder en lieu sûr.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={exportConfig}
+                disabled={exporting}
+                className="border border-journal/40 px-3 py-2 text-xs uppercase tracking-[0.1em] text-journal hover:bg-journal/5 disabled:opacity-50"
+              >
+                {exporting ? "Export en cours..." : "Exporter la configuration"}
+              </button>
+              <label className="cursor-pointer border border-journal/40 px-3 py-2 text-xs uppercase tracking-[0.1em] text-journal hover:bg-journal/5">
+                {importing ? "Import en cours..." : "Importer une configuration"}
+                <input
+                  type="file"
+                  accept="application/json"
+                  onChange={importConfig}
+                  disabled={importing}
+                  className="hidden"
+                />
+              </label>
+              {backupMessage && <span className="text-sm italic text-sepia">{backupMessage}</span>}
+            </div>
           </fieldset>
 
           <div className="flex flex-wrap items-center gap-x-8 gap-y-4 pt-2">

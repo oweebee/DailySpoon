@@ -225,17 +225,22 @@ export default function AdminCategoriesPage() {
     setForceSyncMessage(null);
     const res = await fetch("/api/admin/custom-feeds/sync", { method: "POST" });
     const body = await res.json().catch(() => ({}));
+    setForcingSync(false);
     if (res.ok) {
       setForceSyncMessage(
         body.fetched > 0
-          ? `${body.fetched} nouvel(aux) article(s) récupéré(s).`
-          : "Terminé — aucun nouvel article (voir le détail par flux ci-dessous)."
+          ? `${body.fetched} nouvel(aux) article(s) récupéré(s) — actualisation...`
+          : "Terminé — aucun nouvel article."
       );
-      await loadCustomFeeds();
+      // Même comportement que "Télégraphier les news" (DirectView.tsx) :
+      // rechargement complet de la page après un court délai, pas juste un
+      // refetch de customFeeds — sans ça, le résultat semblait "ne rien
+      // faire" (compteurs d'articles à jour uniquement dans ce composant-ci,
+      // rien d'autre ne bougeait visiblement à l'écran).
+      setTimeout(() => window.location.reload(), 900);
     } else {
       setForceSyncMessage(body.error || "Échec de la synchronisation forcée.");
     }
-    setForcingSync(false);
   }
 
   async function loadCustomCategories() {
@@ -982,7 +987,7 @@ export default function AdminCategoriesPage() {
           type="button"
           onClick={forceSyncCustomFeeds}
           disabled={forcingSync}
-          className="border border-ink px-3 py-2 text-xs uppercase tracking-[0.2em] hover:bg-ink hover:text-paper disabled:opacity-50"
+          className="stamp-button stamp-bg-lg inline-flex h-14 items-center justify-center whitespace-nowrap px-6 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
         >
           {forcingSync ? "Récupération en cours..." : "Forcer la récupération maintenant"}
         </button>
