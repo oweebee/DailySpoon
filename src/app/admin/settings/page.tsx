@@ -672,7 +672,7 @@ export default function AdminSettingsPage() {
             </legend>
             <p className="text-xs italic text-sepia">
               Exporte les réglages, catégories, flux personnalisés et options associées (médaille,
-              notification...) dans un fichier JSON, réimportable en cas de besoin. N'inclut PAS les
+              notification...) dans un fichier JSON, réimportable en cas de besoin. N&apos;inclut PAS les
               articles ni les éditions déjà générées. Le fichier contient les mots de passe/clés en
               clair — à garder en lieu sûr.
             </p>
