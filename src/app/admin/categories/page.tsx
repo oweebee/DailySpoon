@@ -1026,7 +1026,25 @@ export default function AdminCategoriesPage() {
                 return a.cat.label.localeCompare(b.cat.label);
               });
 
-              if (rows.length === 0) {
+              // Flux perso rattachés à une catégorie FreshRSS qui n'apparaît
+              // plus dans `categories` (FreshRSS désactivé dans
+              // /admin/settings, ou catégorie disparue côté FreshRSS) — sans
+              // ça, ces flux restent en base et continuent de fonctionner
+              // (leur freshrssCategoryLabel est un instantané, pas une
+              // jointure live, voir resolveFeedCategory dans customFeeds.ts)
+              // mais deviennent invisibles/ingérables ici, faute de ligne de
+              // catégorie à laquelle les rattacher dans l'arborescence.
+              // Regroupés dans une catégorie fantôme "Sans catégorie" le
+              // temps de leur réassigner une vraie catégorie perso via
+              // "Modifier".
+              const orphanedCustomFeeds = customFeeds.filter(
+                (f) =>
+                  f.isFreshrssCategory &&
+                  f.freshrssCategoryId &&
+                  !categories.some((c) => c.freshrssId === f.freshrssCategoryId)
+              );
+
+              if (rows.length === 0 && orphanedCustomFeeds.length === 0) {
                 return (
                   <p className="py-6 text-center italic text-sepia">
                     Aucune catégorie disponible pour l’instant (FreshRSS et personnalisées).
@@ -1034,7 +1052,32 @@ export default function AdminCategoriesPage() {
                 );
               }
 
-              return rows.map((row) => {
+              return (
+                <>
+                  {orphanedCustomFeeds.length > 0 && (
+                    <li className="border-b border-dashed border-journal/50 bg-journal/5">
+                      <div className="flex flex-wrap items-center gap-3 py-2.5">
+                        <span className="flex items-center gap-2 font-display font-bold">
+                          <span className="inline-block w-3 text-xs text-journal">▾</span>
+                          Sans catégorie
+                          <span className="text-xs font-normal italic text-sepia">
+                            ({orphanedCustomFeeds.length})
+                          </span>
+                          <span className="rounded-sm bg-journal px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-paper">
+                            fantôme
+                          </span>
+                        </span>
+                        <span className="text-xs italic text-sepia">
+                          Catégorie FreshRSS introuvable (désactivé ou supprimé) — réassigne une
+                          catégorie perso via « Modifier » sur chaque flux.
+                        </span>
+                      </div>
+                      <ul className="ml-2 border-l border-dashed border-ink/40 pb-3 pl-5">
+                        {orphanedCustomFeeds.map((feed) => renderCustomFeedRow(feed, true))}
+                      </ul>
+                    </li>
+                  )}
+                  {rows.map((row) => {
                 if (row.kind === "custom") {
                   const cat = row.cat;
                   const catFeeds = customFeeds.filter((f) => f.customCategoryId === cat.id);
@@ -1225,7 +1268,9 @@ export default function AdminCategoriesPage() {
                     )}
                   </li>
                 );
-              });
+                  })}
+                </>
+              );
             })()}
           </ul>
 
