@@ -227,6 +227,57 @@ const parser = new Parser({
   }
 });
 
+// Échappe les "&" isolés (pas déjà partie d'une entité valide) — cause vue
+// en usage réel de "Unexpected close tag" sur des flux servis par un miroir
+// Redlib (un titre/lien Reddit contenant un "&" brut, jamais échappé côté
+// Redlib). Correction volontairement ciblée sur ce seul cas précis, pas une
+// réparation générale de XML cassé.
+function sanitizeRssXml(xml: string): string {
+  return xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, "&amp;");
+}
+
+// Repli utilisé UNIQUEMENT pour les miroirs Redlib (voir plus bas) : refait
+// la requête nous-mêmes (parser.parseURL ne donne pas accès au texte brut en
+// cas d'échec de parsing) pour pouvoir réessayer avec le XML assaini avant
+// d'abandonner ce miroir. Si même l'assainissement échoue, logue un extrait
+// du XML brut autour de la ligne fautive (donnée par le message d'erreur du
+// parseur XML) pour diagnostiquer sans devoir deviner une nouvelle fois.
+async function fetchRedditMirrorFeed(url: string): Promise<Awaited<ReturnType<typeof parser.parseURL>>> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8"
+    },
+    signal: AbortSignal.timeout(45000)
+  });
+  if (!res.ok) throw new Error(`Status code ${res.status}`);
+  const raw = await res.text();
+
+  try {
+    return await parser.parseString(raw);
+  } catch (parseErr) {
+    try {
+      return await parser.parseString(sanitizeRssXml(raw));
+    } catch (secondErr) {
+      const lineMatch = /Line:\s*(\d+)/i.exec((secondErr as Error)?.message || "");
+      let snippet = "";
+      if (lineMatch) {
+        const lineNum = parseInt(lineMatch[1], 10);
+        const lines = raw.split("\n");
+        snippet = lines.slice(Math.max(0, lineNum - 4), lineNum + 3).join("\n");
+      }
+      await writeLog(
+        "warn",
+        "custom-feeds",
+        `XML Reddit/Redlib mal formé même après assainissement — ${url}`,
+        `${(secondErr as Error)?.message || "erreur inconnue"}\n\n${snippet}`
+      );
+      throw secondErr;
+    }
+  }
+}
+
 /** Meilleur contenu disponible dans un item rss-parser : content:encoded
  *  (texte complet, souvent absent des flux minimalistes) sinon content
  *  (mappé depuis <description> par rss-parser) sinon summary. */
@@ -391,7 +442,7 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
               const mirrorUrl = rehostRedditUrl(feed.url, instance);
               if (!mirrorUrl) continue;
               try {
-                redditParsed = await parser.parseURL(mirrorUrl);
+                redditParsed = await fetchRedditMirrorFeed(mirrorUrl);
                 redditAttempts.push(`${mirrorUrl} -> OK`);
                 break;
               } catch (mirrorErr) {
