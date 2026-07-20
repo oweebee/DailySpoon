@@ -1046,21 +1046,15 @@ export default function AdminCategoriesPage() {
           {/* Erreur FreshRSS affichée en simple NOTE, plus en blocage total :
               tes catégories/flux personnalisés se chargent indépendamment et
               doivent rester visibles même si FreshRSS est désactivé ou
-              injoignable (voir le commentaire sur "Impression IA" ci-dessus). */}
-          {error && (
-            <div className="mb-4 space-y-1 border border-journal/40 bg-journal/5 p-3 text-sm text-journal">
-              <p>{error}</p>
-              <p className="text-xs text-neutral-700">
-                Vérifie/active FreshRSS dans{" "}
-                <a href="/admin/settings" className="underline">
-                  /admin/settings
-                </a>{" "}
-                si tu veux aussi ces catégories-là — tes catégories et flux personnalisés restent
-                gérables normalement ci-dessous en attendant.
-              </p>
+              injoignable (voir le commentaire sur "Impression IA" ci-dessus).
+              Un seul encadré (feedsError) plutôt que deux messages quasi
+              identiques l'un sous l'autre (error + feedsError renvoient la
+              même cause côté serveur). */}
+          {feedsError && (
+            <div className="mb-4 border border-journal/40 bg-journal/5 p-3 text-sm text-journal">
+              {feedsError}
             </div>
           )}
-          {feedsError && <p className="mb-3 text-sm text-journal">{feedsError}</p>}
           {feedsLoading && (
             <p className="mb-3 italic text-sepia">Chargement des flux depuis FreshRSS...</p>
           )}
