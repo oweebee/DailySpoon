@@ -377,6 +377,14 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         // (CustomFeed), pas les abonnements FreshRSS réels (couverts par
         // redditFeedHealth.ts, qui bascule l'abonnement lui-même en base).
         let redditParsed: Awaited<ReturnType<typeof parser.parseURL>> | null = null;
+        // Diagnostic temporaire : quel(s) miroir(s) ont été tentés et
+        // pourquoi chacun a échoué, pour un flux reddit.com précis — vu en
+        // usage réel que certains flux basculent avec succès sur un miroir
+        // pendant que d'autres (même liste de miroirs, même passage)
+        // retombent en échec 404 via morss, sans qu'on sache si c'est le
+        // miroir qui a mal répondu pour CETTE URL précise ou autre chose. À
+        // retirer une fois la cause confirmée.
+        const redditAttempts: string[] = [];
         try {
           if (isRedditHostname(new URL(feed.url).hostname)) {
             for (const instance of await getRedlibInstances()) {
@@ -384,14 +392,24 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
               if (!mirrorUrl) continue;
               try {
                 redditParsed = await parser.parseURL(mirrorUrl);
+                redditAttempts.push(`${mirrorUrl} -> OK`);
                 break;
-              } catch {
-                // miroir suivant
+              } catch (mirrorErr) {
+                redditAttempts.push(`${mirrorUrl} -> ${(mirrorErr as Error)?.message || "échec"}`);
               }
             }
           }
         } catch {
           // URL invalide : ignore, retombe sur le repli morss ci-dessous
+        }
+
+        if (!redditParsed && redditAttempts.length > 0) {
+          await writeLog(
+            "warn",
+            "custom-feeds",
+            `Diagnostic Reddit — "${feed.title}" (${feed.url}) : tous les miroirs Redlib ont échoué`,
+            redditAttempts.join("\n")
+          );
         }
 
         if (redditParsed) {
