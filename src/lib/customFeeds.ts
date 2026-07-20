@@ -430,7 +430,31 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
           ogTitle = meta.title;
           if (!excerpt && meta.description) excerpt = meta.description;
         }
+        const usedFavicon = !imageUrl && !!canonicalUrl;
         if (!imageUrl && canonicalUrl) imageUrl = faviconFallback(canonicalUrl);
+
+        // Diagnostic temporaire : le flux Korben (entre autres) se retrouve
+        // sans image malgré extractFirstImageSrc + repli og:image, sans accès
+        // réseau direct à korben.info pour inspecter le flux réel depuis ce
+        // sandbox — on logue donc ICI, en prod, un échantillon exploitable
+        // (premier item concerné par flux et par passage) pour voir
+        // EXACTEMENT ce que contient rawContent/enclosure et pourquoi rien
+        // n'a matché. Volontairement limité à un seul item par flux par
+        // passage (newForThisFeed === 0, avant incrément) pour ne pas noyer
+        // /admin/logs. À retirer une fois la vraie cause identifiée.
+        if (usedFavicon && newForThisFeed === 0) {
+          await writeLog(
+            "info",
+            "custom-feeds",
+            `Diagnostic image manquante — "${feed.title}" / "${rawTitle || guid}"`,
+            JSON.stringify({
+              enclosure: item.enclosure ?? null,
+              rawContentSample: (rawContent || "").slice(0, 1500),
+              contentSnippetSample: (item.contentSnippet || "").slice(0, 300),
+              itemKeys: Object.keys(item)
+            })
+          );
+        }
 
         items.push({
           freshrssItemId,
