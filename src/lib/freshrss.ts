@@ -30,8 +30,24 @@ export type FreshRssFeed = {
 };
 
 async function config() {
-  const { freshrssBaseUrl: baseUrl, freshrssUsername: username, freshrssApiPassword: password } =
-    await getSettings();
+  const {
+    freshrssBaseUrl: baseUrl,
+    freshrssUsername: username,
+    freshrssApiPassword: password,
+    freshrssEnabled
+  } = await getSettings();
+  // Interrupteur explicite en premier : même si l'URL/identifiant/mot de
+  // passe sont renseignés (en base ou via les variables d'environnement
+  // FRESHRSS_*), on refuse tant que la case "Activer FreshRSS" n'est pas
+  // cochée dans /admin/settings — voir settings.ts. Évite qu'un simple
+  // redeploy (qui conserve les variables d'environnement Coolify) ne
+  // réactive tout seul une intégration explicitement coupée.
+  if (!freshrssEnabled) {
+    throw new Error(
+      "FreshRSS n'est pas activé : coche « Activer FreshRSS » dans /admin/settings pour utiliser cette " +
+        "intégration."
+    );
+  }
   if (!baseUrl || !username || !password) {
     throw new Error(
       "FreshRSS n'est pas configuré : renseigne l'URL, l'identifiant et le mot de passe API dans " +
@@ -257,7 +273,33 @@ export async function fetchOgMeta(
       // de thème/logo/icônes qui viennent de /wp-content/themes/ ou
       // /plugins/ — heuristique fiable pour cibler la vraie image
       // d'illustration sans risquer d'attraper un logo ou une icône de nav.
-      const wpMatch = html.match(/<img[^>]+src=["']([^"']*\/wp-content\/uploads\/[^"']+)["']/i);
+      //
+      // Recherche restreinte à ce qui suit <article ...> quand la balise
+      // existe : sur certains thèmes (ex. fdesouche.com), plusieurs images
+      // d'en-tête (logo, bandeau don, pub) sont AUSSI servies depuis
+      // /wp-content/uploads/ et apparaissent AVANT l'image de l'article dans
+      // le HTML — sans ce recadrage, "le premier match" attrapait presque
+      // toujours l'une d'elles au lieu de l'illustration réelle. Repli sur le
+      // HTML entier si aucune balise <article> n'est trouvée.
+      const articleStart = html.search(/<article[\s>]/i);
+      const scope = articleStart >= 0 ? html.slice(articleStart) : html;
+
+      // Beaucoup de thèmes WordPress chargent les images en lazy-load : le
+      // vrai src est alors dans data-src/data-lazy-src/data-srcset (avec un
+      // src= vide ou un minuscule placeholder), donc une recherche limitée à
+      // l'attribut src= ratait l'image la plupart du temps — cas concret
+      // observé sur fdesouche.com. On essaie d'abord un <img> portant la
+      // classe "wp-post-image" (image mise en avant WordPress standard),
+      // puis n'importe quel <img> /wp-content/uploads/, en testant chaque
+      // attribut susceptible de contenir la vraie URL.
+      const attrPattern = "(?:src|data-src|data-lazy-src|srcset|data-srcset)";
+      const wpMatch =
+        scope.match(
+          new RegExp(`<img[^>]+class=["'][^"']*wp-post-image[^"']*["'][^>]+${attrPattern}=["']([^"'\\s]+)`, "i")
+        ) ||
+        scope.match(
+          new RegExp(`<img[^>]+${attrPattern}=["']([^"'\\s]*\\/wp-content\\/uploads\\/[^"'\\s]+)`, "i")
+        );
       if (wpMatch) {
         imageUrl = wpMatch[1].trim();
         if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;

@@ -6,6 +6,15 @@ export type AppSettings = {
   freshrssBaseUrl: string;
   freshrssUsername: string;
   freshrssApiPassword: string;
+  /** false par défaut (interrupteur décoché) : tant que ce n'est pas
+   *  explicitement activé dans /admin/settings, FreshRSS est traité comme
+   *  non configuré, même si l'URL/identifiant/mot de passe sont renseignés
+   *  (en base OU via les variables d'environnement FRESHRSS_*) — voir
+   *  config() dans freshrss.ts. Contrairement aux autres champs FreshRSS
+   *  ci-dessus, PAS de repli sur une variable d'environnement pour ce champ :
+   *  on veut que ce soit un choix explicite fait depuis l'admin, jamais
+   *  réactivé tout seul par un redeploy. */
+  freshrssEnabled: boolean;
   anthropicApiKey: string;
   anthropicModel: string;
   /** "anthropic" (défaut) ou "gemini" — fournisseur IA utilisé pour la
@@ -59,6 +68,7 @@ export async function getSettings(): Promise<AppSettings> {
     freshrssBaseUrl: row?.freshrssBaseUrl || process.env.FRESHRSS_BASE_URL || "",
     freshrssUsername: row?.freshrssUsername || process.env.FRESHRSS_USERNAME || "",
     freshrssApiPassword: row?.freshrssApiPassword || process.env.FRESHRSS_API_PASSWORD || "",
+    freshrssEnabled: row?.freshrssEnabled === true,
     anthropicApiKey: row?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || "",
     anthropicModel: row?.anthropicModel || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
     aiProvider: row?.aiProvider || process.env.AI_PROVIDER || "anthropic",
@@ -95,6 +105,7 @@ export type SettingsInput = Partial<{
   freshrssBaseUrl: string | null;
   freshrssUsername: string | null;
   freshrssApiPassword: string | null;
+  freshrssEnabled: boolean | null;
   anthropicApiKey: string | null;
   anthropicModel: string | null;
   aiProvider: string | null;
@@ -144,6 +155,13 @@ export async function updateSettings(input: SettingsInput): Promise<void> {
     // false est une valeur volontaire (désactivé) — à bien distinguer de
     // null/undefined (pas réglé -> retombe sur activé par défaut).
     data.editionScheduleEnabled = input.editionScheduleEnabled === false ? false : input.editionScheduleEnabled;
+  }
+  if ("freshrssEnabled" in input) {
+    // Ici c'est l'inverse d'editionScheduleEnabled : "true" est la valeur
+    // volontaire explicite (activé), tout le reste (false/null/undefined)
+    // reste/redevient "non activé" — voir le commentaire sur AppSettings
+    // ci-dessus.
+    data.freshrssEnabled = input.freshrssEnabled === true;
   }
   if ("customFeedsIntervalMinutes" in input) {
     const v = input.customFeedsIntervalMinutes;

@@ -321,6 +321,16 @@ model Settings {
   freshrssBaseUrl     String?
   freshrssUsername    String?
   freshrssApiPassword String?
+  // Interrupteur EXPLICITE, décoché par défaut (null/false) : tant qu'il
+  // n'est pas coché dans /admin/settings, FreshRSS est traité comme "pas
+  // configuré" même si l'URL/identifiant/mot de passe sont renseignés (en
+  // base OU via les variables d'environnement FRESHRSS_*) — voir
+  // config() dans src/lib/freshrss.ts. Volontairement dans l'autre sens que
+  // les autres booléens de ce modèle (qui sont activés par défaut) : ici on
+  // veut qu'un simple redémarrage/redeploy avec des FRESHRSS_* déjà réglés
+  // ne réactive jamais tout seul l'intégration si l'utilisateur l'a
+  // explicitement coupée depuis l'admin.
+  freshrssEnabled     Boolean?
   anthropicApiKey     String?
   anthropicModel      String?
   // Fournisseur IA utilisé pour la réécriture/résumé/priorisation des

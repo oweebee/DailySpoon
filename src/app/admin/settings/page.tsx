@@ -7,6 +7,7 @@ type SettingsForm = {
   freshrssBaseUrl: string;
   freshrssUsername: string;
   freshrssApiPassword: string;
+  freshrssEnabled: boolean;
   anthropicApiKey: string;
   anthropicModel: string;
   aiProvider: string;
@@ -26,6 +27,7 @@ const EMPTY: SettingsForm = {
   freshrssBaseUrl: "",
   freshrssUsername: "",
   freshrssApiPassword: "",
+  freshrssEnabled: false,
   anthropicApiKey: "",
   anthropicModel: "",
   aiProvider: "anthropic",
@@ -113,6 +115,7 @@ export default function AdminSettingsPage() {
           freshrssBaseUrl: s.freshrssBaseUrl || "",
           freshrssUsername: s.freshrssUsername || "",
           freshrssApiPassword: s.freshrssApiPassword || "",
+          freshrssEnabled: s.freshrssEnabled === true,
           anthropicApiKey: s.anthropicApiKey || "",
           anthropicModel: s.anthropicModel || "",
           aiProvider: s.aiProvider || "anthropic",
@@ -190,6 +193,7 @@ export default function AdminSettingsPage() {
       freshrssBaseUrl: form.freshrssBaseUrl,
       freshrssUsername: form.freshrssUsername,
       freshrssApiPassword: form.freshrssApiPassword,
+      freshrssEnabled: form.freshrssEnabled,
       anthropicApiKey: form.anthropicApiKey,
       anthropicModel: form.anthropicModel,
       aiProvider: form.aiProvider,
@@ -274,6 +278,22 @@ export default function AdminSettingsPage() {
         <div className="space-y-8">
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">
             <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">FreshRSS</legend>
+            <label className="flex items-center gap-2 text-xs italic text-sepia">
+              <input
+                type="checkbox"
+                checked={form.freshrssEnabled}
+                onChange={(e) => set("freshrssEnabled", e.target.checked)}
+                className="accent-journal"
+              />
+              Activer FreshRSS
+            </label>
+            {!form.freshrssEnabled && (
+              <p className="text-xs italic text-sepia">
+                Désactivé — même avec une URL/identifiant/mot de passe renseignés ici ou via les
+                variables d’environnement, FreshRSS est ignoré partout (Catégories &amp; flux, En
+                direct, impression IA). Seuls les flux personnalisés continuent d’être aspirés.
+              </p>
+            )}
             <Field
               label="URL de base"
               value={form.freshrssBaseUrl}
