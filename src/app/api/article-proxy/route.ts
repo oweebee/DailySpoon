@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
-import { REDLIB_INSTANCES, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
+import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
 import { isAlreadyMorssUrl } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 
@@ -779,11 +779,13 @@ function decodeRedditHtml(encoded: string): string {
   return dom.window.document.getElementById("tmp")?.textContent || "";
 }
 
-// REDLIB_INSTANCES (essai best-effort avant l'API JSON officielle) vit
-// désormais dans src/lib/reddit.ts, partagé avec redditFeedHealth.ts.
+// getRedlibInstances() (essai best-effort avant l'API JSON officielle) vit
+// désormais dans src/lib/reddit.ts, partagé avec redditFeedHealth.ts et
+// customFeeds.ts — lit un cache auto-rafraîchi par le worker (voir
+// refreshRedlibInstanceCache), jamais de sondage réseau ici.
 async function fetchViaRedlib(parsed: URL): Promise<{ html: string; baseUrl: string } | null> {
   const path = parsed.pathname + parsed.search;
-  for (const instance of REDLIB_INSTANCES) {
+  for (const instance of await getRedlibInstances()) {
     const target = `${instance}${path}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
@@ -1052,7 +1054,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 1) Miroir Redlib (best-effort, voir REDLIB_INSTANCES) : rendu HTML
+    // 1) Miroir Redlib (best-effort, voir getRedlibInstances()) : rendu HTML
     //    complet côté serveur, passé par le même pipeline Readability que
     //    n'importe quel autre site.
     const redlib = await fetchViaRedlib(parsed);

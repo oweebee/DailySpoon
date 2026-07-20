@@ -5,7 +5,7 @@ import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl 
 import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
 import { ingestRawItems } from "./generateEdition";
 import { writeLog } from "./logger";
-import { REDLIB_INSTANCES, isRedditHostname, rehostRedditUrl } from "./reddit";
+import { getRedlibInstances, isRedditHostname, rehostRedditUrl } from "./reddit";
 
 /**
  * Flux RSS/Atom ajoutés à la main depuis /admin/categories (CustomFeed),
@@ -379,7 +379,7 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         let redditParsed: Awaited<ReturnType<typeof parser.parseURL>> | null = null;
         try {
           if (isRedditHostname(new URL(feed.url).hostname)) {
-            for (const instance of REDLIB_INSTANCES) {
+            for (const instance of await getRedlibInstances()) {
               const mirrorUrl = rehostRedditUrl(feed.url, instance);
               if (!mirrorUrl) continue;
               try {

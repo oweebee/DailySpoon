@@ -396,6 +396,26 @@ model Settings {
   updatedAt           DateTime @default(now()) @updatedAt
 }
 
+// Cache auto-rafraîchi de la liste des miroirs Redlib (front-end alternatif
+// à Reddit) actuellement fonctionnels — voir src/lib/reddit.ts. Évite de
+// garder une liste figée en dur, qui se périme dès qu'une instance publique
+// tombe ou se met à bloquer les requêtes serveur (Anubis/Cloudflare) : le
+// worker (voir worker/index.ts, même créneau que healthCheckRedditFeeds,
+// toutes les 6h) interroge la liste officielle
+// (github.com/redlib-org/redlib-instances) et sonde chaque candidat, puis
+// écrit ici le résultat. Les appelants (customFeeds.ts, article-proxy,
+// redditFeedHealth.ts) ne font QUE lire ce cache (rapide, aucun appel
+// réseau) — jamais de rafraîchissement synchrone dans le chemin d'une
+// requête utilisateur. Singleton (id = "singleton"), comme Settings, mais
+// délibérément SÉPARÉ de Settings : ceci est un cache d'état runtime, pas un
+// réglage utilisateur — donc exclu de l'export/import de configuration
+// (/api/admin/backup), pour la même raison que CustomFeed.lastFetchedAt.
+model RedlibInstanceCache {
+  id            String   @id @default("singleton")
+  instancesJson String // JSON.stringify(string[]) — miroirs sains connus, dans l'ordre de préférence
+  checkedAt     DateTime @default(now())
+}
+
 // Journal technique persistant (visible dans /admin/logs) : trace les
 // événements utiles pour diagnostiquer "est-ce que tout se passe bien" sans
 // devoir aller fouiller les logs bruts du conteneur Coolify — récupération

@@ -1,5 +1,5 @@
 import { getSettings } from "./settings";
-import { REDLIB_INSTANCES, isRedditHostname, rehostRedditUrl } from "./reddit";
+import { getRedlibInstances, isRedditHostname, rehostRedditUrl } from "./reddit";
 
 /**
  * Contournement automatique du blocage Reddit AU NIVEAU DU FLUX RSS
@@ -92,7 +92,7 @@ async function probeFeedUrl(url: string): Promise<boolean> {
 }
 
 async function findWorkingMirror(originalUrl: string): Promise<string | null> {
-  for (const instance of REDLIB_INSTANCES) {
+  for (const instance of await getRedlibInstances()) {
     const candidate = rehostRedditUrl(originalUrl, instance);
     if (!candidate) continue;
     if (await probeFeedUrl(candidate)) return candidate;

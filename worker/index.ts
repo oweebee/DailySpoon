@@ -3,6 +3,7 @@ import { generateDailyEdition, todayDateOnly } from "../src/lib/generateEdition"
 import { getSettings } from "../src/lib/settings";
 import { prisma } from "../src/lib/prisma";
 import { healthCheckRedditFeeds } from "../src/lib/redditFeedHealth";
+import { refreshRedlibInstanceCache } from "../src/lib/reddit";
 import { syncCustomFeeds } from "../src/lib/customFeeds";
 import { writeLog, pruneOldLogs } from "../src/lib/logger";
 
@@ -93,6 +94,17 @@ async function maybeRunRedditHealthCheck(tz: string) {
   const slot = `${dateKey}-${Math.floor(hour / REDDIT_HEALTH_INTERVAL_HOURS)}`;
   if (minute !== 5 || hour % REDDIT_HEALTH_INTERVAL_HOURS !== 0 || lastRedditHealthSlot === slot) return;
   lastRedditHealthSlot = slot;
+  // Rafraîchit d'abord le cache des miroirs Redlib (voir reddit.ts) — sonde
+  // la liste officielle + repli statique et écrit le résultat en base, AVANT
+  // healthCheckRedditFeeds ci-dessous, qui va justement s'en servir pour
+  // basculer les abonnements FreshRSS en échec. Best-effort, ne bloque jamais
+  // le health-check des abonnements si ça échoue.
+  try {
+    const { healthy } = await refreshRedlibInstanceCache();
+    await writeLog("info", "worker", `Cache miroirs Redlib rafraîchi (${healthy.length} sain(s)) : ${healthy.join(", ")}`);
+  } catch (err) {
+    await writeLog("error", "worker", "Rafraîchissement du cache Redlib échoué", (err as Error)?.message);
+  }
   try {
     const result = await healthCheckRedditFeeds();
     if (result.switched.length > 0) {
