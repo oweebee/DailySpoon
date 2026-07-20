@@ -834,13 +834,33 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
   // flux Korben). Sans ce test, ces articles n'étaient JAMAIS réparés : leur
   // imageUrl n'est ni vide ni un favicon, donc ils n'entraient dans aucune
   // des deux familles ci-dessus.
+  // Cas relatif à part : PAS de requête réseau nécessaire, l'URL correcte se
+  // déduit directement en résolvant le chemin déjà stocké contre l'URL de
+  // l'article (déjà en base) — voir isRelativeImageUrl. Traité séparément du
+  // repli og:image ci-dessous car ce dernier refait une requête DIRECTE vers
+  // le site source (pas via morss) : sur un site qui bloque les requêtes
+  // serveur-à-serveur (ce que morss existe justement pour contourner — cas
+  // vu en usage réel sur korben.info), ce repli échouait silencieusement en
+  // boucle, à chaque génération, sans jamais réparer l'image. Non plafonné
+  // (pas de coût réseau) et appliqué à TOUS les candidats concernés, pas
+  // seulement les MAX_OG_BACKFILL_PER_RUN premiers.
+  const relativeFixById = new Map<string, string>();
+  for (const a of candidates) {
+    if (a.sourceUrl && a.imageUrl && isRelativeImageUrl(a.imageUrl)) {
+      try {
+        relativeFixById.set(a.id, new URL(a.imageUrl, a.sourceUrl).toString());
+      } catch {
+        // sourceUrl lui-même invalide : laissé tel quel, retentera via le
+        // repli og:image ci-dessous au prochain passage.
+      }
+    }
+  }
+
   const needingImage = candidates.filter(
     (a) =>
       a.sourceUrl &&
-      (!a.imageUrl ||
-        isFaviconFallback(a.imageUrl) ||
-        isPlaceholderImage(a.imageUrl) ||
-        isRelativeImageUrl(a.imageUrl))
+      !relativeFixById.has(a.id) &&
+      (!a.imageUrl || isFaviconFallback(a.imageUrl) || isPlaceholderImage(a.imageUrl))
   );
   const toBackfill = needingImage.slice(0, MAX_OG_BACKFILL_PER_RUN);
   const ogResults = await Promise.all(toBackfill.map((a) => fetchOgImage(a.sourceUrl!)));
@@ -863,7 +883,7 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
       (!!article.sourceExcerpt && stripLeadingChrome(article.sourceExcerpt) !== article.sourceExcerpt) ||
       (!!article.summary && stripLeadingChrome(article.summary) !== article.summary);
 
-    let backfilledImage: string | null = ogImageById.get(article.id) ?? null;
+    let backfilledImage: string | null = relativeFixById.get(article.id) ?? ogImageById.get(article.id) ?? null;
 
     // Toujours rien — favicon du site en dernier recours (pas de requête
     // réseau de notre côté, juste une URL construite), seulement si
