@@ -249,6 +249,25 @@ function decodeHtmlEntities(text: string): string {
  * fetchOgImage ci-dessous reste un simple alias pour les appelants qui n'ont
  * besoin que de l'image.
  */
+
+/** Résout une URL d'image trouvée dans le HTML d'une page (og:image,
+ *  twitter:image, <img> WordPress...) contre l'URL de CETTE page — gère les
+ *  trois formes rencontrées en pratique : URL déjà absolue (inchangée),
+ *  protocole-relative ("//cdn.example.com/x.jpg"), et chemin relatif
+ *  ("/wp-content/uploads/x.jpg" ou "x.jpg"). Sans cette résolution, un
+ *  og:image en chemin relatif (vu en usage réel sur Korben, servi via morss)
+ *  était stocké tel quel — une "image" qui pointe en fait vers le domaine de
+ *  DailySpoon, jamais chargeable (voir aussi extractFirstImageSrc dans
+ *  text.ts, même classe de bug côté flux RSS). */
+function resolveImageUrl(raw: string, pageUrl: string): string | null {
+  if (!raw) return null;
+  try {
+    return new URL(raw, pageUrl).toString();
+  } catch {
+    return raw;
+  }
+}
+
 export async function fetchOgMeta(
   url: string
 ): Promise<{ imageUrl: string | null; title: string | null; description: string | null }> {
@@ -308,8 +327,7 @@ export async function fetchOgMeta(
 
     let imageUrl: string | null = null;
     if (imageMatch) {
-      imageUrl = imageMatch[1].trim();
-      if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
+      imageUrl = resolveImageUrl(imageMatch[1].trim(), url);
     } else {
       // Filet de secours WordPress : pas de balise og:image, mais l'image de
       // l'article est presque toujours servie depuis /wp-content/uploads/
@@ -345,8 +363,7 @@ export async function fetchOgMeta(
           new RegExp(`<img[^>]+${attrPattern}=["']([^"'\\s]*\\/wp-content\\/uploads\\/[^"'\\s]+)`, "i")
         );
       if (wpMatch) {
-        imageUrl = wpMatch[1].trim();
-        if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
+        imageUrl = resolveImageUrl(wpMatch[1].trim(), url);
       }
     }
 
