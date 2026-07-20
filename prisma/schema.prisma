@@ -57,6 +57,19 @@ model MedalFeed {
   createdAt  DateTime @default(now())
 }
 
+// Flux (FreshRSS ou perso, même id synthétique que MedalFeed/ExcludedFeed)
+// coché "notification" dans /admin/categories — sert de liste de flux à
+// pousser via le bot Telegram (voir Settings.telegramBotToken/ChatId). La
+// logique d'ENVOI proprement dite (déclenchement, mise en forme du message)
+// n'est pas encore branchée à ce stade — cette table ne fait qu'enregistrer
+// la préférence par flux, en attendant.
+model NotifyFeed {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique
+  label      String
+  createdAt  DateTime @default(now())
+}
+
 // Catégorie personnalisée créée directement depuis /admin/categories (par
 // opposition aux catégories FreshRSS, gérées côté FreshRSS) — un seul niveau
 // (catégorie -> flux), pas de sous-catégories imbriquées, pour rester
@@ -373,6 +386,13 @@ model Settings {
   // (1 mois), 0 = illimité (jamais purgé). Complètement indépendant de
   // retentionDays (qui ne concerne que les articles/éditions).
   logRetentionMinutes Int?
+  // Bot Telegram utilisé pour pousser les flux cochés "notification" (voir
+  // NotifyFeed ci-dessus) — jeton du bot (@BotFather) et id du chat/canal de
+  // destination. L'envoi effectif (déclenchement, mise en forme du message)
+  // n'est pas encore branché : ces deux champs ne servent pour l'instant qu'à
+  // tester la connexion depuis /admin/settings.
+  telegramBotToken    String?
+  telegramChatId      String?
   updatedAt           DateTime @default(now()) @updatedAt
 }
 

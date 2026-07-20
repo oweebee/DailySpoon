@@ -163,6 +163,7 @@ export async function DELETE(req: NextRequest) {
       prisma.aiPrintCategory.deleteMany({ where: { freshrssId: catFreshrssId } }),
       prisma.excludedFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
       prisma.medalFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
+      prisma.notifyFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
       prisma.article.updateMany({ where: { feedId: { in: feedFreshrssIds } }, data: { included: false } }),
       // Filet complémentaire : masque AUSSI les articles de flux perso qui
       // portent encore le LIBELLÉ de cette catégorie mais dont le flux n'est

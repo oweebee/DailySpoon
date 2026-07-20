@@ -21,6 +21,8 @@ type SettingsForm = {
   writingStyle: string;
   morssBaseUrl: string;
   customFeedsIntervalMinutes: string;
+  telegramBotToken: string;
+  telegramChatId: string;
 };
 
 const EMPTY: SettingsForm = {
@@ -40,7 +42,9 @@ const EMPTY: SettingsForm = {
   editionScheduleEnabled: true,
   writingStyle: "normal",
   morssBaseUrl: "",
-  customFeedsIntervalMinutes: "60"
+  customFeedsIntervalMinutes: "60",
+  telegramBotToken: "",
+  telegramChatId: ""
 };
 
 // Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
@@ -102,6 +106,7 @@ export default function AdminSettingsPage() {
     freshrss?: TestResult;
     anthropic?: TestResult;
     gemini?: TestResult;
+    telegram?: TestResult;
   } | null>(null);
   const [geminiModels, setGeminiModels] = useState<GeminiModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -132,7 +137,9 @@ export default function AdminSettingsPage() {
           customFeedsIntervalMinutes:
             s.customFeedsIntervalMinutes !== undefined && s.customFeedsIntervalMinutes !== null
               ? s.customFeedsIntervalMinutes.toString()
-              : "60"
+              : "60",
+          telegramBotToken: s.telegramBotToken || "",
+          telegramChatId: s.telegramChatId || ""
         });
         // Clé déjà enregistrée : charge tout de suite la liste des moteurs
         // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
@@ -208,7 +215,9 @@ export default function AdminSettingsPage() {
       writingStyle: form.writingStyle,
       morssBaseUrl: form.morssBaseUrl,
       customFeedsIntervalMinutes:
-        form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes)
+        form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes),
+      telegramBotToken: form.telegramBotToken,
+      telegramChatId: form.telegramChatId
     };
   }
 
@@ -316,6 +325,34 @@ export default function AdminSettingsPage() {
               <p className={`text-sm italic ${testResults.freshrss.ok ? "text-sepia" : "text-journal"}`}>
                 {testResults.freshrss.ok ? "✓ " : "✗ "}
                 {testResults.freshrss.message}
+              </p>
+            )}
+          </fieldset>
+
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Telegram</legend>
+            <p className="text-xs italic text-sepia">
+              Sert à pousser les flux cochés « notification » dans /admin/categories — l’envoi
+              effectif n’est pas encore branché, ces réglages permettent seulement de préparer/
+              tester la connexion au bot pour l’instant.
+            </p>
+            <Field
+              label="Jeton du bot"
+              value={form.telegramBotToken}
+              onChange={(v) => set("telegramBotToken", v)}
+              type="password"
+              placeholder="1234567890:AAA..."
+            />
+            <Field
+              label="Id du chat / canal"
+              value={form.telegramChatId}
+              onChange={(v) => set("telegramChatId", v)}
+              placeholder="-1001234567890"
+            />
+            {testResults?.telegram && (
+              <p className={`text-sm italic ${testResults.telegram.ok ? "text-sepia" : "text-journal"}`}>
+                {testResults.telegram.ok ? "✓ " : "✗ "}
+                {testResults.telegram.message}
               </p>
             )}
           </fieldset>

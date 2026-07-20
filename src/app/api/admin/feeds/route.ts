@@ -14,13 +14,15 @@ export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
-    const [freshrssFeeds, excluded, medaled] = await Promise.all([
+    const [freshrssFeeds, excluded, medaled, notified] = await Promise.all([
       listAllFeeds(),
       prisma.excludedFeed.findMany(),
-      prisma.medalFeed.findMany()
+      prisma.medalFeed.findMany(),
+      prisma.notifyFeed.findMany()
     ]);
     const excludedIds = new Set(excluded.map((e) => e.freshrssId));
     const medaledIds = new Set(medaled.map((m) => m.freshrssId));
+    const notifiedIds = new Set(notified.map((n) => n.freshrssId));
 
     // Même compte réel (total / visibles en direct) que pour les flux
     // personnalisés — affiché à côté de chaque flux FreshRSS pour une lecture
@@ -51,6 +53,7 @@ export async function GET(req: NextRequest) {
         categoryLabels: f.categoryLabels,
         included: !excludedIds.has(f.freshrssId),
         medal: medaledIds.has(f.freshrssId),
+        notify: notifiedIds.has(f.freshrssId),
         articleCount: counts.total,
         visibleArticleCount: counts.included
       };
@@ -74,15 +77,19 @@ export async function POST(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { freshrssId, title, included, medal } = body as {
+  const { freshrssId, title, included, medal, notify } = body as {
     freshrssId?: string;
     title?: string;
     included?: boolean;
     medal?: boolean;
+    notify?: boolean;
   };
 
-  if (!freshrssId || (typeof included !== "boolean" && typeof medal !== "boolean")) {
-    return NextResponse.json({ error: "freshrssId et (included ou medal) sont requis" }, { status: 400 });
+  if (
+    !freshrssId ||
+    (typeof included !== "boolean" && typeof medal !== "boolean" && typeof notify !== "boolean")
+  ) {
+    return NextResponse.json({ error: "freshrssId et (included, medal ou notify) sont requis" }, { status: 400 });
   }
 
   if (typeof included === "boolean") {
@@ -131,6 +138,21 @@ export async function POST(req: NextRequest) {
       where: { OR: [{ feedId: freshrssId }, ...(title ? [{ feedId: null, feedTitle: title }] : [])] },
       data: { medal }
     });
+  }
+
+  // Contrairement à "medal", ne touche à rien sur Article — sert uniquement
+  // de liste de flux à pousser via Telegram plus tard (envoi pas encore
+  // branché, voir NotifyFeed dans schema.prisma).
+  if (typeof notify === "boolean") {
+    if (notify) {
+      await prisma.notifyFeed.upsert({
+        where: { freshrssId },
+        update: { label: title || freshrssId },
+        create: { freshrssId, label: title || freshrssId }
+      });
+    } else {
+      await prisma.notifyFeed.deleteMany({ where: { freshrssId } });
+    }
   }
 
   return NextResponse.json({ ok: true });

@@ -40,6 +40,7 @@ type Feed = {
   categoryLabels: string[];
   included: boolean;
   medal: boolean;
+  notify: boolean;
   articleCount: number;
   visibleArticleCount: number;
 };
@@ -50,6 +51,7 @@ type CustomFeedItem = {
   title: string;
   included: boolean;
   medal: boolean;
+  notify: boolean;
   lastFetchedAt: string | null;
   lastFetchError: string | null;
   articleCount: number;
@@ -413,6 +415,15 @@ export default function AdminCategoriesPage() {
     });
   }
 
+  async function toggleCustomFeedNotify(feed: CustomFeedItem) {
+    setCustomFeeds((prev) => prev.map((f) => (f.id === feed.id ? { ...f, notify: !f.notify } : f)));
+    await fetch("/api/admin/feeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: `custom-feed:${feed.id}`, title: feed.title, notify: !feed.notify })
+    });
+  }
+
   async function loadCategories() {
     setLoading(true);
     setError(null);
@@ -608,6 +619,17 @@ export default function AdminCategoriesPage() {
     });
   }
 
+  async function toggleNotify(feed: Feed) {
+    setFeeds((prev) =>
+      prev.map((f) => (f.freshrssId === feed.freshrssId ? { ...f, notify: !f.notify } : f))
+    );
+    await fetch("/api/admin/feeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: feed.freshrssId, title: feed.title, notify: !feed.notify })
+    });
+  }
+
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.href = "/admin/login";
@@ -728,6 +750,15 @@ export default function AdminCategoriesPage() {
               className="accent-journal"
             />
             médaille
+          </label>
+          <label className="flex items-center gap-2 text-xs italic text-sepia">
+            <input
+              type="checkbox"
+              checked={feed.notify}
+              onChange={() => toggleCustomFeedNotify(feed)}
+              className="accent-journal"
+            />
+            notification
           </label>
           <label className="flex items-center gap-2 text-xs italic text-sepia">
             <input
@@ -1389,6 +1420,15 @@ export default function AdminCategoriesPage() {
                               <label className="flex items-center gap-2 text-xs italic text-sepia">
                                 <input
                                   type="checkbox"
+                                  checked={feed.notify}
+                                  onChange={() => toggleNotify(feed)}
+                                  className="accent-journal"
+                                />
+                                notification
+                              </label>
+                              <label className="flex items-center gap-2 text-xs italic text-sepia">
+                                <input
+                                  type="checkbox"
                                   checked={feed.included}
                                   onChange={() => toggleFeed(feed)}
                                   className="accent-ink"
@@ -1446,6 +1486,15 @@ export default function AdminCategoriesPage() {
                               className="accent-journal"
                             />
                             médaille
+                          </label>
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={feed.notify}
+                              onChange={() => toggleNotify(feed)}
+                              className="accent-journal"
+                            />
+                            notification
                           </label>
                           <label className="flex items-center gap-2 text-xs italic text-sepia">
                             <input

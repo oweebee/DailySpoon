@@ -53,6 +53,12 @@ export type AppSettings = {
   /** Rétention (minutes) du journal technique (/admin/logs, LogEntry). 0 =
    *  illimité. Défaut : 1440 (1 jour) — voir src/lib/logger.ts. */
   logRetentionMinutes: number;
+  /** Jeton du bot Telegram (@BotFather) et id du chat/canal de destination,
+   *  utilisés pour tester la connexion depuis /admin/settings — l'envoi
+   *  effectif des notifications (flux cochés, voir NotifyFeed) n'est pas
+   *  encore branché à ce stade. */
+  telegramBotToken: string;
+  telegramChatId: string;
 };
 
 /**
@@ -83,7 +89,9 @@ export async function getSettings(): Promise<AppSettings> {
     writingStyle: row?.writingStyle || process.env.WRITING_STYLE || "normal",
     morssBaseUrl: (row?.morssBaseUrl || process.env.MORSS_BASE_URL || "").replace(/\/+$/, ""),
     customFeedsIntervalMinutes: row?.customFeedsIntervalMinutes ?? 60,
-    logRetentionMinutes: row?.logRetentionMinutes ?? 1440
+    logRetentionMinutes: row?.logRetentionMinutes ?? 1440,
+    telegramBotToken: row?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "",
+    telegramChatId: row?.telegramChatId || process.env.TELEGRAM_CHAT_ID || ""
   };
 }
 
@@ -98,7 +106,9 @@ const STRING_FIELDS = [
   "geminiModel",
   "editionTz",
   "writingStyle",
-  "morssBaseUrl"
+  "morssBaseUrl",
+  "telegramBotToken",
+  "telegramChatId"
 ] as const;
 
 export type SettingsInput = Partial<{
@@ -120,6 +130,8 @@ export type SettingsInput = Partial<{
   morssBaseUrl: string | null;
   customFeedsIntervalMinutes: number | null;
   logRetentionMinutes: number | null;
+  telegramBotToken: string | null;
+  telegramChatId: string | null;
 }>;
 
 /**

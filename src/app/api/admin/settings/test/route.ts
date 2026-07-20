@@ -21,10 +21,12 @@ export async function POST(req: NextRequest) {
     anthropicApiKey,
     anthropicModel,
     geminiApiKey,
-    geminiModel
+    geminiModel,
+    telegramBotToken,
+    telegramChatId
   } = body ?? {};
 
-  const results: { freshrss?: TestResult; anthropic?: TestResult; gemini?: TestResult } = {};
+  const results: { freshrss?: TestResult; anthropic?: TestResult; gemini?: TestResult; telegram?: TestResult } = {};
 
   if (freshrssBaseUrl && freshrssUsername && freshrssApiPassword) {
     results.freshrss = await testFreshRss(freshrssBaseUrl, freshrssUsername, freshrssApiPassword);
@@ -40,8 +42,46 @@ export async function POST(req: NextRequest) {
   if (geminiApiKey) {
     results.gemini = await testGemini(geminiApiKey, geminiModel);
   }
+  if (telegramBotToken) {
+    results.telegram = await testTelegram(telegramBotToken, telegramChatId);
+  }
 
   return NextResponse.json(results);
+}
+
+// getMe (valide le jeton) puis getChat (valide l'accès au chat/canal) —
+// aucun des deux n'envoie de message ni n'a d'effet de bord, contrairement à
+// sendMessage : cohérent avec les tests Anthropic/Gemini ci-dessous, qui
+// évitent aussi toute action réelle juste pour vérifier une clé.
+async function testTelegram(botToken: string, chatId?: string): Promise<TestResult> {
+  try {
+    const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+    const meData: any = await meRes.json().catch(() => ({}));
+    if (!meRes.ok || !meData.ok) {
+      return { ok: false, message: "Jeton de bot Telegram invalide." };
+    }
+    const username = meData.result?.username ? `@${meData.result.username}` : "bot";
+
+    if (!chatId) {
+      return { ok: true, message: `${username} valide — renseigne aussi l'id du chat pour vérifier l'accès.` };
+    }
+
+    const chatRes = await fetch(
+      `https://api.telegram.org/bot${botToken}/getChat?chat_id=${encodeURIComponent(chatId)}`
+    );
+    const chatData: any = await chatRes.json().catch(() => ({}));
+    if (!chatRes.ok || !chatData.ok) {
+      return {
+        ok: false,
+        message: `${username} valide, mais accès au chat impossible (${chatData.description || "vérifie l'id et que le bot y a été ajouté"}).`
+      };
+    }
+
+    const chatLabel = chatData.result?.title || chatData.result?.username || chatData.result?.first_name || chatId;
+    return { ok: true, message: `${username} valide, accès confirmé au chat "${chatLabel}".` };
+  } catch (err: any) {
+    return { ok: false, message: `Impossible de joindre l'API Telegram : ${err?.message || "erreur réseau"}` };
+  }
 }
 
 async function testFreshRss(baseUrlRaw: string, username: string, password: string): Promise<TestResult> {
