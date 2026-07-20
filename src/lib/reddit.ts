@@ -39,11 +39,24 @@ export function isRedditVideoHostname(hostname: string): boolean {
  *  https://redlib.catsarch.com + /r/france/.rss depuis
  *  https://www.reddit.com/r/france/.rss. Partagé entre redditFeedHealth.ts
  *  (bascule des abonnements FreshRSS) et customFeeds.ts (repli à la volée
- *  pour un flux personnalisé pointant directement vers reddit.com). */
+ *  pour un flux personnalisé pointant directement vers reddit.com).
+ *
+ *  Force le suffixe ".rss" : les deux appelants sont des contextes de FLUX,
+ *  or on colle très souvent l'URL de la PAGE Reddit telle qu'affichée dans
+ *  le navigateur (".../r/SurvivalGaming/top/?t=week", sans ".rss"). Sans
+ *  cette normalisation, le miroir répond du HTML tout à fait valide, que
+ *  rss-parser rejette ensuite par "Feed not recognized as RSS 1 or 2" —
+ *  erreur trompeuse qui ressemble à un miroir cassé alors que c'est juste
+ *  la mauvaise URL qui a été demandée. La query (?t=week, tri temporel) est
+ *  conservée telle quelle : Redlib la comprend aussi bien sur le flux. */
 export function rehostRedditUrl(originalUrl: string, newBase: string): string | null {
   try {
     const parsed = new URL(originalUrl);
-    return `${newBase}${parsed.pathname}${parsed.search}`;
+    let path = parsed.pathname;
+    if (!/\.rss$/i.test(path)) {
+      path = path.endsWith("/") ? `${path}.rss` : `${path}/.rss`;
+    }
+    return `${newBase}${path}${parsed.search}`;
   } catch {
     return null;
   }
