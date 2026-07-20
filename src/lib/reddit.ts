@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { JSDOM } from "jsdom";
 
 /**
  * Miroirs publics Redlib (front-end alternatif à Reddit, scrape sa propre
@@ -62,6 +63,112 @@ export function rehostRedditUrl(originalUrl: string, newBase: string): string | 
   }
 }
 
+// --- Lecture d'un listing Redlib en HTML -------------------------------
+
+/** Item minimal compatible avec ce que customFeeds.ts consomme d'un item
+ *  rss-parser (guid/link/title/enclosure/isoDate) — produit en parsant la
+ *  page HTML d'un miroir Redlib, car la quasi-totalité des instances
+ *  publiques ont désormais le RSS DÉSACTIVÉ (fonction opt-in côté Redlib,
+ *  REDLIB_ENABLE_RSS) : demander ".rss" y renvoie du HTML/vide, d'où les
+ *  échecs "Feed not recognized as RSS 1 or 2" vus dans /admin/logs. La page
+ *  HTML, elle, est toujours servie — on la transforme donc nous-mêmes en
+ *  items de flux. */
+export type RedditListingItem = {
+  title: string;
+  link: string;
+  guid: string;
+  isoDate?: string;
+  enclosure?: { url: string; type?: string };
+};
+
+/** Parse la page HTML d'un listing Redlib (ex. /r/IndieGaming/top?t=week) en
+ *  items de flux. Sélecteurs alignés sur les gabarits Redlib/Libreddit
+ *  (".post", "h2.post_title a", ".post_thumbnail", "span.created[title]") +
+ *  repli générique par balayage des liens "/comments/" si la structure
+ *  change — dans ce cas on perd miniatures/dates mais pas les articles. */
+export function parseRedlibListingHtml(html: string, instanceBase: string): RedditListingItem[] {
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+  const seen = new Set<string>();
+  const items: RedditListingItem[] = [];
+
+  const toCanonical = (href: string): { link: string; id: string } | null => {
+    const match = /\/r\/[^/]+\/comments\/([a-z0-9]+)/i.exec(href);
+    if (!match) return null;
+    const path = href.startsWith("http") ? new URL(href).pathname : href.split("?")[0];
+    return { link: `https://www.reddit.com${path}`, id: match[1] };
+  };
+
+  for (const post of Array.from(doc.querySelectorAll(".post"))) {
+    // Posts épinglés (règles du sub, mégathreads...) : pas des nouveautés.
+    if (post.classList.contains("stickied")) continue;
+
+    const anchor =
+      post.querySelector<HTMLAnchorElement>("h2.post_title a[href*='/comments/']") ||
+      post.querySelector<HTMLAnchorElement>(".post_title a[href*='/comments/']");
+    const href = anchor?.getAttribute("href");
+    if (!anchor || !href) continue;
+    const canonical = toCanonical(href);
+    const title = (anchor.textContent || "").trim();
+    if (!canonical || !title || seen.has(canonical.id)) continue;
+    seen.add(canonical.id);
+
+    // Miniature : Redlib met l'aperçu dans un <image href> SVG (listing
+    // compact) ou un <img src> (post média affiché en grand dans le listing).
+    const thumbEl =
+      post.querySelector(".post_thumbnail image") ||
+      post.querySelector(".post_thumbnail img") ||
+      post.querySelector(".post_media_image img") ||
+      post.querySelector("img.post_media_image");
+    const thumbRaw = thumbEl?.getAttribute("href") || thumbEl?.getAttribute("src") || null;
+    let enclosure: RedditListingItem["enclosure"];
+    if (thumbRaw) {
+      try {
+        enclosure = { url: new URL(thumbRaw, instanceBase).toString(), type: "image/jpeg" };
+      } catch {
+        // miniature illisible : tant pis, favicon en repli comme d'habitude
+      }
+    }
+
+    // Date : Redlib met la date absolue dans l'attribut title du span
+    // "created" (le texte visible n'est que du relatif type "13h ago").
+    const createdTitle = post.querySelector("span.created")?.getAttribute("title");
+    const createdDate = createdTitle ? new Date(createdTitle) : null;
+
+    items.push({
+      title,
+      link: canonical.link,
+      guid: canonical.link,
+      isoDate: createdDate && !isNaN(createdDate.getTime()) ? createdDate.toISOString() : undefined,
+      enclosure
+    });
+  }
+
+  // Repli générique si la structure ".post" n'a rien donné (gabarit modifié
+  // par une instance) : tous les liens vers une page de commentaires, en
+  // écartant les libellés de type "123 comments" — on garde, par post, le
+  // texte le plus long (le titre bat toujours le compteur de commentaires).
+  if (items.length === 0) {
+    const byId = new Map<string, { title: string; link: string }>();
+    for (const a of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href*='/comments/']"))) {
+      const href = a.getAttribute("href");
+      if (!href) continue;
+      const canonical = toCanonical(href);
+      const text = (a.textContent || "").trim();
+      if (!canonical || !text || /^\s*[\d.,km]*\s*comment/i.test(text)) continue;
+      const existing = byId.get(canonical.id);
+      if (!existing || text.length > existing.title.length) {
+        byId.set(canonical.id, { title: text, link: canonical.link });
+      }
+    }
+    for (const { title, link } of byId.values()) {
+      items.push({ title, link, guid: link });
+    }
+  }
+
+  return items;
+}
+
 // --- Cache auto-rafraîchi (RedlibInstanceCache) -----------------------
 
 const USER_AGENT =
@@ -86,13 +193,14 @@ const MAX_CANDIDATES_PROBED = 8;
 const PROBE_TIMEOUT_MS = 6000;
 
 // Dernier repli si TOUT échoue (cache vide ET liste officielle injoignable
-// ET aucun candidat sondé ne répond) — vérifiée manuellement le 20/07/2026
-// comme servant du vrai contenu Reddit (les 4 précédentes de cette liste —
-// catsarch/privacyredirect/orangenet/privadency — ne répondaient plus DU
-// TOUT à ce moment-là). Absente de la liste officielle
-// (github.com/redlib-org/redlib-instances), ajoutée manuellement en tête des
-// candidats sondés à chaque rafraîchissement.
-const STATIC_FALLBACK = ["https://safereddit.com"];
+// ET aucun candidat sondé ne répond) — vérifiées manuellement le 20/07/2026
+// comme servant du vrai contenu Reddit en HTML (les 4 anciennes de cette
+// liste — catsarch/privacyredirect/orangenet/privadency — ne répondaient
+// plus DU TOUT à ce moment-là). safereddit est absente de la liste
+// officielle (github.com/redlib-org/redlib-instances), nadeko y figure —
+// toutes deux ajoutées manuellement en tête des candidats sondés à chaque
+// rafraîchissement.
+const STATIC_FALLBACK = ["https://safereddit.com", "https://redlib.nadeko.net"];
 
 async function fetchOfficialInstanceCandidates(): Promise<string[]> {
   try {
@@ -119,25 +227,30 @@ async function fetchOfficialInstanceCandidates(): Promise<string[]> {
   }
 }
 
-// Sonde légère : vérifie qu'une instance sert bien du vrai flux RSS/Atom
-// (pas une page de challenge anti-bot) sur un chemin toujours public
-// (r/popular), sans dépendre d'un abonnement particulier.
+// Sonde légère : vérifie qu'une instance sert bien un vrai listing Reddit en
+// HTML (pas une page de challenge anti-bot ni une coquille vide) sur un
+// chemin toujours public (r/popular), sans dépendre d'un abonnement
+// particulier. On sonde le HTML et PAS le ".rss" : le RSS est une option
+// désactivée sur la quasi-totalité des instances publiques (voir
+// parseRedlibListingHtml plus haut) — c'est le listing HTML qu'on consomme
+// réellement, autant sonder exactement ce dont on a besoin.
 async function probeRedlibInstance(baseUrl: string): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    const res = await fetch(`${baseUrl}/r/popular/.rss`, {
+    const res = await fetch(`${baseUrl}/r/popular`, {
       signal: controller.signal,
       headers: {
         "User-Agent": USER_AGENT,
-        Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8"
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       }
     });
     if (!res.ok) return false;
     const text = await res.text();
-    if (text.length < 200) return false;
+    if (text.length < 500) return false;
     if (/anubis|checking your browser|cf-browser-verification/i.test(text)) return false;
-    return /<rss|<feed[\s>]/i.test(text.slice(0, 2000));
+    // Un vrai listing contient des liens vers des pages de commentaires.
+    return text.includes("/comments/");
   } catch {
     return false;
   } finally {

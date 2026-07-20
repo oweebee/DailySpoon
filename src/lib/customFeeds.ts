@@ -5,7 +5,7 @@ import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl 
 import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
 import { ingestRawItems } from "./generateEdition";
 import { writeLog } from "./logger";
-import { getRedlibInstances, isRedditHostname, rehostRedditUrl } from "./reddit";
+import { getRedlibInstances, isRedditHostname, rehostRedditUrl, parseRedlibListingHtml } from "./reddit";
 
 /**
  * Flux RSS/Atom ajoutés à la main depuis /admin/categories (CustomFeed),
@@ -236,44 +236,51 @@ function sanitizeRssXml(xml: string): string {
   return xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, "&amp;");
 }
 
-// Repli utilisé UNIQUEMENT pour les miroirs Redlib (voir plus bas) : refait
-// la requête nous-mêmes (parser.parseURL ne donne pas accès au texte brut en
-// cas d'échec de parsing) pour pouvoir réessayer avec le XML assaini avant
-// d'abandonner ce miroir. Si même l'assainissement échoue, logue un extrait
-// du XML brut autour de la ligne fautive (donnée par le message d'erreur du
-// parseur XML) pour diagnostiquer sans devoir deviner une nouvelle fois.
+// Récupération d'un flux Reddit via un miroir Redlib. Trois étages, dans
+// l'ordre du moins au plus coûteux, car le support varie par instance :
+//   1. le ".rss" du miroir, tel quel (rare : RSS est une option Redlib
+//      désactivée sur la quasi-totalité des instances publiques) ;
+//   2. le même XML assaini (les "&" isolés non échappés cassent le parseur) ;
+//   3. la page HTML du LISTING elle-même (toujours servie, elle), parsée en
+//      items par parseRedlibListingHtml — c'est le chemin qui marche
+//      réellement sur les instances actuelles, les deux premiers ne coûtent
+//      qu'un seul aller-retour raté avant d'y arriver.
 async function fetchRedditMirrorFeed(url: string): Promise<Awaited<ReturnType<typeof parser.parseURL>>> {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8"
-    },
-    signal: AbortSignal.timeout(45000)
-  });
+  const headers = {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    Accept: "text/html,application/rss+xml,application/atom+xml,application/xml;q=0.9,*/*;q=0.8"
+  };
+
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(45000) });
   if (!res.ok) throw new Error(`Status code ${res.status}`);
   const raw = await res.text();
 
   try {
     return await parser.parseString(raw);
-  } catch (parseErr) {
+  } catch {
     try {
       return await parser.parseString(sanitizeRssXml(raw));
-    } catch (secondErr) {
-      const lineMatch = /Line:\s*(\d+)/i.exec((secondErr as Error)?.message || "");
-      let snippet = "";
-      if (lineMatch) {
-        const lineNum = parseInt(lineMatch[1], 10);
-        const lines = raw.split("\n");
-        snippet = lines.slice(Math.max(0, lineNum - 4), lineNum + 3).join("\n");
+    } catch {
+      // Pas du RSS : on bascule sur la page HTML du listing. L'URL ".rss"
+      // redonne parfois déjà ce HTML directement (instance sans RSS), sinon
+      // on refait la requête sans le suffixe.
+      const instanceBase = new URL(url).origin;
+      let html = raw;
+      if (!/\/comments\//.test(html)) {
+        const htmlUrl = url.replace(/\/?\.rss(\?|$)/i, (_m, q) => (q === "?" ? "?" : "")).replace(/\?$/, "");
+        const htmlRes = await fetch(htmlUrl, { headers, signal: AbortSignal.timeout(45000) });
+        if (!htmlRes.ok) throw new Error(`Status code ${htmlRes.status} (listing HTML)`);
+        html = await htmlRes.text();
       }
-      await writeLog(
-        "warn",
-        "custom-feeds",
-        `XML Reddit/Redlib mal formé même après assainissement — ${url}`,
-        `${(secondErr as Error)?.message || "erreur inconnue"}\n\n${snippet}`
-      );
-      throw secondErr;
+
+      const listingItems = parseRedlibListingHtml(html, instanceBase);
+      if (listingItems.length === 0) {
+        throw new Error("Ni RSS ni listing HTML exploitable sur ce miroir");
+      }
+      // Même forme que la sortie de rss-parser pour les champs que le
+      // pipeline aval consomme (guid/link/title/enclosure/isoDate).
+      return { items: listingItems } as unknown as Awaited<ReturnType<typeof parser.parseURL>>;
     }
   }
 }
