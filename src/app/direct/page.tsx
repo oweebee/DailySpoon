@@ -54,6 +54,18 @@ export default async function DirectPage() {
       <div className="hidden md:block">
         <Masthead date={editionDate} />
       </div>
+      {/* Preuve visuelle que le filtre ci-dessus tourne bien avec la
+          version de code actuellement déployée (sert aussi à diagnostiquer
+          un doute sur un déploiement pas encore pris en compte) — pas
+          seulement un message de debug : utile en soi pour comprendre
+          pourquoi certaines rubriques semblent vides après désactivation. */}
+      {!freshrssEnabled && (
+        <p className="mb-4 text-center text-xs italic text-sepia">
+          FreshRSS désactivé — seuls les articles de flux personnalisés (et les articles sans
+          origine identifiée) sont affichés ici. {articles.length} article
+          {articles.length > 1 ? "s" : ""} affiché{articles.length > 1 ? "s" : ""}.
+        </p>
+      )}
       <DirectView initialArticles={articles} categoryOrder={categoryOrder} date={editionDate} />
     </main>
   );
