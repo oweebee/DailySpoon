@@ -38,3 +38,17 @@ export function isRedditImageHostname(hostname: string): boolean {
 export function isRedditVideoHostname(hostname: string): boolean {
   return /(^|\.)v\.redd\.it$/i.test(hostname);
 }
+
+/** Reconstruit la même URL (chemin + query) sur un autre hôte — ex.
+ *  https://redlib.catsarch.com + /r/france/.rss depuis
+ *  https://www.reddit.com/r/france/.rss. Partagé entre redditFeedHealth.ts
+ *  (bascule des abonnements FreshRSS) et customFeeds.ts (repli à la volée
+ *  pour un flux personnalisé pointant directement vers reddit.com). */
+export function rehostRedditUrl(originalUrl: string, newBase: string): string | null {
+  try {
+    const parsed = new URL(originalUrl);
+    return `${newBase}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}

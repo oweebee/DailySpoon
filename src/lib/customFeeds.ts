@@ -5,6 +5,7 @@ import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl 
 import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
 import { ingestRawItems } from "./generateEdition";
 import { writeLog } from "./logger";
+import { REDLIB_INSTANCES, isRedditHostname, rehostRedditUrl } from "./reddit";
 
 /**
  * Flux RSS/Atom ajoutés à la main depuis /admin/categories (CustomFeed),
@@ -364,18 +365,52 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
       try {
         parsed = await parser.parseURL(feed.url);
       } catch (directErr) {
-        // Repli via morss (réglé dans /admin/settings), même mécanisme que
-        // pour le fetch d'un article individuel (voir article-proxy) — utile
-        // seulement pour un flux dont l'URL n'est PAS déjà elle-même une URL
-        // morss : si le flux passe déjà PAR morss, l'échec vient de morss
-        // lui-même (voir le timeout déjà augmenté ci-dessus pour ce cas), et
-        // le relayer une seconde fois via morss ne ferait que refaire
-        // exactement la même requête qui vient d'échouer — inutile, et ça
-        // fait juste attendre un second timeout pour rien. Ne fait rien non
-        // plus si ce réglage est vide.
-        if (!settings.morssBaseUrl || isAlreadyMorssUrl(feed.url, settings.morssBaseUrl)) throw directErr;
-        const strippedUrl = feed.url.replace(/^https?:\/\//, "");
-        parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
+        // Repli Reddit AVANT le repli morss générique : reddit.com bloque
+        // désormais quasi toutes les requêtes serveur-à-serveur (RSS compris)
+        // par un 403 réseau/IP, indépendant du User-Agent (voir reddit.ts) —
+        // morss se ferait bloquer exactement pareil en requêtant reddit.com
+        // depuis son propre serveur, inutile de perdre un aller-retour
+        // dessus. Mêmes miroirs Redlib que pour la lecture d'un article
+        // individuel (article-proxy) et le health-check périodique des
+        // abonnements FreshRSS (redditFeedHealth.ts) — mais CE chemin-ci ne
+        // couvre que les flux personnalisés ajoutés depuis /admin/categories
+        // (CustomFeed), pas les abonnements FreshRSS réels (couverts par
+        // redditFeedHealth.ts, qui bascule l'abonnement lui-même en base).
+        let redditParsed: Awaited<ReturnType<typeof parser.parseURL>> | null = null;
+        try {
+          if (isRedditHostname(new URL(feed.url).hostname)) {
+            for (const instance of REDLIB_INSTANCES) {
+              const mirrorUrl = rehostRedditUrl(feed.url, instance);
+              if (!mirrorUrl) continue;
+              try {
+                redditParsed = await parser.parseURL(mirrorUrl);
+                break;
+              } catch {
+                // miroir suivant
+              }
+            }
+          }
+        } catch {
+          // URL invalide : ignore, retombe sur le repli morss ci-dessous
+        }
+
+        if (redditParsed) {
+          parsed = redditParsed;
+        } else if (!settings.morssBaseUrl || isAlreadyMorssUrl(feed.url, settings.morssBaseUrl)) {
+          // Repli via morss (réglé dans /admin/settings), même mécanisme que
+          // pour le fetch d'un article individuel (voir article-proxy) —
+          // utile seulement pour un flux dont l'URL n'est PAS déjà elle-même
+          // une URL morss : si le flux passe déjà PAR morss, l'échec vient de
+          // morss lui-même (voir le timeout déjà augmenté ci-dessus pour ce
+          // cas), et le relayer une seconde fois via morss ne ferait que
+          // refaire exactement la même requête qui vient d'échouer — inutile,
+          // et ça fait juste attendre un second timeout pour rien. Ne fait
+          // rien non plus si ce réglage est vide.
+          throw directErr;
+        } else {
+          const strippedUrl = feed.url.replace(/^https?:\/\//, "");
+          parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
+        }
       }
 
       // Dédoublonnage en UNE requête pour tout le flux (au lieu d'un

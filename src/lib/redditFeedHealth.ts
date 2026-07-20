@@ -1,5 +1,5 @@
 import { getSettings } from "./settings";
-import { REDLIB_INSTANCES, isRedditHostname } from "./reddit";
+import { REDLIB_INSTANCES, isRedditHostname, rehostRedditUrl } from "./reddit";
 
 /**
  * Contournement automatique du blocage Reddit AU NIVEAU DU FLUX RSS
@@ -91,21 +91,9 @@ async function probeFeedUrl(url: string): Promise<boolean> {
   }
 }
 
-/** Reconstruit la même URL de flux (chemin + query) sur un autre hôte — ex.
- *  https://redlib.catsarch.com + /r/france/.rss depuis
- *  https://www.reddit.com/r/france/.rss */
-function rehostUrl(originalUrl: string, newBase: string): string | null {
-  try {
-    const parsed = new URL(originalUrl);
-    return `${newBase}${parsed.pathname}${parsed.search}`;
-  } catch {
-    return null;
-  }
-}
-
 async function findWorkingMirror(originalUrl: string): Promise<string | null> {
   for (const instance of REDLIB_INSTANCES) {
-    const candidate = rehostUrl(originalUrl, instance);
+    const candidate = rehostRedditUrl(originalUrl, instance);
     if (!candidate) continue;
     if (await probeFeedUrl(candidate)) return candidate;
   }
