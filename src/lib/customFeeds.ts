@@ -418,12 +418,12 @@ export function safeTitle(value: unknown): string {
   return String(value).trim();
 }
 
-function bestImageUrl(item: Parser.Item, rawContent: string): string | null {
+function bestImageUrl(item: Parser.Item, rawContent: string, baseUrl?: string | null): string | null {
   const enclosureUrl = item.enclosure?.url;
   if (enclosureUrl && (!item.enclosure?.type || item.enclosure.type.startsWith("image/"))) {
     return enclosureUrl;
   }
-  return extractFirstImageSrc(rawContent);
+  return extractFirstImageSrc(rawContent, baseUrl);
 }
 
 /**
@@ -562,7 +562,22 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
           // rien non plus si ce réglage est vide.
           throw directErr;
         } else {
-          const strippedUrl = feed.url.replace(/^https?:\/\//, "");
+          let morssTarget = feed.url;
+          try {
+            const parsedUrl = new URL(feed.url);
+            if (isRedditHostname(parsedUrl.hostname)) {
+              // Reddit ne sert PLUS le format .rss (404 systématique, même
+              // pour morss) : on donne à morss la page HTML du listing, qu'il
+              // sait convertir en flux lui-même — c'est exactement le chemin
+              // qui fonctionne déjà en prod pour le flux SurvivalGaming
+              // (URL collée sans .rss, 10 articles récupérés via morss).
+              parsedUrl.pathname = parsedUrl.pathname.replace(/\/?\.rss$/i, "/");
+              morssTarget = parsedUrl.toString();
+            }
+          } catch {
+            // URL illisible : morss recevra l'URL telle quelle
+          }
+          const strippedUrl = morssTarget.replace(/^https?:\/\//, "");
           parsed = await parser.parseURL(`${settings.morssBaseUrl}/${strippedUrl}`);
         }
       }
@@ -596,7 +611,12 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         if (excerpt) excerpt = stripLeadingChrome(excerpt);
 
         const canonicalUrl = item.link || "";
-        let imageUrl = bestImageUrl(item, rawContent);
+        // Base pour résoudre une éventuelle image en chemin relatif (voir
+        // extractFirstImageSrc) : l'URL canonique de l'ARTICLE si le flux la
+        // fournit, jamais l'URL du flux lui-même (qui peut être une URL
+        // morss — résoudre contre ça donnerait un domaine morss.*, pas le
+        // vrai site source).
+        let imageUrl = bestImageUrl(item, rawContent, canonicalUrl || null);
         const rawTitle = safeTitle(item.title);
 
         // Un seul aller-retour réseau (fetchOgMeta) couvre TROIS besoins à la

@@ -111,6 +111,18 @@ export function isPlaceholderImage(url: string): boolean {
   return /(?:^|\/)(?:blank|spacer|placeholder|transparent|lazy|loader|grey|gray)[-_.]?\d*\.(?:gif|png|svg)/.test(u);
 }
 
+/** URL d'image enregistrée en chemin RELATIF ("/img/photo.jpg") au lieu
+ *  d'une URL absolue — cassée en pratique (résolue contre le domaine de
+ *  DailySpoon, pas celui du site source), vu en usage réel sur le flux
+ *  Korben avant la résolution ajoutée dans extractFirstImageSrc (baseUrl).
+ *  Sert au rattrapage rétroactif des articles enregistrés avant ce
+ *  correctif (voir generateEdition.ts, cleanExistingHtmlArtifacts). */
+export function isRelativeImageUrl(url: string): boolean {
+  const u = url.trim();
+  if (!u) return false;
+  return !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(u);
+}
+
 /**
  * Best-effort first <img> found in raw (possibly entity-encoded) HTML —
  * decodes entities first for the same reason stripHtml does.
@@ -122,8 +134,17 @@ export function isPlaceholderImage(url: string): boolean {
  * exploitable, ou null si le contenu n'a que des placeholders — auquel cas
  * l'appelant peut enchaîner sur son repli og:image, ce qui n'arrivait jamais
  * avant (voir isPlaceholderImage ci-dessus).
+ *
+ * `baseUrl` (typiquement l'URL canonique de l'article) sert à résoudre une
+ * URL relative ("/img/photo.jpg") en URL absolue — vu en usage réel sur
+ * Korben (via morss) : certaines images d'articles sont servies en chemin
+ * relatif au lieu d'une URL complète. Sans résolution, l'"image" pointait
+ * vers le domaine de DailySpoon lui-même au lieu de korben.info — une
+ * miniature manquante en pratique, sans que ça ressemble à une erreur (l'URL
+ * avait l'air valide). Sans baseUrl (repli), l'URL brute est retournée telle
+ * quelle comme avant.
  */
-export function extractFirstImageSrc(html: string | null | undefined): string | null {
+export function extractFirstImageSrc(html: string | null | undefined, baseUrl?: string | null): string | null {
   if (!html) return null;
   const decoded = html
     .replace(/&lt;/gi, "<")
@@ -145,7 +166,17 @@ export function extractFirstImageSrc(html: string | null | undefined): string | 
       if (!m) continue;
       const raw = m[1].trim();
       const url = (attr.includes("srcset") ? raw.split(",")[0].trim().split(/\s+/)[0] : raw).trim();
-      if (url && !isPlaceholderImage(url)) return url;
+      if (!url || isPlaceholderImage(url)) continue;
+      if (/^(?:https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+      if (baseUrl) {
+        try {
+          return new URL(url, baseUrl).toString();
+        } catch {
+          // baseUrl lui-même invalide : repli sur l'URL brute plutôt que de
+          // perdre l'image, comme avant l'ajout de baseUrl.
+        }
+      }
+      return url;
     }
   }
   return null;

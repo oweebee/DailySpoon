@@ -9,7 +9,7 @@ import {
   type ProcessedArticle,
   type TokenUsage
 } from "./ai";
-import { stripHtml, looksLikeHtml, stripLeadingChrome, isPlaceholderImage } from "./text";
+import { stripHtml, looksLikeHtml, stripLeadingChrome, isPlaceholderImage, isRelativeImageUrl } from "./text";
 import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
@@ -796,6 +796,13 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
         // fréquent est une data: URI, repérable en SQL — les autres formes
         // (blank.gif...) sont rattrapées via la fenêtre fetchedAt ci-dessous.
         { imageUrl: { startsWith: "data:" } },
+        // URL relative ("/img/photo.jpg") au lieu d'absolue — cassée en
+        // pratique (voir isRelativeImageUrl) : cas fréquent avant l'ajout de
+        // la résolution baseUrl dans extractFirstImageSrc (Korben,
+        // Numerama...). Le test précis (n'importe quel schéma, pas
+        // seulement "/") est fait en JS juste en dessous ; "startsWith '/'"
+        // couvre déjà l'immense majorité des cas en SQL.
+        { imageUrl: { startsWith: "/" } },
         { sourceTitle: { contains: "<" } },
         { sourceExcerpt: { contains: "<" } },
         { headline: { contains: "<" } },
@@ -828,7 +835,12 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
   // imageUrl n'est ni vide ni un favicon, donc ils n'entraient dans aucune
   // des deux familles ci-dessus.
   const needingImage = candidates.filter(
-    (a) => a.sourceUrl && (!a.imageUrl || isFaviconFallback(a.imageUrl) || isPlaceholderImage(a.imageUrl))
+    (a) =>
+      a.sourceUrl &&
+      (!a.imageUrl ||
+        isFaviconFallback(a.imageUrl) ||
+        isPlaceholderImage(a.imageUrl) ||
+        isRelativeImageUrl(a.imageUrl))
   );
   const toBackfill = needingImage.slice(0, MAX_OG_BACKFILL_PER_RUN);
   const ogResults = await Promise.all(toBackfill.map((a) => fetchOgImage(a.sourceUrl!)));

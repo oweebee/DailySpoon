@@ -195,7 +195,7 @@ export async function renameCategory(freshrssId: string, newLabel: string): Prom
  * regarde les deux champs séparément, certains flux ne mettent l'image que
  * dans l'un des deux.
  */
-function extractImageUrl(item: any): string | null {
+function extractImageUrl(item: any, baseUrl?: string | null): string | null {
   const enclosures: any[] = item.enclosure || [];
   const imageEnclosure = enclosures.find((e) => {
     if (typeof e?.type === "string" && e.type.startsWith("image/")) return true;
@@ -205,10 +205,10 @@ function extractImageUrl(item: any): string | null {
   });
   if (imageEnclosure?.href) return imageEnclosure.href;
 
-  const fromSummary = extractFirstImageSrc(item.summary?.content || null);
+  const fromSummary = extractFirstImageSrc(item.summary?.content || null, baseUrl);
   if (fromSummary) return fromSummary;
 
-  const fromContent = extractFirstImageSrc(item.content?.content || null);
+  const fromContent = extractFirstImageSrc(item.content?.content || null, baseUrl);
   if (fromContent) return fromContent;
 
   return null;
@@ -467,7 +467,7 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     // vrai texte.
     if (excerpt) excerpt = stripLeadingChrome(excerpt);
 
-    let imageUrl = extractImageUrl(item);
+    let imageUrl = extractImageUrl(item, canonicalUrl || null);
     // Un seul aller-retour réseau (fetchOgMeta) couvre image manquante ET/OU
     // extrait manquant — un flux "lien seul" (aucun content:encoded/summary
     // réel) tombait sinon systématiquement sur le texte générique "Aucun
