@@ -1,16 +1,30 @@
 import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
 import { DirectView } from "@/components/DirectView";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function DirectPage() {
+  const { freshrssEnabled } = await getSettings();
+
   // Même agrégation que la page d'accueil : on ne filtre pas sur l'édition
   // du jour, sinon toute catégorie sans nouveauté aujourd'hui apparaît vide
   // et tout ce qui a été aspiré hier disparaît dès minuit. On prend les
   // articles les plus récents toutes éditions confondues ; EditionView ne
   // plafonne plus par catégorie (l'encart "Afficher plus d'articles" sur
   // desktop défile en interne dans tout ce qui est chargé ici).
+  //
+  // FreshRSS désactivé (voir /admin/settings) : les articles FreshRSS déjà
+  // en base restent en base (pour la recherche, /api/articles/search, qui
+  // interroge la table sans ce filtre) mais n'apparaissent plus ici — sur
+  // demande explicite, pour ne pas mélanger du contenu "figé" (plus jamais
+  // rafraîchi tant que c'est désactivé) avec les flux perso toujours actifs.
+  // Un article FreshRSS a un feedId = item.origin.streamId (voir
+  // fetchNewItemsFromSelectedCategories) ; un article de flux perso a
+  // toujours un feedId préfixé "custom-feed:" (voir customFeedFreshrssId) —
+  // feedId null (rare, cas dégradé) reste affiché par prudence, plutôt que
+  // de risquer de cacher un article dont l'origine est ambiguë.
   const [latestEdition, articles, selectedCategories] = await Promise.all([
     // "generatedAt" en second critère : plusieurs éditions peuvent désormais
     // partager la même date (une par régénération), sinon l'ordre entre
@@ -18,7 +32,11 @@ export default async function DirectPage() {
     // correcte mais issue d'une édition qui n'est pas vraiment la dernière.
     prisma.edition.findFirst({ orderBy: [{ date: "desc" }, { generatedAt: "desc" }] }),
     prisma.article.findMany({
-      where: { processed: true, included: true },
+      where: {
+        processed: true,
+        included: true,
+        ...(freshrssEnabled ? {} : { OR: [{ feedId: null }, { feedId: { startsWith: "custom-feed:" } }] })
+      },
       orderBy: { publishedAt: "desc" },
       take: 1000
     }),
