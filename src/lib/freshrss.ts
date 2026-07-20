@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
-import { stripHtml, extractFirstImageSrc, stripLeadingChrome } from "./text";
+import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl } from "./text";
+import { writeLog } from "./logger";
 
 export type RawItem = {
   freshrssItemId: string;
@@ -268,32 +269,28 @@ function resolveImageUrl(raw: string, pageUrl: string): string | null {
   }
 }
 
-export async function fetchOgMeta(
-  url: string
-): Promise<{ imageUrl: string | null; title: string | null; description: string | null }> {
-  if (!url) return { imageUrl: null, title: null, description: null };
+const OG_META_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+/** Un seul essai de récupération de page (direct OU via une URL morss déjà
+ *  construite) — factorisé pour être appelé deux fois par
+ *  fetchPageHtmlWithMorssFallback ci-dessous sans dupliquer la lecture par
+ *  morceaux (streaming, borné à MAX_BYTES). */
+async function fetchHtmlOnce(url: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        signal: controller.signal,
-        // Certains sites (ex. jeuxvideo.com) renvoient un 403 dès qu'ils
-        // reconnaissent un User-Agent "bot" dans l'en-tête, même pour une
-        // simple requête d'aperçu de lien (og:image, publique dans le
-        // <head> de toute façon) — un User-Agent de navigateur classique,
-        // déjà utilisé ailleurs dans l'appli (article-proxy), passe sans
-        // problème.
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        }
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-    if (!res.ok) return { imageUrl: null, title: null, description: null };
+    const res = await fetch(url, {
+      signal: controller.signal,
+      // Certains sites (ex. jeuxvideo.com) renvoient un 403 dès qu'ils
+      // reconnaissent un User-Agent "bot" dans l'en-tête, même pour une
+      // simple requête d'aperçu de lien (og:image, publique dans le
+      // <head> de toute façon) — un User-Agent de navigateur classique,
+      // déjà utilisé ailleurs dans l'appli (article-proxy), passe sans
+      // problème.
+      headers: { "User-Agent": OG_META_USER_AGENT }
+    });
+    if (!res.ok) return null;
 
     // On ne s'arrête plus à la fin du <head> : certains sites (ex.
     // Geekzone/WordPress sans plugin SEO configuré sur tous les articles)
@@ -318,6 +315,50 @@ export async function fetchOgMeta(
     } else {
       html = await res.text();
     }
+    return html;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Repli via morss (voir /admin/settings) quand la requête DIRECTE vers la
+ *  page échoue — même raisonnement que partout ailleurs dans l'app
+ *  (customFeeds.ts, article-proxy) : un site qui bloque les requêtes
+ *  serveur-à-serveur (anti-bot, Cloudflare...) laisse quand même passer
+ *  morss. Sans ce repli, le rattrapage rétroactif d'image (voir
+ *  generateEdition.ts) échouait en boucle, à chaque génération, sur
+ *  n'importe quel site bloquant ce type de requête — vu en usage réel sur
+ *  korben.info. Ne retente pas si l'URL est déjà une URL morss (l'échec
+ *  viendrait alors de morss lui-même, pas la peine de le relayer deux fois).
+ */
+async function fetchPageHtmlWithMorssFallback(url: string): Promise<string | null> {
+  const direct = await fetchHtmlOnce(url);
+  if (direct) return direct;
+
+  const { morssBaseUrl } = await getSettings();
+  if (!morssBaseUrl || isAlreadyMorssUrl(url, morssBaseUrl)) return null;
+
+  const strippedUrl = url.replace(/^https?:\/\//, "");
+  const viaMorss = await fetchHtmlOnce(`${morssBaseUrl}/${strippedUrl}`);
+  if (!viaMorss) {
+    await writeLog(
+      "warn",
+      "custom-feeds",
+      `Repli image (og:image) : échec direct ET via morss — ${url}`
+    );
+  }
+  return viaMorss;
+}
+
+export async function fetchOgMeta(
+  url: string
+): Promise<{ imageUrl: string | null; title: string | null; description: string | null }> {
+  if (!url) return { imageUrl: null, title: null, description: null };
+  try {
+    const html = await fetchPageHtmlWithMorssFallback(url);
+    if (!html) return { imageUrl: null, title: null, description: null };
 
     const imageMatch =
       html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i) ||
