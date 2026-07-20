@@ -56,6 +56,7 @@ const WRITING_STYLE_OPTIONS = [
   { value: "normal", label: "Normal" },
   { value: "ackboo", label: "Ackboo" },
   { value: "darksasuke", label: "Dark Sasuke" },
+  { value: "jmlp", label: "JMLP" },
   { value: "random", label: "Aléatoire" }
 ];
 

@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
 const WRITING_STYLE_LABELS: Record<string, string> = {
   normal: "Normal",
   ackboo: "Ackboo",
-  darksasuke: "Dark Sasuke"
+  darksasuke: "Dark Sasuke",
+  jmlp: "JMLP"
 };
 const PROVIDER_LABELS: Record<string, string> = { anthropic: "Claude", gemini: "Gemini" };
 function formatCost(n: number): string {
