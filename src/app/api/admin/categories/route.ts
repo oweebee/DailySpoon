@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { listAllCategories } from "@/lib/freshrss";
+import { listAllCategories, renameCategory } from "@/lib/freshrss";
 import { recomputeIncludedForFreshrssCategory } from "@/lib/customFeeds";
 
 async function assertAuthed(req: NextRequest) {
@@ -58,6 +58,61 @@ export async function GET(req: NextRequest) {
       { error: err?.message || "Impossible de contacter FreshRSS" },
       { status: 502 }
     );
+  }
+}
+
+// Renomme une catégorie FreshRSS (nécessite FreshRSS activé, voir
+// Settings.freshrssEnabled — renameCategory/config() lèvent sinon). Côté
+// FreshRSS, l'id de la catégorie ENCODE son libellé : renommer change donc
+// aussi l'id (voir renameCategory dans freshrss.ts), ce qui rendrait TOUTES
+// les références locales à l'ancien id orphelines (SelectedCategory,
+// AiPrintCategory, DisabledCustomFeedsCategory, CustomFeed.freshrssCategoryId)
+// — exactement le bug déjà rencontré sur une catégorie personnalisée
+// supprimée. On répercute donc explicitement l'ancien -> nouvel id/libellé
+// partout, y compris sur les articles déjà ingérés (categoryLabel), pour
+// qu'aucune colonne fantôme n'apparaisse dans En direct/l'impression IA.
+export async function PATCH(req: NextRequest) {
+  if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const freshrssId = typeof body.freshrssId === "string" ? body.freshrssId : "";
+  const newLabel = typeof body.newLabel === "string" ? body.newLabel.trim() : "";
+  const oldLabel = typeof body.oldLabel === "string" ? body.oldLabel : "";
+
+  if (!freshrssId || !newLabel) {
+    return NextResponse.json({ error: "freshrssId et newLabel sont requis" }, { status: 400 });
+  }
+  if (newLabel === oldLabel) return NextResponse.json({ ok: true, newFreshrssId: freshrssId });
+
+  try {
+    const { newFreshrssId } = await renameCategory(freshrssId, newLabel);
+
+    await prisma.$transaction([
+      prisma.selectedCategory.updateMany({
+        where: { freshrssId },
+        data: { freshrssId: newFreshrssId, label: newLabel }
+      }),
+      prisma.aiPrintCategory.updateMany({
+        where: { freshrssId },
+        data: { freshrssId: newFreshrssId, label: newLabel }
+      }),
+      prisma.disabledCustomFeedsCategory.updateMany({
+        where: { freshrssCategoryId: freshrssId },
+        data: { freshrssCategoryId: newFreshrssId, label: newLabel }
+      }),
+      prisma.customFeed.updateMany({
+        where: { freshrssCategoryId: freshrssId },
+        data: { freshrssCategoryId: newFreshrssId, freshrssCategoryLabel: newLabel }
+      }),
+      ...(oldLabel
+        ? [prisma.article.updateMany({ where: { categoryLabel: oldLabel }, data: { categoryLabel: newLabel } })]
+        : [])
+    ]);
+
+    return NextResponse.json({ ok: true, newFreshrssId });
+  } catch (err: any) {
+    console.error("[admin/categories] rename failed:", err);
+    return NextResponse.json({ error: err?.message || "Échec du renommage" }, { status: 500 });
   }
 }
 

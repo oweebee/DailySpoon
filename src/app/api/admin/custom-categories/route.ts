@@ -85,6 +85,60 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Renomme une catégorie personnalisée. CustomCategory.label est la source
+// canonique (les flux qui y sont rattachés résolvent leur libellé en LIVE via
+// resolveFeedCategory -> feed.customCategory.label, pas un instantané, donc
+// rien à corriger de ce côté). En revanche SelectedCategory.label/
+// AiPrintCategory.label (copies utilisées pour l'affichage/tri de
+// /admin/categories) ET les articles DÉJÀ ingérés (Article.categoryLabel,
+// utilisé pour le regroupement par colonne dans En direct/l'impression IA)
+// sont bien des instantanés — sans les mettre à jour ici, un renommage
+// laisserait une colonne fantôme au nom de l'ancien libellé pour tout
+// article déjà récupéré, exactement le bug déjà rencontré sur une catégorie
+// supprimée (voir recomputeOrphanedCustomFeedArticles).
+export async function PATCH(req: NextRequest) {
+  if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const id = typeof body.id === "string" ? body.id : "";
+    const label = typeof body.label === "string" ? body.label.trim() : "";
+    if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+    if (!label) return NextResponse.json({ error: "label requis" }, { status: 400 });
+
+    const category = await prisma.customCategory.findUnique({ where: { id }, include: { feeds: true } });
+    if (!category) return NextResponse.json({ error: "Catégorie introuvable" }, { status: 404 });
+
+    if (category.label === label) return NextResponse.json({ ok: true });
+
+    const catFreshrssId = customCategoryFreshrssId(id);
+    const feedFreshrssIds = category.feeds.map((f) => customFeedFreshrssId(f.id));
+    const oldLabel = category.label;
+
+    await prisma.$transaction([
+      prisma.customCategory.update({ where: { id }, data: { label } }),
+      prisma.selectedCategory.updateMany({ where: { freshrssId: catFreshrssId }, data: { label } }),
+      prisma.aiPrintCategory.updateMany({ where: { freshrssId: catFreshrssId }, data: { label } }),
+      ...(feedFreshrssIds.length > 0
+        ? [
+            prisma.article.updateMany({
+              where: { feedId: { in: feedFreshrssIds }, categoryLabel: oldLabel },
+              data: { categoryLabel: label }
+            })
+          ]
+        : [])
+    ]);
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error("[admin/custom-categories] PATCH failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Échec du renommage de la catégorie" },
+      { status: 500 }
+    );
+  }
+}
+
 // Supprime une catégorie personnalisée : cascade sur ses flux (FK
 // ON DELETE CASCADE), nettoie les réglages qui référencent son id
 // synthétique (SelectedCategory/AiPrintCategory + ExcludedFeed/MedalFeed de

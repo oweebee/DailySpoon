@@ -284,16 +284,21 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     rawItems = await fetchNewItemsFromSelectedCategories();
     await writeLog("info", "freshrss", `${rawItems.length} nouvel(aux) item(s) récupéré(s) depuis FreshRSS.`);
   } catch (err) {
-    // Rethrow préservé tel quel (comportement inchangé, voir worker/index.ts
-    // qui logue déjà l'échec en console) — writeLog en plus pour que ce même
-    // échec soit aussi visible dans /admin/logs, pas seulement Coolify.
+    // Ne fait PLUS échouer toute la génération (voir /api/cron/generate, qui
+    // sinon renvoyait un échec générique sur CHAQUE "Télégraphier les news"
+    // dès que FreshRSS est désactivé — voir Settings.freshrssEnabled) : un
+    // échec FreshRSS (désactivé, auth, connexion...) est traité comme "0
+    // item récupéré de ce côté-là" et la génération continue normalement
+    // avec le reste (flux perso déjà synchronisés juste avant, articles déjà
+    // en base...). Reste bien loggué en erreur dans /admin/logs pour rester
+    // visible, même si ce n'est plus bloquant.
     await writeLog(
       "error",
       "freshrss",
-      "Échec de récupération FreshRSS (auth/connexion)",
+      "Échec de récupération FreshRSS (auth/connexion/désactivé)",
       (err as Error)?.message
     );
-    throw err;
+    rawItems = [];
   }
 
   // Contenu à afficher : les articles publiés AUJOURD'HUI (Paris) s'il y en

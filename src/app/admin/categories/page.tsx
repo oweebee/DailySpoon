@@ -176,6 +176,16 @@ export default function AdminCategoriesPage() {
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
 
+  // Renommage inline d'une catégorie (perso OU FreshRSS, si activé) — un
+  // seul champ actif à la fois par type, sur le même principe que
+  // editingFeedId ci-dessus.
+  const [freshrssEnabled, setFreshrssEnabled] = useState(false);
+  const [renameCustomId, setRenameCustomId] = useState<string | null>(null);
+  const [renameCustomValue, setRenameCustomValue] = useState("");
+  const [renameFreshrssId, setRenameFreshrssId] = useState<string | null>(null);
+  const [renameFreshrssValue, setRenameFreshrssValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
   // Pli/dépli par catégorie perso dans "Catégories personnalisées" — même
   // pattern que "Catégories & flux" (collapsed/toggleExpanded), déplié par
   // défaut.
@@ -445,7 +455,58 @@ export default function AdminCategoriesPage() {
     loadStats();
     loadCustomCategories();
     loadCustomFeeds();
+    // Uniquement pour savoir si le renommage des catégories FreshRSS doit
+    // être proposé (voir freshrssEnabled ci-dessous) — le reste des réglages
+    // n'est pas utilisé ici.
+    fetch("/api/admin/settings")
+      .then((res) => res.json())
+      .then((body) => setFreshrssEnabled(body.settings?.freshrssEnabled === true))
+      .catch(() => {});
   }, []);
+
+  async function renameCustomCategory(cat: CustomCategoryItem) {
+    const label = renameCustomValue.trim();
+    if (!label || label === cat.label) {
+      setRenameCustomId(null);
+      return;
+    }
+    setRenaming(true);
+    const res = await fetch("/api/admin/custom-categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: cat.id, label })
+    });
+    setRenaming(false);
+    if (res.ok) {
+      setRenameCustomId(null);
+      await Promise.all([loadCustomCategories(), loadCustomFeeds()]);
+    } else {
+      const body = await res.json().catch(() => ({}));
+      window.alert(body.error || "Échec du renommage.");
+    }
+  }
+
+  async function renameFreshrssCategory(cat: Category) {
+    const label = renameFreshrssValue.trim();
+    if (!label || label === cat.label) {
+      setRenameFreshrssId(null);
+      return;
+    }
+    setRenaming(true);
+    const res = await fetch("/api/admin/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: cat.freshrssId, newLabel: label, oldLabel: cat.label })
+    });
+    setRenaming(false);
+    if (res.ok) {
+      setRenameFreshrssId(null);
+      await Promise.all([loadCategories(), loadFeeds()]);
+    } else {
+      const body = await res.json().catch(() => ({}));
+      window.alert(body.error || "Échec du renommage.");
+    }
+  }
 
   async function toggle(cat: Category) {
     setCategories((prev) =>
@@ -1085,20 +1146,48 @@ export default function AdminCategoriesPage() {
                   return (
                     <li key={`custom-${cat.id}`} className="border-b border-ink/30">
                       <div className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => toggleCustomExpanded(cat.id)}
-                          className="flex items-center gap-2 text-left font-display font-bold hover:underline"
-                        >
-                          <span className="inline-block w-3 text-xs text-sepia">
-                            {isCollapsed ? "▸" : "▾"}
-                          </span>
-                          {cat.label}
-                          <span className="text-xs font-normal italic text-sepia">({catFeeds.length})</span>
-                          <span className="rounded-sm bg-ink px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-paper">
-                            perso
-                          </span>
-                        </button>
+                        {renameCustomId === cat.id ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="text"
+                              value={renameCustomValue}
+                              onChange={(e) => setRenameCustomValue(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && renameCustomCategory(cat)}
+                              autoFocus
+                              className="border border-ink/40 bg-transparent px-2 py-1 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => renameCustomCategory(cat)}
+                              disabled={renaming}
+                              className="text-xs uppercase tracking-[0.2em] hover:underline disabled:opacity-50"
+                            >
+                              OK
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRenameCustomId(null)}
+                              className="text-xs uppercase tracking-[0.2em] text-sepia hover:underline"
+                            >
+                              Annuler
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleCustomExpanded(cat.id)}
+                            className="flex items-center gap-2 text-left font-display font-bold hover:underline"
+                          >
+                            <span className="inline-block w-3 text-xs text-sepia">
+                              {isCollapsed ? "▸" : "▾"}
+                            </span>
+                            {cat.label}
+                            <span className="text-xs font-normal italic text-sepia">({catFeeds.length})</span>
+                            <span className="rounded-sm bg-ink px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-paper">
+                              perso
+                            </span>
+                          </button>
+                        )}
                         <div className="flex flex-wrap items-center gap-4">
                           <label className="flex items-center gap-2 text-xs italic text-sepia">
                             <input
@@ -1118,6 +1207,18 @@ export default function AdminCategoriesPage() {
                             />
                             inclure la catégorie
                           </label>
+                          {renameCustomId !== cat.id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRenameCustomId(cat.id);
+                                setRenameCustomValue(cat.label);
+                              }}
+                              className="text-xs uppercase tracking-[0.2em] hover:underline"
+                            >
+                              Renommer
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => deleteCustomCategory(cat)}
@@ -1175,24 +1276,52 @@ export default function AdminCategoriesPage() {
                         >
                           ⠿
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(cat.freshrssId)}
-                          className="flex items-center gap-2 text-left font-display font-bold hover:underline"
-                        >
-                          <span className="inline-block w-3 text-xs text-sepia">
-                            {isCollapsed ? "▸" : "▾"}
-                          </span>
-                          {cat.label}
-                          {!feedsLoading && (
-                            <span className="text-xs font-normal italic text-sepia">
-                              ({childFeeds.length + childCustomFeeds.length})
+                        {renameFreshrssId === cat.freshrssId ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="text"
+                              value={renameFreshrssValue}
+                              onChange={(e) => setRenameFreshrssValue(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && renameFreshrssCategory(cat)}
+                              autoFocus
+                              className="border border-ink/40 bg-transparent px-2 py-1 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => renameFreshrssCategory(cat)}
+                              disabled={renaming}
+                              className="text-xs uppercase tracking-[0.2em] hover:underline disabled:opacity-50"
+                            >
+                              OK
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRenameFreshrssId(null)}
+                              className="text-xs uppercase tracking-[0.2em] text-sepia hover:underline"
+                            >
+                              Annuler
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(cat.freshrssId)}
+                            className="flex items-center gap-2 text-left font-display font-bold hover:underline"
+                          >
+                            <span className="inline-block w-3 text-xs text-sepia">
+                              {isCollapsed ? "▸" : "▾"}
                             </span>
-                          )}
-                          <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
-                            freshrss
-                          </span>
-                        </button>
+                            {cat.label}
+                            {!feedsLoading && (
+                              <span className="text-xs font-normal italic text-sepia">
+                                ({childFeeds.length + childCustomFeeds.length})
+                              </span>
+                            )}
+                            <span className="rounded-sm border border-ink/30 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.15em] text-sepia">
+                              freshrss
+                            </span>
+                          </button>
+                        )}
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-4">
                         {childCustomFeeds.length > 0 && (
@@ -1215,6 +1344,23 @@ export default function AdminCategoriesPage() {
                           />
                           inclure la catégorie
                         </label>
+                        {/* Renommer une catégorie FreshRSS écrit RÉELLEMENT
+                            dans FreshRSS (voir renameCategory,
+                            src/lib/freshrss.ts) — proposé seulement quand
+                            l'intégration est activée, sinon l'appel
+                            échouerait de toute façon (config() lève). */}
+                        {freshrssEnabled && renameFreshrssId !== cat.freshrssId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRenameFreshrssId(cat.freshrssId);
+                              setRenameFreshrssValue(cat.label);
+                            }}
+                            className="text-xs uppercase tracking-[0.2em] hover:underline"
+                          >
+                            Renommer
+                          </button>
+                        )}
                       </div>
                     </div>
 

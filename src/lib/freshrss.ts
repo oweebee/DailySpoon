@@ -145,6 +145,50 @@ export async function listAllFeeds(): Promise<FreshRssFeed[]> {
 }
 
 /**
+ * Renomme une catégorie/label FreshRSS via l'API Google Reader
+ * (rename-tag) — nécessite un jeton d'écriture séparé (endpoint /token,
+ * protection CSRF côté FreshRSS), en plus du jeton d'auth déjà utilisé pour
+ * la lecture. IMPORTANT : côté FreshRSS, l'id d'une catégorie ENCODE son
+ * libellé (ex. "user/1005921/label/Tech") — renommer change donc aussi
+ * l'id, ce n'est jamais une simple mise à jour de champ. On relit la liste
+ * des catégories après coup pour récupérer l'id EXACT tel que FreshRSS l'a
+ * réellement construit, plutôt que de le deviner/reconstruire ici (le
+ * numéro d'utilisateur dans l'id n'est pas forcément prévisible).
+ */
+export async function renameCategory(freshrssId: string, newLabel: string): Promise<{ newFreshrssId: string }> {
+  const { baseUrl, token } = await login();
+
+  const tokenRes = await fetch(`${baseUrl}/api/greader.php/reader/api/0/token`, {
+    headers: { Authorization: `GoogleLogin auth=${token}` }
+  });
+  if (!tokenRes.ok) {
+    throw new Error(`[freshrss] Impossible d'obtenir un jeton d'écriture (${tokenRes.status} ${tokenRes.statusText}).`);
+  }
+  const writeToken = (await tokenRes.text()).trim();
+
+  const res = await fetch(`${baseUrl}/api/greader.php/reader/api/0/rename-tag`, {
+    method: "POST",
+    headers: {
+      Authorization: `GoogleLogin auth=${token}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({ s: freshrssId, dest: `user/-/label/${newLabel}`, T: writeToken }).toString()
+  });
+  if (!res.ok) {
+    throw new Error(`[freshrss] Échec du renommage (${res.status} ${res.statusText}).`);
+  }
+
+  const categories = await listAllCategories();
+  const renamed = categories.find((c) => c.label === newLabel);
+  if (!renamed) {
+    throw new Error(
+      "Renommage envoyé à FreshRSS mais la nouvelle catégorie reste introuvable — vérifie directement dans FreshRSS."
+    );
+  }
+  return { newFreshrssId: renamed.freshrssId };
+}
+
+/**
  * Best-effort illustration for an article, dans l'ordre : un media enclosure
  * si le flux en déclare un (podcasts/certains flux), sinon le premier <img>
  * trouvé dans le résumé OU le contenu complet brut (avant stripHtml) — on
