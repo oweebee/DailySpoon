@@ -560,17 +560,25 @@ export default function AdminSettingsPage() {
           </fieldset>
 
           <div className="flex flex-wrap items-center gap-x-8 gap-y-4 pt-2">
+            {/* Hauteur explicite (h-14) partagée par les deux boutons : sans
+                ça, chaque timbre se dimensionne sur la largeur de SON propre
+                texte (voir stamp-bg-* dans globals.css, aspect-ratio pilotée
+                par la largeur) — "Tester les réglages", plus long, donnait
+                donc un timbre plus haut que "Enregistrer". En fixant la
+                hauteur et en passant ce bouton sur le timbre "lg" (plus
+                large/plat), c'est la LARGEUR qui absorbe le texte plus long,
+                pas la hauteur — les deux gardent leur ratio propre. */}
             <button
               onClick={save}
               disabled={saving}
-              className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-md inline-flex h-14 items-center justify-center whitespace-nowrap px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
             >
               {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
             <button
               onClick={test}
               disabled={testing}
-              className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-lg inline-flex h-14 items-center justify-center whitespace-nowrap px-6 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
             >
               {testing ? "Test en cours..." : "Tester les réglages"}
             </button>

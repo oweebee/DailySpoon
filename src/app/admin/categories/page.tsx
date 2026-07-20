@@ -798,7 +798,12 @@ export default function AdminCategoriesPage() {
         (partout, articles déjà récupérés compris), pas seulement des futures récupérations.
       </p>
 
-      {!loading && !error && (categories.length > 0 || customCategories.length > 0) && (
+      {/* PAS de "!error" ici : une erreur FreshRSS (ex. FreshRSS désactivé
+          dans /admin/settings) ne doit pas cacher les catégories perso, qui
+          se chargent via une route complètement indépendante
+          (/api/admin/custom-categories) — categories vaut simplement [] dans
+          ce cas, ce qui suffit déjà à ne montrer que les perso. */}
+      {!loading && (categories.length > 0 || customCategories.length > 0) && (
         <CollapsibleSection title="Impression IA">
           <p className="newsprint mb-4 text-sm text-neutral-700">
             L’impression IA (la une générée sur la page d’accueil, uniquement les news du jour) est
@@ -975,20 +980,25 @@ export default function AdminCategoriesPage() {
 
       {loading ? (
         <p className="italic text-sepia">Chargement depuis FreshRSS...</p>
-      ) : error ? (
-        <div className="space-y-2 text-sm text-journal">
-          <p>{error}</p>
-          <p className="text-neutral-700">
-            Vérifie l’URL, l’identifiant et le mot de passe API FreshRSS dans{" "}
-            <a href="/admin/settings" className="underline">
-              /admin/settings
-            </a>{" "}
-            (ou les variables d’environnement FRESHRSS_BASE_URL / FRESHRSS_USERNAME /
-            FRESHRSS_API_PASSWORD).
-          </p>
-        </div>
       ) : (
         <>
+          {/* Erreur FreshRSS affichée en simple NOTE, plus en blocage total :
+              tes catégories/flux personnalisés se chargent indépendamment et
+              doivent rester visibles même si FreshRSS est désactivé ou
+              injoignable (voir le commentaire sur "Impression IA" ci-dessus). */}
+          {error && (
+            <div className="mb-4 space-y-1 border border-journal/40 bg-journal/5 p-3 text-sm text-journal">
+              <p>{error}</p>
+              <p className="text-xs text-neutral-700">
+                Vérifie/active FreshRSS dans{" "}
+                <a href="/admin/settings" className="underline">
+                  /admin/settings
+                </a>{" "}
+                si tu veux aussi ces catégories-là — tes catégories et flux personnalisés restent
+                gérables normalement ci-dessous en attendant.
+              </p>
+            </div>
+          )}
           {feedsError && <p className="mb-3 text-sm text-journal">{feedsError}</p>}
           {feedsLoading && (
             <p className="mb-3 italic text-sepia">Chargement des flux depuis FreshRSS...</p>
@@ -1019,7 +1029,7 @@ export default function AdminCategoriesPage() {
               if (rows.length === 0) {
                 return (
                   <p className="py-6 text-center italic text-sepia">
-                    Aucune catégorie trouvée dans FreshRSS.
+                    Aucune catégorie disponible pour l’instant (FreshRSS et personnalisées).
                   </p>
                 );
               }
