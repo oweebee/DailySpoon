@@ -111,6 +111,19 @@ export function isPlaceholderImage(url: string): boolean {
   return /(?:^|\/)(?:blank|spacer|placeholder|transparent|lazy|loader|grey|gray)[-_.]?\d*\.(?:gif|png|svg)/.test(u);
 }
 
+/** Logo de marque/pub plutôt que vraie photo d'illustration — vu en usage
+ *  réel sur des flux Numerama (via morss) : un encart "contenu partenaire"
+ *  (ex. logo Bitdefender) placé avant la vraie image dans le contenu se
+ *  faisait prendre pour "la première image" de l'article, sur PLUSIEURS
+ *  articles différents pointant vers le même fichier de logo générique.
+ *  Heuristique par nom de fichier ("logo" apparaît quasi uniquement dans les
+ *  assets de marque, jamais dans une vraie photo d'actu) — volontairement
+ *  étroite pour ne pas écarter à tort une image légitime. */
+export function isLikelyLogoImage(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  return /(?:^|[/_-])logo[-_.]?\d*\.(?:png|svg|webp|jpe?g|gif)/.test(u);
+}
+
 /** URL d'image enregistrée en chemin RELATIF ("/img/photo.jpg") au lieu
  *  d'une URL absolue — cassée en pratique (résolue contre le domaine de
  *  DailySpoon, pas celui du site source), vu en usage réel sur le flux
@@ -166,7 +179,7 @@ export function extractFirstImageSrc(html: string | null | undefined, baseUrl?: 
       if (!m) continue;
       const raw = m[1].trim();
       const url = (attr.includes("srcset") ? raw.split(",")[0].trim().split(/\s+/)[0] : raw).trim();
-      if (!url || isPlaceholderImage(url)) continue;
+      if (!url || isPlaceholderImage(url) || isLikelyLogoImage(url)) continue;
       if (/^(?:https?:)?\/\//i.test(url) || url.startsWith("data:")) return url;
       if (baseUrl) {
         try {

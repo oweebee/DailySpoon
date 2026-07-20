@@ -9,7 +9,14 @@ import {
   type ProcessedArticle,
   type TokenUsage
 } from "./ai";
-import { stripHtml, looksLikeHtml, stripLeadingChrome, isPlaceholderImage, isRelativeImageUrl } from "./text";
+import {
+  stripHtml,
+  looksLikeHtml,
+  stripLeadingChrome,
+  isPlaceholderImage,
+  isRelativeImageUrl,
+  isLikelyLogoImage
+} from "./text";
 import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
@@ -803,6 +810,14 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
         // seulement "/") est fait en JS juste en dessous ; "startsWith '/'"
         // couvre déjà l'immense majorité des cas en SQL.
         { imageUrl: { startsWith: "/" } },
+        // Logo de marque/pub pris pour la vraie image (voir
+        // isLikelyLogoImage) — vu en usage réel sur Numerama (via morss) :
+        // un encart "contenu partenaire" placé avant la vraie photo dans le
+        // contenu se faisait prendre pour "la première image", identique sur
+        // plusieurs articles pointant vers le même fichier de logo
+        // générique. Filtre approximatif en SQL (juste "contient logo"), le
+        // test précis (nom de fichier) est fait en JS juste en dessous.
+        { imageUrl: { contains: "logo" } },
         { sourceTitle: { contains: "<" } },
         { sourceExcerpt: { contains: "<" } },
         { headline: { contains: "<" } },
@@ -860,7 +875,10 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
     (a) =>
       a.sourceUrl &&
       !relativeFixById.has(a.id) &&
-      (!a.imageUrl || isFaviconFallback(a.imageUrl) || isPlaceholderImage(a.imageUrl))
+      (!a.imageUrl ||
+        isFaviconFallback(a.imageUrl) ||
+        isPlaceholderImage(a.imageUrl) ||
+        isLikelyLogoImage(a.imageUrl))
   );
   const toBackfill = needingImage.slice(0, MAX_OG_BACKFILL_PER_RUN);
   const ogResults = await Promise.all(toBackfill.map((a) => fetchOgImage(a.sourceUrl!)));
