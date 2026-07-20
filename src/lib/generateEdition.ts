@@ -9,7 +9,7 @@ import {
   type ProcessedArticle,
   type TokenUsage
 } from "./ai";
-import { stripHtml, looksLikeHtml, stripLeadingChrome } from "./text";
+import { stripHtml, looksLikeHtml, stripLeadingChrome, isPlaceholderImage } from "./text";
 import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
@@ -791,6 +791,11 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
       OR: [
         { imageUrl: null },
         { imageUrl: { contains: "google.com/s2/favicons" } },
+        // Bouche-trous de lazy-load enregistrés comme image (voir
+        // isPlaceholderImage / extractFirstImageSrc) : le cas de loin le plus
+        // fréquent est une data: URI, repérable en SQL — les autres formes
+        // (blank.gif...) sont rattrapées via la fenêtre fetchedAt ci-dessous.
+        { imageUrl: { startsWith: "data:" } },
         { sourceTitle: { contains: "<" } },
         { sourceExcerpt: { contains: "<" } },
         { headline: { contains: "<" } },
@@ -816,8 +821,14 @@ async function cleanExistingHtmlArtifacts(): Promise<void> {
   // Pas d'image du tout, ou juste un favicon posé en dernier recours à un
   // run précédent (voir isFaviconFallback) : dans les deux cas, on retente
   // d'obtenir la vraie illustration — plafonné, puis lancé d'un coup.
+  // isPlaceholderImage : rattrapage rétroactif des articles enregistrés avec
+  // un bouche-trou de lazy-load à la place de la vraie image (data: URI, GIF
+  // transparent... — voir extractFirstImageSrc dans text.ts, cas vu sur le
+  // flux Korben). Sans ce test, ces articles n'étaient JAMAIS réparés : leur
+  // imageUrl n'est ni vide ni un favicon, donc ils n'entraient dans aucune
+  // des deux familles ci-dessus.
   const needingImage = candidates.filter(
-    (a) => a.sourceUrl && (!a.imageUrl || isFaviconFallback(a.imageUrl))
+    (a) => a.sourceUrl && (!a.imageUrl || isFaviconFallback(a.imageUrl) || isPlaceholderImage(a.imageUrl))
   );
   const toBackfill = needingImage.slice(0, MAX_OG_BACKFILL_PER_RUN);
   const ogResults = await Promise.all(toBackfill.map((a) => fetchOgImage(a.sourceUrl!)));

@@ -96,9 +96,32 @@ export function looksLikeHtml(text: string | null | undefined): boolean {
   return /<\s*[a-z][a-z0-9]*[\s>/]/i.test(text) || /&lt;\s*[a-z]/i.test(text);
 }
 
+/** Une URL d'image extraite est-elle un vrai fichier, ou juste un
+ *  bouche-trou de lazy-load ? Beaucoup de thèmes WordPress mettent un
+ *  placeholder dans src= (data: URI d'un SVG gris, GIF transparent 1x1,
+ *  "blank.gif"/"spacer.gif", parfois une image en base64) et la VRAIE URL
+ *  dans data-src/data-lazy-src/srcset. Sans ce test, on retenait le
+ *  placeholder comme "image trouvée" : miniature vide à l'écran ET repli
+ *  og:image jamais déclenché (puisqu'une image avait "été trouvée") — vu en
+ *  usage réel sur le flux Korben. */
+export function isPlaceholderImage(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  if (!u) return true;
+  if (u.startsWith("data:")) return true;
+  return /(?:^|\/)(?:blank|spacer|placeholder|transparent|lazy|loader|grey|gray)[-_.]?\d*\.(?:gif|png|svg)/.test(u);
+}
+
 /**
- * Best-effort first <img> src found in raw (possibly entity-encoded) HTML —
+ * Best-effort first <img> found in raw (possibly entity-encoded) HTML —
  * decodes entities first for the same reason stripHtml does.
+ *
+ * Ne se contente PAS du premier src= : passe en revue chaque <img> et, pour
+ * chacun, teste les attributs susceptibles de porter la vraie URL
+ * (data-src/data-lazy-src/data-original/srcset avant src, car en lazy-load
+ * c'est src qui contient le bouche-trou). Renvoie la première URL réellement
+ * exploitable, ou null si le contenu n'a que des placeholders — auquel cas
+ * l'appelant peut enchaîner sur son repli og:image, ce qui n'arrivait jamais
+ * avant (voir isPlaceholderImage ci-dessus).
  */
 export function extractFirstImageSrc(html: string | null | undefined): string | null {
   if (!html) return null;
@@ -108,8 +131,24 @@ export function extractFirstImageSrc(html: string | null | undefined): string | 
     .replace(/&quot;/gi, '"')
     .replace(/&#0?39;/gi, "'")
     .replace(/&amp;/gi, "&");
-  const match = decoded.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return match ? match[1] : null;
+
+  const imgTags = decoded.match(/<img[^>]*>/gi);
+  if (!imgTags) return null;
+
+  // srcset en dernier recours : sa syntaxe est "url1 480w, url2 800w", donc
+  // on n'en garde que la première URL (avant l'espace/la virgule).
+  const attrs = ["data-src", "data-lazy-src", "data-original", "data-srcset", "srcset", "src"];
+
+  for (const tag of imgTags) {
+    for (const attr of attrs) {
+      const m = tag.match(new RegExp(`\\b${attr}=["']([^"']+)["']`, "i"));
+      if (!m) continue;
+      const raw = m[1].trim();
+      const url = (attr.includes("srcset") ? raw.split(",")[0].trim().split(/\s+/)[0] : raw).trim();
+      if (url && !isPlaceholderImage(url)) return url;
+    }
+  }
+  return null;
 }
 
 /**
