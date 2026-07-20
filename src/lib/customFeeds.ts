@@ -236,6 +236,73 @@ function sanitizeRssXml(xml: string): string {
   return xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, "&amp;");
 }
 
+// Récupération d'un flux Reddit DIRECTEMENT via l'API JSON publique de
+// Reddit — tentée AVANT les miroirs Redlib : le serveur reçoit un 404 (pas
+// un 403 "bloqué") sur les URLs ".rss", ce qui indique que Reddit lui répond
+// normalement et que c'est le format RSS lui-même qui a été retiré. La même
+// URL en ".json" (API publique historique, ex. /r/X/top.json?t=week) sert
+// exactement le même listing — plus riche même (vraie image de preview,
+// texte du post, date précise), sans dépendre d'aucun miroir tiers.
+// raw_json=1 : sinon Reddit renvoie les URLs avec les & encodés en &amp;.
+function redditJsonUrl(originalUrl: string): string | null {
+  try {
+    const parsed = new URL(originalUrl);
+    if (!isRedditHostname(parsed.hostname)) return null;
+    const path = parsed.pathname.replace(/\/?\.rss$/i, "").replace(/\/+$/, "");
+    if (!path) return null;
+    const sep = parsed.search ? `${parsed.search}&` : "?";
+    return `https://www.reddit.com${path}.json${sep}raw_json=1&limit=25`;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchRedditJsonFeed(originalUrl: string): Promise<Awaited<ReturnType<typeof parser.parseURL>>> {
+  const jsonUrl = redditJsonUrl(originalUrl);
+  if (!jsonUrl) throw new Error("URL Reddit invalide");
+
+  const res = await fetch(jsonUrl, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Accept: "application/json"
+    },
+    signal: AbortSignal.timeout(45000)
+  });
+  if (!res.ok) throw new Error(`Status code ${res.status} (API JSON Reddit)`);
+  const data: any = await res.json();
+
+  const children = data?.data?.children;
+  if (!Array.isArray(children) || children.length === 0) {
+    throw new Error("Réponse JSON Reddit vide ou inattendue");
+  }
+
+  const items = children
+    .map((child: any) => child?.data)
+    .filter((d: any) => d && !d.stickied && typeof d.title === "string" && typeof d.permalink === "string")
+    .map((d: any) => {
+      const link = `https://www.reddit.com${d.permalink}`;
+      // Vraie image de preview quand elle existe ; thumbnail sinon (mais
+      // Reddit y met aussi des mots-clés "self"/"default"/"nsfw" au lieu
+      // d'une URL pour les posts sans image — d'où le test http).
+      const previewUrl: string | undefined = d.preview?.images?.[0]?.source?.url;
+      const thumbUrl: string | undefined =
+        typeof d.thumbnail === "string" && /^https?:\/\//.test(d.thumbnail) ? d.thumbnail : undefined;
+      const imageUrl = previewUrl || thumbUrl;
+      return {
+        title: d.title,
+        link,
+        guid: link,
+        isoDate: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : undefined,
+        contentSnippet: typeof d.selftext === "string" && d.selftext ? d.selftext.slice(0, 1000) : undefined,
+        enclosure: imageUrl ? { url: imageUrl, type: "image/jpeg" } : undefined
+      };
+    });
+
+  if (items.length === 0) throw new Error("Aucun post exploitable dans la réponse JSON Reddit");
+  return { items } as unknown as Awaited<ReturnType<typeof parser.parseURL>>;
+}
+
 // Récupération d'un flux Reddit via un miroir Redlib. Trois étages, dans
 // l'ordre du moins au plus coûteux, car le support varie par instance :
 //   1. le ".rss" du miroir, tel quel (rare : RSS est une option Redlib
@@ -445,15 +512,26 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         const redditAttempts: string[] = [];
         try {
           if (isRedditHostname(new URL(feed.url).hostname)) {
-            for (const instance of await getRedlibInstances()) {
-              const mirrorUrl = rehostRedditUrl(feed.url, instance);
-              if (!mirrorUrl) continue;
-              try {
-                redditParsed = await fetchRedditMirrorFeed(mirrorUrl);
-                redditAttempts.push(`${mirrorUrl} -> OK`);
-                break;
-              } catch (mirrorErr) {
-                redditAttempts.push(`${mirrorUrl} -> ${(mirrorErr as Error)?.message || "échec"}`);
+            // 1er choix : l'API JSON publique de Reddit, en direct — aucun
+            // miroir tiers, voir fetchRedditJsonFeed ci-dessus.
+            try {
+              redditParsed = await fetchRedditJsonFeed(feed.url);
+              redditAttempts.push("API JSON Reddit -> OK");
+            } catch (jsonErr) {
+              redditAttempts.push(`API JSON Reddit -> ${(jsonErr as Error)?.message || "échec"}`);
+            }
+            // 2e choix : les miroirs Redlib (cache auto-rafraîchi).
+            if (!redditParsed) {
+              for (const instance of await getRedlibInstances()) {
+                const mirrorUrl = rehostRedditUrl(feed.url, instance);
+                if (!mirrorUrl) continue;
+                try {
+                  redditParsed = await fetchRedditMirrorFeed(mirrorUrl);
+                  redditAttempts.push(`${mirrorUrl} -> OK`);
+                  break;
+                } catch (mirrorErr) {
+                  redditAttempts.push(`${mirrorUrl} -> ${(mirrorErr as Error)?.message || "échec"}`);
+                }
               }
             }
           }
