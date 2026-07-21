@@ -716,7 +716,7 @@ export default function AdminCategoriesPage() {
     return (
       <li
         key={feed.id}
-        className="flex flex-wrap items-center justify-between gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+        className="flex flex-col items-stretch gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
       >
         <span className="text-sm">
           {feed.title}{" "}
@@ -746,7 +746,7 @@ export default function AdminCategoriesPage() {
             </span>
           )}
         </span>
-        <div className="flex shrink-0 flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4 sm:shrink-0">
           <label className="flex items-center gap-2 text-xs italic text-sepia">
             <input
               type="checkbox"
@@ -933,7 +933,7 @@ export default function AdminCategoriesPage() {
               return rows.map((row) => (
                 <li
                   key={row.kind === "custom" ? `custom-${row.cat.id}` : row.cat.freshrssId}
-                  className="flex flex-wrap items-center justify-between gap-4 border-b border-ink/30 py-3"
+                  className="flex flex-col items-stretch gap-3 border-b border-ink/30 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4"
                 >
                   <span className="font-display font-bold">
                     {row.cat.label}{" "}
@@ -947,7 +947,7 @@ export default function AdminCategoriesPage() {
                       </span>
                     )}
                   </span>
-                  <label className="flex shrink-0 items-center gap-2 text-xs italic text-sepia">
+                  <label className="flex items-center gap-2 text-xs italic text-sepia sm:shrink-0">
                     <input
                       type="checkbox"
                       checked={row.cat.frontPageEnabled}
@@ -1175,7 +1175,7 @@ export default function AdminCategoriesPage() {
                   const isCollapsed = customCollapsed.has(cat.id);
                   return (
                     <li key={`custom-${cat.id}`} className="border-b border-ink/30">
-                      <div className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                      <div className="flex flex-col items-stretch gap-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                         {renameCustomId === cat.id ? (
                           <div className="flex flex-wrap items-center gap-2">
                             <input
@@ -1290,7 +1290,7 @@ export default function AdminCategoriesPage() {
                     }}
                     className={`border-b border-ink/30 transition-colors hover:bg-ink/5 ${draggedId === cat.freshrssId ? "opacity-40" : ""}`}
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-4 py-3">
+                    <div className="flex flex-col items-stretch gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
                       <div className="flex items-center gap-2">
                         {/* Poignée de glissé séparée du bouton de dépliage : un
                             seul élément à la fois draggable ET cliquable fait
@@ -1353,7 +1353,7 @@ export default function AdminCategoriesPage() {
                           </button>
                         )}
                       </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-4 sm:shrink-0">
                         {childCustomFeeds.length > 0 && (
                           <label className="flex items-center gap-2 text-xs italic text-sepia">
                             <input
@@ -1399,7 +1399,7 @@ export default function AdminCategoriesPage() {
                         {childFeeds.map((feed) => (
                           <li
                             key={feed.freshrssId}
-                            className="flex flex-wrap items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+                            className="flex flex-col items-stretch gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4"
                           >
                             <span className="text-sm">
                               {feed.title}{" "}
@@ -1412,7 +1412,7 @@ export default function AdminCategoriesPage() {
                                   : `${feed.articleCount} article${feed.articleCount > 1 ? "s" : ""} récupéré${feed.articleCount > 1 ? "s" : ""}, ${feed.visibleArticleCount} visible${feed.visibleArticleCount > 1 ? "s" : ""} en direct`}
                               </span>
                             </span>
-                            <div className="flex flex-wrap shrink-0 items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-4 sm:shrink-0">
                               <label className="flex items-center gap-2 text-xs italic text-sepia">
                                 <input
                                   type="checkbox"
@@ -1479,10 +1479,10 @@ export default function AdminCategoriesPage() {
                     {orphanFeeds.map((feed) => (
                       <li
                         key={feed.freshrssId}
-                        className="flex flex-wrap items-center justify-between gap-4 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5"
+                        className="flex flex-col items-stretch gap-3 rounded-sm py-1.5 px-2 -mx-2 transition-colors hover:bg-ink/5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4"
                       >
                         <span className="text-sm">{feed.title}</span>
-                        <div className="flex flex-wrap shrink-0 items-center gap-4">
+                        <div className="flex flex-wrap items-center gap-4 sm:shrink-0">
                           <label className="flex items-center gap-2 text-xs italic text-sepia">
                             <input
                               type="checkbox"
