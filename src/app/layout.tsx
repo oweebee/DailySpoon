@@ -7,11 +7,16 @@ export const metadata: Metadata = {
   title: "DailySpoon — le journal du jour",
   description: "Votre édition quotidienne personnalisée, générée automatiquement.",
   manifest: "/manifest.json",
+  // Le favicon standard (onglet navigateur) vient UNIQUEMENT de
+  // src/app/icon.svg (convention de fichier Next.js, génère automatiquement
+  // la balise <link rel="icon">) — pas de tableau "icon" ici, sinon les deux
+  // se cumulent et le navigateur peut afficher l'un ou l'autre au hasard
+  // selon le cache (c'est exactement le bug qu'on vient de corriger : un
+  // vieux src/app/icon.svg traînait en plus de ce tableau). "apple" reste
+  // explicite : convention Next.js séparée (icône iOS "Ajouter à l'écran
+  // d'accueil"), aucun fichier app/apple-icon.* n'existe donc pas de
+  // doublon possible pour celle-là.
   icons: {
-    icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" }
-    ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
   },
   appleWebApp: {
