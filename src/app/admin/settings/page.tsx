@@ -112,6 +112,12 @@ export default function AdminSettingsPage() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
+  const [testingNotify, setTestingNotify] = useState(false);
+  const [notifyResults, setNotifyResults] = useState<{ label: string; ok: boolean; message: string }[] | null>(
+    null
+  );
+  const [notifyError, setNotifyError] = useState<string | null>(null);
+
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
@@ -248,6 +254,28 @@ export default function AdminSettingsPage() {
     const body = await res.json().catch(() => ({}));
     setTesting(false);
     setTestResults(body);
+  }
+
+  // Contrairement à test() ci-dessus (getMe/getChat, sans effet de bord),
+  // envoie de VRAIS messages Telegram : la dernière news déjà en base de
+  // chaque flux coché « notification » — pour vérifier le rendu réel (photo +
+  // légende) sans attendre qu'un nouvel article arrive naturellement.
+  async function testNotify() {
+    setTestingNotify(true);
+    setNotifyResults(null);
+    setNotifyError(null);
+    const res = await fetch("/api/admin/settings/test-telegram-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramBotToken: form.telegramBotToken, telegramChatId: form.telegramChatId })
+    });
+    const body = await res.json().catch(() => ({}));
+    setTestingNotify(false);
+    if (!res.ok) {
+      setNotifyError(body.error || "Échec du test.");
+    } else {
+      setNotifyResults(body.results || []);
+    }
   }
 
   // Export : télécharge un fichier JSON avec toute la config (réglages,
@@ -402,9 +430,8 @@ export default function AdminSettingsPage() {
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">
             <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Telegram</legend>
             <p className="text-xs italic text-sepia">
-              Sert à pousser les flux cochés « notification » dans /admin/categories — l’envoi
-              effectif n’est pas encore branché, ces réglages permettent seulement de préparer/
-              tester la connexion au bot pour l’instant.
+              Pousse une photo + message pour chaque tout nouvel article des flux cochés
+              « notification » dans /admin/categories.
             </p>
             <Field
               label="Jeton du bot"
@@ -424,6 +451,28 @@ export default function AdminSettingsPage() {
                 {testResults.telegram.ok ? "✓ " : "✗ "}
                 {testResults.telegram.message}
               </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={testNotify}
+                disabled={testingNotify || !form.telegramBotToken || !form.telegramChatId}
+                className="border border-ink/40 px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-journal hover:bg-ink/5 disabled:opacity-50"
+              >
+                {testingNotify ? "Envoi en cours..." : "Envoyer un test (dernière news de chaque flux coché)"}
+              </button>
+            </div>
+            {notifyError && <p className="text-sm italic text-journal">✗ {notifyError}</p>}
+            {notifyResults && notifyResults.length > 0 && (
+              <ul className="space-y-1 text-sm italic">
+                {notifyResults.map((r, i) => (
+                  <li key={i} className={r.ok ? "text-sepia" : "text-journal"}>
+                    {r.ok ? "✓ " : "✗ "}
+                    {r.label} — {r.message}
+                  </li>
+                ))}
+              </ul>
             )}
           </fieldset>
 

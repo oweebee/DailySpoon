@@ -58,11 +58,11 @@ model MedalFeed {
 }
 
 // Flux (FreshRSS ou perso, même id synthétique que MedalFeed/ExcludedFeed)
-// coché "notification" dans /admin/categories — sert de liste de flux à
-// pousser via le bot Telegram (voir Settings.telegramBotToken/ChatId). La
-// logique d'ENVOI proprement dite (déclenchement, mise en forme du message)
-// n'est pas encore branchée à ce stade — cette table ne fait qu'enregistrer
-// la préférence par flux, en attendant.
+// coché "notification" dans /admin/categories — liste des flux à pousser via
+// le bot Telegram (voir Settings.telegramBotToken/ChatId). Envoi effectif
+// déclenché depuis ingestRawItems (generateEdition.ts) pour chaque tout
+// nouvel article de ces flux, via src/lib/telegramNotify.ts (photo fixe +
+// légende titre/extrait/lien, calqué sur le workflow n8n "News - Telegram").
 model NotifyFeed {
   id         String   @id @default(cuid())
   freshrssId String   @unique

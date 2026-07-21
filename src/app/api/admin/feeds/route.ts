@@ -140,9 +140,10 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Contrairement à "medal", ne touche à rien sur Article — sert uniquement
-  // de liste de flux à pousser via Telegram plus tard (envoi pas encore
-  // branché, voir NotifyFeed dans schema.prisma).
+  // Contrairement à "medal", ne touche à rien sur Article — sert de liste de
+  // flux à pousser via Telegram (voir src/lib/telegramNotify.ts, déclenché
+  // depuis ingestRawItems dans generateEdition.ts pour chaque tout nouvel
+  // article de ces flux).
   if (typeof notify === "boolean") {
     if (notify) {
       await prisma.notifyFeed.upsert({

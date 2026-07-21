@@ -53,10 +53,10 @@ export type AppSettings = {
   /** Rétention (minutes) du journal technique (/admin/logs, LogEntry). 0 =
    *  illimité. Défaut : 1440 (1 jour) — voir src/lib/logger.ts. */
   logRetentionMinutes: number;
-  /** Jeton du bot Telegram (@BotFather) et id du chat/canal de destination,
-   *  utilisés pour tester la connexion depuis /admin/settings — l'envoi
-   *  effectif des notifications (flux cochés, voir NotifyFeed) n'est pas
-   *  encore branché à ce stade. */
+  /** Jeton du bot Telegram (@BotFather) et id du chat/canal de destination —
+   *  utilisés à la fois pour tester la connexion depuis /admin/settings, et
+   *  pour l'envoi effectif des notifications "photo + légende" (flux cochés
+   *  notification, voir NotifyFeed et src/lib/telegramNotify.ts). */
   telegramBotToken: string;
   telegramChatId: string;
 };

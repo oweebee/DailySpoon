@@ -21,6 +21,7 @@ import { todayRangeInTz, dayRangeInTz, todayDateOnlyInTz } from "./tz";
 import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
 import { writeLog } from "./logger";
+import { sendTelegramNotification } from "./telegramNotify";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
 // og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
@@ -37,6 +38,13 @@ const MAX_OG_BACKFILL_PER_RUN = 25;
 // chargée dans une seule catégorie (au-delà, le surplus reste affiché en
 // traitement brut fallbackProcess, sans coût IA, plutôt que d'être exclu).
 const MAX_AI_ITEMS_PER_CATEGORY = 200;
+
+// Nombre max de notifications Telegram poussées en une seule fois par
+// ingestRawItems. Sert de garde-fou uniquement (le cas normal — quelques
+// nouveaux articles par intervalle — ne l'atteint jamais) : évite une rafale
+// de dizaines de messages d'un coup si un flux avec beaucoup d'historique
+// vient d'être coché "notification" pour la première fois.
+const MAX_TELEGRAM_NOTIFY_PER_RUN = 5;
 
 // Exporté pour le worker (voir worker/index.ts) : sert à vérifier si une
 // édition existe déjà pour aujourd'hui avant de déclencher une génération de
@@ -164,6 +172,26 @@ export async function ingestRawItems(rawItems: RawItem[], editionId: string | nu
     };
   });
 
+  // Notifications Telegram : calculées AVANT l'insertion, pour distinguer
+  // précisément un item "vraiment nouveau" d'un item déjà en base (le
+  // createMany qui suit ne le dit pas — skipDuplicates est silencieux). Ne
+  // concerne que les items d'un flux coché "notification" (NotifyFeed) et
+  // toujours inclus (raw.included) — un flux exclu ne doit pas notifier.
+  const notifyFeeds = await prisma.notifyFeed.findMany({ select: { freshrssId: true } });
+  const notifyFeedIds = new Set(notifyFeeds.map((f) => f.freshrssId));
+  const notifyCandidates =
+    notifyFeedIds.size > 0
+      ? rawItems.filter((r) => r.feedId && notifyFeedIds.has(r.feedId) && r.included)
+      : [];
+  let alreadyExistingIds = new Set<string>();
+  if (notifyCandidates.length > 0) {
+    const existing = await prisma.article.findMany({
+      where: { freshrssItemId: { in: notifyCandidates.map((c) => c.freshrssItemId) } },
+      select: { freshrssItemId: true }
+    });
+    alreadyExistingIds = new Set(existing.map((e) => e.freshrssItemId));
+  }
+
   // UNE requête pour tout le lot au lieu d'un upsert PAR article (des
   // centaines de requêtes séquentielles sur une grosse journée) :
   // createMany + skipDuplicates est strictement équivalent à l'ancien
@@ -193,6 +221,27 @@ export async function ingestRawItems(rawItems: RawItem[], editionId: string | nu
           `${row.freshrssItemId} — ${(err as Error)?.message}`
         );
       }
+    }
+  }
+
+  if (notifyCandidates.length > 0) {
+    const brandNew = notifyCandidates.filter((c) => !alreadyExistingIds.has(c.freshrssItemId));
+    if (brandNew.length > MAX_TELEGRAM_NOTIFY_PER_RUN) {
+      await writeLog(
+        "info",
+        "telegram",
+        `${brandNew.length} nouveaux articles à notifier d'un coup — seuls les ${MAX_TELEGRAM_NOTIFY_PER_RUN} plus récents sont poussés (évite une rafale Telegram).`
+      );
+    }
+    const toNotify = [...brandNew]
+      .sort((a, b) => (b.publishedAt ? new Date(b.publishedAt).getTime() : 0) - (a.publishedAt ? new Date(a.publishedAt).getTime() : 0))
+      .slice(0, MAX_TELEGRAM_NOTIFY_PER_RUN);
+    for (const item of toNotify) {
+      await sendTelegramNotification({
+        title: item.sourceTitle,
+        excerpt: item.sourceExcerpt,
+        link: item.sourceUrl
+      });
     }
   }
 }
