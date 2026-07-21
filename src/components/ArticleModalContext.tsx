@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 type ArticleModalState = {
   url: string;
@@ -38,12 +38,38 @@ export function useArticleModal(): ArticleModalContextValue {
 export function ArticleModalProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ArticleModalState>(null);
 
+  // Sans ça, ouvrir un article ne touchait jamais l'historique du
+  // navigateur — le bouton/geste "retour" d'Android navigue alors tout
+  // droit hors de la page (voire hors de l'app) plutôt que de simplement
+  // refermer la fenêtre de lecture. On ajoute donc une entrée d'historique
+  // factice (même URL, rien ne change à l'écran) à l'ouverture, uniquement
+  // pour que le retour arrière ait quelque chose à "consommer" : il fait
+  // alors reculer l'historique jusqu'à l'entrée d'avant l'ouverture — pile
+  // là où on veut atterrir — et on se contente de refermer la fenêtre côté
+  // React en réaction à cet événement, sans naviguer nous-mêmes.
+  useEffect(() => {
+    function handlePopState() {
+      setState(null);
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   function openArticle(url: string, title?: string) {
+    window.history.pushState({ articleModal: true }, "");
     setState({ url, title });
   }
 
   function close() {
     setState(null);
+    // Fermeture via le bouton "Fermer" (pas via le retour arrière, qui a
+    // déjà consommé cette entrée avant même d'appeler close) : on dépile
+    // nous-mêmes l'entrée factice ajoutée à l'ouverture, sinon un prochain
+    // retour arrière ne ferait que revenir dessus au lieu de vraiment
+    // quitter la page.
+    if (typeof window !== "undefined" && window.history.state?.articleModal) {
+      window.history.back();
+    }
   }
 
   // Requête de recherche pour le bouton "Chercher sur Google" — le titre de
