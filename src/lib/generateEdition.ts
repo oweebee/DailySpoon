@@ -240,7 +240,8 @@ export async function ingestRawItems(rawItems: RawItem[], editionId: string | nu
       await sendTelegramNotification({
         title: item.sourceTitle,
         excerpt: item.sourceExcerpt,
-        link: item.sourceUrl
+        link: item.sourceUrl,
+        source: item.feedTitle
       });
     }
   }

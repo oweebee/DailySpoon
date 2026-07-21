@@ -20,28 +20,46 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Échappement spécifique à l'intérieur d'un attribut HTML entre guillemets
+// doubles (href="...") — seuls & et " doivent être neutralisés ici (pas
+// < > : ce ne sont pas des délimiteurs d'attribut), sinon un & littéral dans
+// l'URL (query string) ou un " cassent l'attribut aux yeux du parseur
+// Telegram.
+function escapeHtmlAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
 export type TelegramNotifyItem = {
   title: string;
   excerpt?: string | null;
   link: string;
+  /** Nom du flux source (ex. "Korben") — affiché comme texte cliquable vers
+   *  l'article, à la place de l'URL brute en fin de légende. */
+  source: string;
 };
 
 /**
  * Construit la légende HTML envoyée avec la photo, dans le même format que
  * le workflow n8n "👼🏾 News - Telegram" pris comme référence :
- * <blockquote>⚠ titre</blockquote> puis un extrait, puis le lien. Exporté
- * séparément de l'envoi pour être réutilisé par le bouton de test manuel
+ * <blockquote>⚠ titre</blockquote> puis un extrait, puis un lien cliquable
+ * (le nom du flux, pas l'URL brute) vers l'article. Exporté séparément de
+ * l'envoi pour être réutilisé par le bouton de test manuel
  * (/api/admin/settings/test-telegram-notify), qui doit produire EXACTEMENT
  * le même rendu que l'envoi automatique.
  */
 export function buildTelegramCaption(item: TelegramNotifyItem): string {
   const title = escapeHtml(item.title || "");
+  const source = escapeHtml(item.source || "Lire l'article");
+  const href = escapeHtmlAttr(item.link);
+  // Budget calculé sur le texte VISIBLE (Telegram compte le texte rendu, pas
+  // la balise <a href> autour) — le nom du flux, court, remplace l'URL brute
+  // qui pesait potentiellement bien plus lourd dans l'ancien calcul.
   let excerpt = escapeHtml((item.excerpt || "").trim());
-  const budget = MAX_CAPTION_CHARS - title.length - item.link.length - 40;
+  const budget = MAX_CAPTION_CHARS - title.length - source.length - 40;
   if (excerpt.length > Math.max(0, budget)) {
     excerpt = excerpt.slice(0, Math.max(0, budget)).trim() + "…";
   }
-  return `<blockquote>⚠ ${title}</blockquote>\n${excerpt}\n\n${item.link}`;
+  return `<blockquote>⚠ ${title}</blockquote>\n${excerpt}\n\n<a href="${href}">${source}</a>`;
 }
 
 export type TelegramSendResult = { ok: boolean; message: string };

@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
     const caption = buildTelegramCaption({
       title: latest.sourceTitle,
       excerpt: latest.sourceExcerpt,
-      link: latest.sourceUrl
+      link: latest.sourceUrl,
+      source: latest.feedTitle
     });
     const sendResult = await postTelegramPhoto(telegramBotToken, telegramChatId, caption);
     results.push({ label: feed.label, ok: sendResult.ok, message: sendResult.message });
