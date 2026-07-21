@@ -61,7 +61,14 @@ const LEADING_CHROME_MARKERS: RegExp[] = [
   // ".+?" entre "News" et le "news" suivant avale ce titre répété quel qu'il
   // soit, sans avoir besoin de le connaître à l'avance.
   /soutenez\s+\S+\s+et\s+d[ée]couvrez\s+tous\s+nos\s+contenus/,
-  /menu\s+recherche\s+abonn[ée]s\s+l['’]actualit[ée]\s+accueil\s+news\s+.+?\s+news\b/
+  /menu\s+recherche\s+abonn[ée]s\s+l['’]actualit[ée]\s+accueil\s+news\s+.+?\s+news\b/,
+  // MetalZone (et probablement d'autres sites au même gabarit) : titre
+  // répété, auteur, date de publication, "(Mis à jour le ...)", heure, PUIS
+  // "Lecture N min." — ordre inverse du marqueur générique ci-dessus ("N min
+  // de lecture"), donc pas capté par lui. Le tout est parfois suivi d'un
+  // crédit copyright ("© YouTube (@handle)") qui doit sauter avec le reste
+  // du bloc auteur/date qui le précède, d'où le groupe optionnel.
+  /lecture\s+\d+\s*min\.?(?:\s*©[^)]*\))?/
 ];
 // On ne cherche que dans le tout début du texte : un repère qui apparaît
 // plus loin a de bonnes chances d'être du vrai contenu (un article qui
