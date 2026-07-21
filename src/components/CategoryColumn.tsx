@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ArticleLike } from "./EditionView";
-import { SourceLine, formatStamp } from "./EditionView";
+import { SourceLine, formatStamp, directTitle, directText } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
 import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
@@ -173,25 +173,25 @@ export function CategoryColumn({
             {article.imageUrl && (
               <ArticleLink
                 href={article.sourceUrl}
-                title={article.headline || article.sourceTitle}
+                title={directTitle(article)}
                 className="mb-2 block aspect-[16/9] w-full"
               >
                 <ArticleImage
                   src={article.imageUrl}
-                  alt={article.headline || article.sourceTitle}
+                  alt={directTitle(article)}
                   dateLabel={showDateStamp ? formatStamp(article.publishedAt) : null}
                   medal={showMedal ? article.medal : false}
                   className="h-full w-full"
                 />
               </ArticleLink>
             )}
-            <h3 className="font-display text-sm font-bold leading-snug">{article.headline}</h3>
+            <h3 className="font-display text-sm font-bold leading-snug">{directTitle(article)}</h3>
             <p
               className={`newsprint mt-1 text-sm leading-snug text-neutral-700 ${
                 clampSummary ? "line-clamp-[10]" : ""
               }`}
             >
-              {article.summary}
+              {directText(article)}
             </p>
             <SourceLine article={article} showDate={!article.imageUrl} showFavorite={showFavorite} />
           </article>

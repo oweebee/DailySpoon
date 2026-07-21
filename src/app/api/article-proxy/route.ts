@@ -951,14 +951,24 @@ export async function GET(req: NextRequest) {
     .catch(() => null);
   const articleId = articleRecord?.id ?? null;
   const favorite = articleRecord?.favorite ?? false;
-  const fallbackExcerpt = articleRecord?.summary?.trim() || articleRecord?.sourceExcerpt?.trim() || null;
-  // Même titre que celui déjà affiché en vignette (accueil, En direct) —
-  // headline (réécrit par l'IA, ex. en français) prioritaire sur sourceTitle
-  // (brut, langue d'origine) : même ordre de priorité que partout ailleurs
-  // dans l'appli (EditionView/CategoryColumn affichent headline||sourceTitle)
-  // — sinon on se retrouvait avec un titre anglais au-dessus d'un texte
-  // français, incohérent avec la vignette.
-  const fallbackTitle = articleRecord?.headline?.trim() || articleRecord?.sourceTitle?.trim() || null;
+  // sourceExcerpt (texte brut du flux RSS, jamais touché par l'IA) D'ABORD,
+  // summary (réécriture Gemini, posée UNIQUEMENT quand une impression IA
+  // tourne — voir generateEdition.ts, aiRewritten) seulement en dernier
+  // recours. Avant ce correctif l'ordre était inversé : dès qu'une impression
+  // IA passait sur l'article (même s'il avait été aspiré sans IA par "En
+  // Direct" plus tôt dans la journée), ce repli de lecture affichait le
+  // résumé Gemini à la place du texte original du flux — contraire à l'esprit
+  // "En Direct" (zéro IA), repéré via le texte "Selon Korben, ..." qui
+  // n'existe nulle part dans l'article source ni dans son flux RSS.
+  const fallbackExcerpt = articleRecord?.sourceExcerpt?.trim() || articleRecord?.summary?.trim() || null;
+  // sourceTitle (titre BRUT du flux, jamais touché par l'IA) D'ABORD, headline
+  // (réécrit par Gemini quand une impression IA tourne) seulement en dernier
+  // recours — même logique que fallbackExcerpt ci-dessus et que la vignette
+  // "En direct" (voir directTitle dans EditionView) : la lecture d'un article
+  // depuis "En direct" doit rester 100 % sans IA, titre compris. Le champ
+  // sourceExcerpt affiché juste en dessous est lui aussi le texte brut du
+  // flux, donc titre et corps restent cohérents (même langue, même source).
+  const fallbackTitle = articleRecord?.sourceTitle?.trim() || articleRecord?.headline?.trim() || null;
 
   // Le message d'avertissement passe APRÈS le texte récupéré (pas avant) et
   // dans un encadré grisé sur toute la largeur de la zone de texte — même
@@ -1033,8 +1043,9 @@ export async function GET(req: NextRequest) {
 
   if (isRedditPostUrl(parsed)) {
     // Si on a déjà un texte pour ce post en base (fallbackExcerpt =
-    // summary IA sinon sourceExcerpt tel que récupéré depuis le flux — ce
-    // dernier est parfois déjà en français : Reddit traduit lui-même
+    // sourceExcerpt tel que récupéré depuis le flux, sinon summary IA en
+    // dernier recours — voir plus haut — sourceExcerpt est parfois déjà en
+    // français : Reddit traduit lui-même
     // certains posts côté flux/Redlib, indépendamment de toute IA de notre
     // côté), on le sert directement plutôt que d'aller chercher le texte
     // ORIGINAL (souvent anglais) via Redlib/l'API JSON officielle plus bas :

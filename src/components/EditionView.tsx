@@ -10,6 +10,11 @@ export type ArticleLike = {
   id: string;
   headline: string | null;
   summary: string | null;
+  // Champs BRUTS du flux RSS, JAMAIS réécrits par l'IA (contrairement à
+  // headline/summary, écrasés par Gemini dès qu'une impression IA tourne) —
+  // c'est EXCLUSIVEMENT ceux-ci qu'affiche "En direct", tenu à zéro IA (voir
+  // directTitle/directText plus bas).
+  sourceExcerpt?: string | null;
   // Résumé concis dédié à la une IA (voir FrontPageView) — absent/inutilisé
   // partout ailleurs (En direct, favoris, archive gardent `summary`).
   frontPageSummary?: string | null;
@@ -31,6 +36,24 @@ export type ArticleLike = {
 };
 
 export type CategoryOrderEntry = { freshrssId: string; label: string };
+
+// RÈGLE DU PROJET : "En direct" n'affiche JAMAIS d'IA. On ne lit donc jamais
+// headline/summary dans ce composant (ni CategoryColumn ni la recherche de
+// DirectView, tous réservés à "En direct") — ces deux champs sont réécrits
+// par Gemini dès qu'une impression IA passe sur l'article, MÊME s'il a été
+// aspiré sans IA plus tôt. On lit toujours à la place les champs bruts du
+// flux : sourceTitle (titre d'origine) et sourceExcerpt (texte d'origine),
+// que rien ne réécrit jamais. C'est ce qui garantit que le texte affiché en
+// "En direct" reste toujours celui de la source, pas un résumé IA.
+export function directTitle(a: ArticleLike): string {
+  return (a.sourceTitle && a.sourceTitle.trim()) || a.headline || "(sans titre)";
+}
+export function directText(a: ArticleLike): string {
+  return (
+    (a.sourceExcerpt && a.sourceExcerpt.trim()) ||
+    "Aucun aperçu fourni par le flux — consulte la source pour lire l'article complet."
+  );
+}
 
 export function EditionView({
   articles,
@@ -282,7 +305,7 @@ export function SourceLine({
       }`}
     >
       {formatted && <span>{formatted} · </span>}
-      <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
+      <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="hover:underline">
         Source : {article.feedTitle || article.sourceTitle}
       </ArticleLink>
       {showFavorite && <FavoriteStar articleId={article.id} initialFavorite={article.favorite} />}
@@ -298,15 +321,15 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
   return (
     <article className={`flex flex-col text-center ${className}`}>
       <h2 className="mx-auto mb-4 max-w-2xl font-display text-xl font-black leading-tight md:text-2xl">
-        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
-          {article.headline}
+        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="hover:underline">
+          {directTitle(article)}
         </ArticleLink>
       </h2>
       {article.imageUrl && (
-        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="mb-4 block aspect-[16/9] w-full">
+        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="mb-4 block aspect-[16/9] w-full">
           <ArticleImage
             src={article.imageUrl}
-            alt={article.headline || article.sourceTitle}
+            alt={directTitle(article)}
             dateLabel={formatStamp(article.publishedAt)}
             medal={article.medal}
             className="h-full w-full"
@@ -314,7 +337,7 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
         </ArticleLink>
       )}
       <p className="newsprint mx-auto max-w-xl line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
-        {article.summary}
+        {directText(article)}
       </p>
       <SourceLine article={article} center />
     </article>
@@ -325,22 +348,22 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
   return (
     <article className={className}>
       <h3 className="mb-2 max-w-2xl font-display text-xl font-black leading-tight md:text-2xl">
-        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="hover:underline">
-          {article.headline}
+        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="hover:underline">
+          {directTitle(article)}
         </ArticleLink>
       </h3>
       {article.imageUrl && (
-        <ArticleLink href={article.sourceUrl} title={article.headline || article.sourceTitle} className="mb-2 block aspect-[4/3] w-full">
+        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="mb-2 block aspect-[4/3] w-full">
           <ArticleImage
             src={article.imageUrl}
-            alt={article.headline || article.sourceTitle}
+            alt={directTitle(article)}
             dateLabel={formatStamp(article.publishedAt)}
             medal={article.medal}
             className="h-full w-full"
           />
         </ArticleLink>
       )}
-      <p className="newsprint line-clamp-[10] text-sm leading-snug text-neutral-700">{article.summary}</p>
+      <p className="newsprint line-clamp-[10] text-sm leading-snug text-neutral-700">{directText(article)}</p>
       <SourceLine article={article} />
     </article>
   );
