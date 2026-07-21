@@ -5,12 +5,12 @@
 // fonctionner hors-ligne. Seuls le manifeste et les icônes (assets
 // statiques, jamais périmés) sont mis en cache, en secours si le réseau est
 // coupé au moment de charger l'écran d'accueil de l'app installée.
-// v3 : icônes redessinées (cadrage serré cuillère + DS, lettres débordant
-// sur marge transparente). Bump obligatoire à CHAQUE changement d'icône,
-// sinon un navigateur ayant déjà installé une version précédente du service
-// worker garde ses vieilles icônes en cache indéfiniment (voir SHELL_ASSETS
-// ci-dessous, jamais réinvalidé sans changer ce nom).
-const CACHE_NAME = "dailyspoon-shell-v3";
+// v4 : icône maskable (installation bureau/app) agrandie (motif trop petit à
+// v3). Bump obligatoire à CHAQUE changement d'icône, sinon un navigateur
+// ayant déjà installé une version précédente du service worker garde ses
+// vieilles icônes en cache indéfiniment (voir SHELL_ASSETS ci-dessous,
+// jamais réinvalidé sans changer ce nom).
+const CACHE_NAME = "dailyspoon-shell-v4";
 const SHELL_ASSETS = [
   "/manifest.json",
   "/apple-touch-icon.png",
