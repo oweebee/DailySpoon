@@ -1,9 +1,9 @@
-<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img">
+<svg width="284.6" height="284.6" viewBox="0 0 284.6 284.6" xmlns="http://www.w3.org/2000/svg" role="img">
 <title>DailySpoon</title>
-<rect x="0" y="0" width="240" height="240" fill="#ffffff"/>
-<g transform="rotate(25 120 120)">
-<ellipse cx="120" cy="72" rx="38" ry="62" fill="#1a1a1a"/>
-<rect x="106" y="122" width="28" height="108" rx="14" fill="#1a1a1a"/>
+<rect x="22.3" y="22.3" width="240" height="240" fill="#ffffff"/>
+<g transform="rotate(25 142.3 142.3)">
+<ellipse cx="142.3" cy="94.3" rx="38" ry="62" fill="#1a1a1a"/>
+<rect x="128.3" y="144.3" width="28" height="108" rx="14" fill="#1a1a1a"/>
 </g>
-<text x="120" y="178" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="900" font-size="200" letter-spacing="-6" fill="#808080" opacity="0.65">DS</text>
+<text x="142.3" y="200.3" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="900" font-size="200" letter-spacing="-6" fill="#808080" opacity="0.65">DS</text>
 </svg>

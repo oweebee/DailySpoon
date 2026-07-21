@@ -7,16 +7,15 @@ export const metadata: Metadata = {
   title: "DailySpoon — le journal du jour",
   description: "Votre édition quotidienne personnalisée, générée automatiquement.",
   manifest: "/manifest.json",
-  // Le favicon standard (onglet navigateur) vient UNIQUEMENT de
-  // src/app/icon.svg (convention de fichier Next.js, génère automatiquement
-  // la balise <link rel="icon">) — pas de tableau "icon" ici, sinon les deux
-  // se cumulent et le navigateur peut afficher l'un ou l'autre au hasard
-  // selon le cache (c'est exactement le bug qu'on vient de corriger : un
-  // vieux src/app/icon.svg traînait en plus de ce tableau). "apple" reste
-  // explicite : convention Next.js séparée (icône iOS "Ajouter à l'écran
-  // d'accueil"), aucun fichier app/apple-icon.* n'existe donc pas de
-  // doublon possible pour celle-là.
+  // Favicon pointé explicitement vers src/app/icon.svg. Note : la convention
+  // de fichier Next.js est censée générer automatiquement la balise <link
+  // rel="icon"> toute seule à partir de ce fichier, MAIS en pratique, dès
+  // qu'on déclare un objet "icons" ici (ne serait-ce que pour "apple"
+  // ci-dessous), Next arrête de l'auto-générer — vérifié en direct sur le
+  // site déployé (aucune balise <link rel="icon"> présente du tout). D'où la
+  // déclaration EXPLICITE de "icon" ci-dessous, qui contourne le problème.
   icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
   },
   appleWebApp: {
