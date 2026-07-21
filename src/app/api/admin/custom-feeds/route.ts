@@ -20,12 +20,27 @@ async function assertAuthed(req: NextRequest) {
 // récupérer le vrai titre du flux plutôt que d'afficher l'URL brute — sans
 // bloquer la création si le flux est temporairement injoignable (le
 // prochain balayage du worker le récupérera de toute façon).
+// Beaucoup de flux RSS mettent le TAGLINE complet du site dans <title> du
+// channel (ex. "Alpha Beta Gamer | Free Video Game Alpha & Beta Tests. The
+// worlds biggest beta testing site") plutôt que le seul nom du site — sans
+// troncature, ce texte entier se retrouvait utilisé partout où le nom du
+// flux sert de libellé (catégorie par défaut, menu mobile, byline "Source :
+// ..."), y compris dans des endroits à largeur contrainte où ça débordait
+// sur plusieurs lignes verticales illisibles (vu en usage réel sur mobile).
+// Ne garde que ce qui précède le premier séparateur habituel entre un nom de
+// site et sa description ("|", tiret cadratin/demi-cadratin, ":") — au pire
+// (aucun séparateur), le titre est déjà probablement déjà court.
+function shortenFeedTitle(title: string): string {
+  const cut = title.split(/\s+[|–—]\s+|:\s+/)[0]?.trim();
+  return cut && cut.length >= 3 ? cut : title;
+}
+
 async function guessFeedTitle(url: string): Promise<string> {
   try {
     const parser = new Parser({ timeout: 6000 });
     const parsed = await parser.parseURL(url);
     const title = safeTitle(parsed.title);
-    if (title) return title;
+    if (title) return shortenFeedTitle(title);
   } catch {
     // best-effort : on retombe sur l'hôte de l'URL ci-dessous
   }

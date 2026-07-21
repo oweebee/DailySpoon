@@ -361,7 +361,13 @@ export function fallbackProcess(item: RawItem): ProcessedArticle {
 }
 
 export type CurationItem = { id: string; headline: string; summary: string; category: string; source: string };
-export type CurationResult = { priorityScore: number; frontPageSummary: string };
+// duplicateOfId : "id" d'un AUTRE article de CETTE MÊME liste couvrant le
+// MÊME événement précis (pas juste le même thème général) — voir
+// buildCurationPrompt. null/absent = article distinct, à garder. Sert au
+// garde-fou "un sujet par article" dans generateEdition.ts (curateFrontPageScores) :
+// tout article marqué duplicateOfId d'un autre article du jour est masqué
+// (included: false), jamais supprimé.
+export type CurationResult = { priorityScore: number; frontPageSummary: string; duplicateOfId?: string | null };
 
 // Passe de curation de la "une" : contrairement à processArticles (qui note
 // chaque article par lots indépendants de 12 — un article isolé dans un lot
@@ -426,16 +432,24 @@ export async function curateFrontPage(
       id: string;
       priorityScore: number;
       frontPageSummary?: string;
+      duplicateOfId?: string | null;
     }[];
     if (!Array.isArray(parsed)) throw new Error("réponse IA non conforme (pas un tableau)");
 
+    const validIds = new Set(items.map((it) => it.id));
     const map = new Map<string, CurationResult>();
     for (const p of parsed) {
       if (!p?.id) continue;
       const original = items.find((it) => it.id === p.id);
+      // duplicateOfId ignoré s'il est absent de la liste ou pointe sur
+      // lui-même (hallucination possible) — un id "juste inventé" ne doit
+      // jamais faire disparaître un article par erreur.
+      const duplicateOfId =
+        p.duplicateOfId && p.duplicateOfId !== p.id && validIds.has(p.duplicateOfId) ? p.duplicateOfId : null;
       map.set(p.id, {
         priorityScore: clamp(Number(p.priorityScore) || 40, 1, 100),
-        frontPageSummary: p.frontPageSummary?.trim() || original?.summary?.trim() || NO_EXCERPT_PLACEHOLDER
+        frontPageSummary: p.frontPageSummary?.trim() || original?.summary?.trim() || NO_EXCERPT_PLACEHOLDER,
+        duplicateOfId
       });
     }
     return map;
@@ -478,12 +492,13 @@ ${trendingBlock}
 Détermine, en comparant vraiment les articles ENTRE EUX (pas isolément), quelles sont les news les plus marquantes de la journée, pour composer une "une" cohérente. Pour CHAQUE article, dans l'ordre, donne, de façon CONCISE (le coût dépend directement de la longueur du texte produit) :
 - "priorityScore" : un score d'importance de 1 à 100 (100 = doit faire la une du jour, 1 = anecdotique). Les scores doivent réellement discriminer : seuls 1 à 3 articles au grand maximum doivent approcher 100, le reste doit s'étaler selon l'importance réelle.
 - "frontPageSummary" : une réécriture COURTE du résumé fourni qui va droit à l'essentiel (l'info principale d'abord). 1-2 phrases pour la plupart des articles, 3-4 phrases maximum pour un sujet vraiment substantiel/complexe — jamais plus. Intègre aussi une citation journalistique de la source fournie ("source") directement dans le texte (ex : "selon Presse-citron", "rapporte Le Monde", "d'après Reuters"), SANS jamais insérer de lien ni d'URL — juste le nom du média mentionné en passant, comme dans un vrai article de journal. Le texte reste basé sur le résumé DailySpoon fourni ci-dessous pour cet article, jamais sur le contenu de la recherche web ci-dessus (qui ne sert qu'à évaluer l'importance).
+- "duplicateOfId" : un garde-fou "un seul article par sujet". Repère les articles qui couvrent EXACTEMENT le même événement précis qu'un AUTRE article de cette liste (même annonce, même fait, même sortie produit... racontés par des sources différentes ou mis à jour au fil de la journée) — PAS juste la même thématique générale (deux articles sur "la canicule" mais un sur les départements en alerte et l'autre sur un conseil santé restent DEUX sujets distincts, à garder tous les deux). Si et seulement si un article est un vrai doublon d'un autre, mets dans "duplicateOfId" l'"id" de la version à GARDER (la plus complète/récente/importante des deux — choisis TOUJOURS le même id "gagnant" pour tout un groupe de doublons, jamais une chaîne A→B→C). Sinon, mets null. Par défaut, en cas de doute, NE MARQUE PAS de doublon (mieux vaut deux articles proches que d'en perdre un à tort).
 
 Articles :
 ${JSON.stringify(list, null, 2)}
 
 Réponds UNIQUEMENT avec un tableau JSON de ${items.length} objets, dans le même ordre, sans texte avant ou après, format :
-[{"id": "...", "priorityScore": 0, "frontPageSummary": "..."}, ...]`;
+[{"id": "...", "priorityScore": 0, "frontPageSummary": "...", "duplicateOfId": null}, ...]`;
 }
 
 /**

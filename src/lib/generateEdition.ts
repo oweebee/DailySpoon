@@ -429,12 +429,20 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     await curateFrontPageScores(contentRange, usage, effectiveWritingStyle ?? undefined);
   }
 
+  // "included: true" explicite ici (pas dans aiPrintWhere, réglage
+  // indépendant — voir getAiPrintEligibilityWhere) : c'est le champ que
+  // curateFrontPageScores vient de mettre à false sur les articles marqués
+  // "doublon du même sujet" juste au-dessus (duplicateOfId) — ces requêtes
+  // tournant APRÈS, elles doivent explicitement les exclure de la une/du
+  // compte/de la photo figée de l'édition.
   const heroArticle = await prisma.article.findFirst({
-    where: { publishedAt: contentRange, ...aiPrintWhere },
+    where: { publishedAt: contentRange, included: true, ...aiPrintWhere },
     orderBy: { priorityScore: "desc" }
   });
 
-  const articleCount = await prisma.article.count({ where: { publishedAt: contentRange, ...aiPrintWhere } });
+  const articleCount = await prisma.article.count({
+    where: { publishedAt: contentRange, included: true, ...aiPrintWhere }
+  });
 
   // Photo figée (EditionArticle) de la une IA telle qu'elle est À CET
   // INSTANT précis — mêmes critères de qualification que la page d'accueil
@@ -461,6 +469,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
           publishedAt: contentRange,
           processed: true,
           aiRewritten: true,
+          included: true,
           ...aiPrintWhere
         }
       });
@@ -736,15 +745,37 @@ async function curateFrontPageScores(
   );
   if (scores.size === 0) return;
 
-  await prisma.$transaction(
-    [...scores.entries()].map(([id, result]) =>
+  // Garde-fou "un sujet par article" : tout article dont l'IA a détecté
+  // qu'il couvre le MÊME événement précis qu'un autre article du jour (voir
+  // duplicateOfId, buildCurationPrompt dans ai.ts) est masqué — included:
+  // false, JAMAIS supprimé, pour rester trouvable par la recherche comme
+  // n'importe quel autre article exclu (flux/catégorie décochée...). Le
+  // "gagnant" de chaque groupe de doublons (celui pointé par duplicateOfId)
+  // n'est jamais masqué lui-même, même s'il ne reçoit aucune requête directe
+  // à ce sujet ici.
+  const duplicateIds = [...scores.entries()]
+    .filter(([, result]) => result.duplicateOfId)
+    .map(([id]) => id);
+
+  await prisma.$transaction([
+    ...[...scores.entries()].map(([id, result]) =>
       prisma.article.update({
         where: { id },
         data: { priorityScore: result.priorityScore, frontPageSummary: result.frontPageSummary }
       })
-    )
-  );
+    ),
+    ...(duplicateIds.length > 0
+      ? [prisma.article.updateMany({ where: { id: { in: duplicateIds } }, data: { included: false } })]
+      : [])
+  ]);
   await writeLog("info", "ai", `Une du jour recalculée par l'IA pour ${scores.size} article(s).`);
+  if (duplicateIds.length > 0) {
+    await writeLog(
+      "info",
+      "ai",
+      `${duplicateIds.length} article(s) masqué(s) comme doublon du même sujet (garde-fou "un sujet par article").`
+    );
+  }
 }
 
 /**
