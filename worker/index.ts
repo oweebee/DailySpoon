@@ -8,9 +8,9 @@ import { syncCustomFeeds } from "../src/lib/customFeeds";
 import { writeLog, pruneOldLogs } from "../src/lib/logger";
 
 // Self-hosted daily scheduler (no Vercel cron needed).
-// Checked every minute against the current /admin/settings (or env var
+// Checked every 10 minutes against the current /admin/settings (or env var
 // fallback) so that changing the schedule from the admin UI takes effect
-// immediately — no restart or redeploy needed.
+// quickly — no restart or redeploy needed.
 
 let lastRunDate: string | null = null;
 let lastFallbackRunAt: number | null = null;
@@ -90,9 +90,16 @@ const REDDIT_HEALTH_INTERVAL_HOURS = 6;
 let lastRedditHealthSlot: string | null = null;
 
 async function maybeRunRedditHealthCheck(tz: string) {
-  const { hour, minute, dateKey } = currentHourMinuteInTz(tz);
+  const { hour, dateKey } = currentHourMinuteInTz(tz);
   const slot = `${dateKey}-${Math.floor(hour / REDDIT_HEALTH_INTERVAL_HOURS)}`;
-  if (minute !== 5 || hour % REDDIT_HEALTH_INTERVAL_HOURS !== 0 || lastRedditHealthSlot === slot) return;
+  // Le dédoublonnage tient uniquement au "slot" (créneau de 6h) : peu importe
+  // À QUELLE minute le tick tombe dedans (dépend du pas du tick, voir
+  // cron.schedule plus bas), lastRedditHealthSlot garantit déjà "une seule
+  // fois par créneau". Avant, un test en dur sur minute===5 supposait un tick
+  // à la minute près — cassait silencieusement le health-check dès que le
+  // tick passait à un pas plus grossier (ex. */10, qui ne tombe jamais sur
+  // :05).
+  if (hour % REDDIT_HEALTH_INTERVAL_HOURS !== 0 || lastRedditHealthSlot === slot) return;
   lastRedditHealthSlot = slot;
   // Rafraîchit d'abord le cache des miroirs Redlib (voir reddit.ts) — sonde
   // la liste officielle + repli statique et écrit le résultat en base, AVANT
@@ -117,7 +124,7 @@ async function maybeRunRedditHealthCheck(tz: string) {
 
 // Flux RSS personnalisés (voir customFeeds.ts, CustomCategory/CustomFeed) —
 // zéro coût IA, tourne dans tous les cas (mode auto ou manuel). Appelé à
-// CHAQUE tick (chaque minute) : syncCustomFeeds()/fetchCustomFeedItems()
+// CHAQUE tick (toutes les 10 minutes) : syncCustomFeeds()/fetchCustomFeedItems()
 // s'auto-gate en interne sur Settings.customFeedsIntervalMinutes (5mn à 1
 // semaine, réglable dans /admin/settings) — un appel qui n'est pas encore
 // dû ne fait qu'une lecture DB, pas de requête réseau vers les flux.
@@ -140,7 +147,7 @@ async function tick() {
   const settings = await getSettings();
 
   // Purge du journal (/admin/logs) — DELETE indexé sur createdAt, négligeable
-  // même appelé chaque minute (voir logger.ts). S'auto-gate en interne sur
+  // même appelé à chaque tick (voir logger.ts). S'auto-gate en interne sur
   // Settings.logRetentionMinutes (0 = illimité, ne fait rien).
   await pruneOldLogs();
 
@@ -149,7 +156,19 @@ async function tick() {
 
   if (settings.editionScheduleEnabled) {
     const { hour, minute, dateKey } = currentHourMinuteInTz(settings.editionTz);
-    if (hour === settings.editionHour && minute === settings.editionMinute && lastRunDate !== dateKey) {
+    // Fenêtre plutôt qu'égalité stricte : avec un tick toutes les 10 minutes
+    // (voir cron.schedule plus bas), la minute exacte réglée dans
+    // /admin/settings (ex. 23) ne tombe pas forcément sur un tick (:00, :10,
+    // :20...). On déclenche donc dès que l'heure programmée est atteinte OU
+    // dépassée de moins de 10 minutes, toujours au plus une fois par jour
+    // (lastRunDate).
+    const scheduledTotalMin = settings.editionHour * 60 + settings.editionMinute;
+    const currentTotalMin = hour * 60 + minute;
+    if (
+      currentTotalMin >= scheduledTotalMin &&
+      currentTotalMin < scheduledTotalMin + 10 &&
+      lastRunDate !== dateKey
+    ) {
       lastRunDate = dateKey;
       await runOnce();
     }
@@ -172,9 +191,9 @@ async function tick() {
   }
 }
 
-console.log("[worker] DailySpoon worker started — checking the schedule (from /admin/settings) every minute.");
+console.log("[worker] DailySpoon worker started — checking the schedule (from /admin/settings) every 10 minutes.");
 
-cron.schedule("* * * * *", tick);
+cron.schedule("*/10 * * * *", tick);
 
 // Also run once immediately on boot if RUN_ON_START=true (handy for first
 // deploy/testing UNIQUEMENT — ce n'est pas censé rester activé en

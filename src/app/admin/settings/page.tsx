@@ -460,7 +460,7 @@ export default function AdminSettingsPage() {
                 disabled={testingNotify || !form.telegramBotToken || !form.telegramChatId}
                 className="border border-ink/40 px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-journal hover:bg-ink/5 disabled:opacity-50"
               >
-                {testingNotify ? "Envoi en cours..." : "Envoyer un test (dernière news de chaque flux coché)"}
+                {testingNotify ? "Envoi en cours..." : "Test d'envoi des dernières news notifiées"}
               </button>
             </div>
             {notifyError && <p className="text-sm italic text-journal">✗ {notifyError}</p>}
