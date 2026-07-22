@@ -82,10 +82,17 @@ async function getAccessToken(creds: WallabagCreds): Promise<string> {
   return data.access_token as string;
 }
 
+// Tag posé sur chaque entrée créée depuis DailySpoon — permet de retrouver/
+// filtrer dans Wallabag tout ce qui vient d'ici (l'API accepte "tags" en
+// chaîne de libellés séparés par des virgules ; un seul ici). Wallabag crée
+// le tag automatiquement s'il n'existe pas encore.
+const WALLABAG_TAG = "DailySpoon";
+
 /** Poste une URL d'article sur Wallabag (l'archive/le "traite" côté Wallabag,
- *  avec sa propre extraction de contenu). Wallabag déduplique lui-même par
- *  URL : renvoyer deux fois la même URL ne crée pas de doublon, il met à jour
- *  l'entrée existante — donc re-cocher un favori déjà envoyé est sans risque. */
+ *  avec sa propre extraction de contenu), en le marquant du tag DailySpoon.
+ *  Wallabag déduplique lui-même par URL : renvoyer deux fois la même URL ne
+ *  crée pas de doublon, il met à jour l'entrée existante (et lui ajoute le tag
+ *  s'il manquait) — donc re-cocher un favori déjà envoyé est sans risque. */
 async function postEntry(creds: WallabagCreds, token: string, url: string): Promise<void> {
   const res = await fetchWithTimeout(
     `${creds.baseUrl}/api/entries.json`,
@@ -96,7 +103,7 @@ async function postEntry(creds: WallabagCreds, token: string, url: string): Prom
         Accept: "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ url })
+      body: JSON.stringify({ url, tags: WALLABAG_TAG })
     },
     12000
   );
