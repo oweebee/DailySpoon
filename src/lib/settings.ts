@@ -69,6 +69,11 @@ export type AppSettings = {
   wallabagClientSecret: string;
   wallabagUsername: string;
   wallabagPassword: string;
+  /** Mot de passe dédié à l'API Google Reader (lecteur externe type Readrops,
+   *  voir src/lib/greader.ts). Vide = le ClientLogin accepte le mot de passe
+   *  admin (rétrocompat). À privilégier en lettres/chiffres pour éviter les
+   *  soucis d'encodage form-urlencoded d'un mot de passe admin complexe. */
+  greaderApiPassword: string;
 };
 
 /**
@@ -108,7 +113,8 @@ export async function getSettings(): Promise<AppSettings> {
     wallabagClientId: row?.wallabagClientId || process.env.WALLABAG_CLIENT_ID || "",
     wallabagClientSecret: row?.wallabagClientSecret || process.env.WALLABAG_CLIENT_SECRET || "",
     wallabagUsername: row?.wallabagUsername || process.env.WALLABAG_USERNAME || "",
-    wallabagPassword: row?.wallabagPassword || process.env.WALLABAG_PASSWORD || ""
+    wallabagPassword: row?.wallabagPassword || process.env.WALLABAG_PASSWORD || "",
+    greaderApiPassword: row?.greaderApiPassword || process.env.GREADER_API_PASSWORD || ""
   };
 }
 
@@ -130,7 +136,8 @@ const STRING_FIELDS = [
   "wallabagClientId",
   "wallabagClientSecret",
   "wallabagUsername",
-  "wallabagPassword"
+  "wallabagPassword",
+  "greaderApiPassword"
 ] as const;
 
 export type SettingsInput = Partial<{
@@ -159,6 +166,7 @@ export type SettingsInput = Partial<{
   wallabagClientSecret: string | null;
   wallabagUsername: string | null;
   wallabagPassword: string | null;
+  greaderApiPassword: string | null;
 }>;
 
 /**

@@ -62,11 +62,31 @@ export async function isAuthorized(authHeader: string | null): Promise<boolean> 
   return diff === 0;
 }
 
+/** Comparaison à temps constant de deux chaînes (mot de passe API dédié). */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Vrai si le mot de passe fourni au ClientLogin est valide : soit le mot de
+ *  passe API DÉDIÉ (greaderApiPassword, s'il est défini dans /admin/settings),
+ *  soit le mot de passe admin (rétrocompat, toujours accepté). Le mot de passe
+ *  dédié existe justement pour éviter les caractères spéciaux d'un mot de passe
+ *  admin complexe qui se déforment en form-urlencoded lors du transit depuis le
+ *  lecteur (Readrops) et provoquent un 403 alors que le mot de passe est bon. */
+async function credentialMatches(provided: string): Promise<boolean> {
+  const { greaderApiPassword } = await getSettings();
+  if (greaderApiPassword && constantTimeEqual(provided, greaderApiPassword)) return true;
+  return isCorrectPassword(provided);
+}
+
 /** Réponse texte de /accounts/ClientLogin. Email accepté tel quel (on ne gère
- *  qu'un seul compte, "dailyspoon") ; seul le mot de passe (= mot de passe
- *  admin) est vérifié. Renvoie null si le mot de passe est faux. */
+ *  qu'un seul compte, "dailyspoon") ; seul le mot de passe est vérifié (voir
+ *  credentialMatches). Renvoie null si le mot de passe est faux. */
 export async function clientLogin(password: string): Promise<string | null> {
-  if (!isCorrectPassword(password)) return null;
+  if (!(await credentialMatches(password))) return null;
   const token = await buildAuthToken();
   return `SID=${token}\nLSID=${token}\nAuth=${token}\n`;
 }

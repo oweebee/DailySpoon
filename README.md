@@ -175,6 +175,13 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
 - **PWA** : DailySpoon est installable sur mobile et bureau (« Ajouter à l'écran d'accueil » /
   « Installer »), avec sa propre icône ; sur mobile, le bouton/geste retour referme la fenêtre de
   lecture d'un article plutôt que de quitter la page.
+- **Lecteur RSS externe (compatible FreshRSS)** : DailySpoon expose une API Google Reader à
+  `/api/greader.php`, donc n'importe quel lecteur RSS compatible FreshRSS/Google Reader peut s'y
+  connecter comme à un FreshRSS et lire tes flux (avec synchro lu/non-lu et étoile — l'étoile
+  correspond au favori DailySpoon, donc envoyé aussi à Wallabag). Dans le lecteur : compte de type
+  FreshRSS, adresse = l'URL de DailySpoon, identifiant `dailyspoon`, mot de passe = le code API
+  généré dans `/admin/settings` (un code à 8 chiffres, bouton « Régénérer » ; à défaut le mot de
+  passe admin est aussi accepté). Le texte servi est toujours brut (0 IA), comme « En direct ».
 - La rétention de l'historique (articles ET éditions) se règle dans `/admin/settings` (2 ans par
   défaut, 0 = illimité) ; les articles marqués favoris ne sont jamais purgés.
 - Un journal technique (`/admin/logs`) trace récupérations de flux, générations et appels IA, avec

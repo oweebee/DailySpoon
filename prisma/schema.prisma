@@ -420,6 +420,15 @@ model Settings {
   wallabagClientSecret String?
   wallabagUsername     String?
   wallabagPassword     String?
+  // Mot de passe dédié pour l'API Google Reader (lecteur externe type
+  // Readrops, voir src/lib/greader.ts). Optionnel : s'il est vide, le
+  // ClientLogin accepte le mot de passe admin (rétrocompat). Recommandé de
+  // mettre ici un code SIMPLE (lettres/chiffres) : Readrops transmet ce mot
+  // de passe en form-urlencoded, où certains caractères spéciaux d'un mot de
+  // passe admin complexe se déforment (d'où des 403 « BadAuthentication »
+  // alors que le mot de passe est correct). Identifiant fixe côté client :
+  // "dailyspoon".
+  greaderApiPassword   String?
   updatedAt           DateTime @default(now()) @updatedAt
 }
 

@@ -28,6 +28,7 @@ type SettingsForm = {
   wallabagClientSecret: string;
   wallabagUsername: string;
   wallabagPassword: string;
+  greaderApiPassword: string;
 };
 
 const EMPTY: SettingsForm = {
@@ -54,7 +55,8 @@ const EMPTY: SettingsForm = {
   wallabagClientId: "",
   wallabagClientSecret: "",
   wallabagUsername: "",
-  wallabagPassword: ""
+  wallabagPassword: "",
+  greaderApiPassword: ""
 };
 
 // Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
@@ -131,6 +133,8 @@ export default function AdminSettingsPage() {
   const [testingWallabag, setTestingWallabag] = useState(false);
   const [wallabagResult, setWallabagResult] = useState<TestResult | null>(null);
 
+  const [generatingCode, setGeneratingCode] = useState(false);
+
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
@@ -167,7 +171,8 @@ export default function AdminSettingsPage() {
           wallabagClientId: s.wallabagClientId || "",
           wallabagClientSecret: s.wallabagClientSecret || "",
           wallabagUsername: s.wallabagUsername || "",
-          wallabagPassword: s.wallabagPassword || ""
+          wallabagPassword: s.wallabagPassword || "",
+          greaderApiPassword: s.greaderApiPassword || ""
         });
         // Clé déjà enregistrée : charge tout de suite la liste des moteurs
         // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
@@ -250,7 +255,8 @@ export default function AdminSettingsPage() {
       wallabagClientId: form.wallabagClientId,
       wallabagClientSecret: form.wallabagClientSecret,
       wallabagUsername: form.wallabagUsername,
-      wallabagPassword: form.wallabagPassword
+      wallabagPassword: form.wallabagPassword,
+      greaderApiPassword: form.greaderApiPassword
     };
   }
 
@@ -325,6 +331,26 @@ export default function AdminSettingsPage() {
       setWallabagResult({ ok: false, message: body.error || "Échec du test." });
     } else {
       setWallabagResult({ ok: body.ok, message: body.message });
+    }
+  }
+
+  // Code API du lecteur RSS externe : généré par l'app, jamais saisi à la main.
+  // 8 chiffres. Régénérer produit un nouveau code ET l'enregistre tout de suite
+  // (POST du seul champ concerné) pour qu'il soit actif immédiatement, sans
+  // dépendre du bouton « Enregistrer » global — évite de générer un code,
+  // oublier d'enregistrer, et se demander pourquoi le lecteur ne se connecte pas.
+  async function regenerateGreaderCode() {
+    setGeneratingCode(true);
+    const code = String(Math.floor(Math.random() * 100_000_000)).padStart(8, "0");
+    set("greaderApiPassword", code);
+    try {
+      await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ greaderApiPassword: code })
+      });
+    } finally {
+      setGeneratingCode(false);
     }
   }
 
@@ -589,6 +615,46 @@ export default function AdminSettingsPage() {
               >
                 {testingWallabag ? "Test en cours..." : "Tester la connexion"}
               </button>
+            </div>
+          </fieldset>
+
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">
+              Lecteur RSS externe (compatible FreshRSS)
+            </legend>
+            <p className="text-xs italic text-sepia">
+              DailySpoon expose une API compatible FreshRSS (Google Reader) : tu peux le brancher à
+              n’importe quel lecteur RSS externe compatible pour lire tes flux, avec synchro
+              lu/non-lu et étoile (l’étoile = favori DailySpoon, envoyé aussi à Wallabag).
+              <br />
+              Dans le lecteur : compte de type <strong>FreshRSS</strong>, adresse{" "}
+              <code>{typeof window !== "undefined" ? window.location.origin : ""}</code>, identifiant{" "}
+              <code>dailyspoon</code>, et le <strong>code à 8 chiffres</strong> ci-dessous comme mot
+              de passe. Le code est généré par l’app (pas de saisie) ; « Régénérer » en crée un
+              nouveau et l’active aussitôt — les lecteurs déjà connectés devront alors mettre à jour
+              le code.
+            </p>
+            <div>
+              <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
+                Code API (mot de passe du lecteur)
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <code className="select-all rounded-sm border border-ink/40 bg-paper px-4 py-2 font-mono text-lg tracking-[0.3em] text-ink">
+                  {form.greaderApiPassword || "————————"}
+                </code>
+                <button
+                  type="button"
+                  onClick={regenerateGreaderCode}
+                  disabled={generatingCode}
+                  className="border border-ink/40 px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-journal hover:bg-ink/5 disabled:opacity-50"
+                >
+                  {generatingCode
+                    ? "Génération..."
+                    : form.greaderApiPassword
+                      ? "Régénérer"
+                      : "Générer un code"}
+                </button>
+              </div>
             </div>
           </fieldset>
 
