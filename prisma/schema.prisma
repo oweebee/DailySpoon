@@ -382,7 +382,7 @@ model Settings {
   // passif-agressif, cynique et drôle inspiré d'Ackboo/Canard PC). Sans
   // effet sur /direct, qui reste toujours sans IA.
   writingStyle        String?
-  // Base d'une instance morss (ex. "https://morss.obsidianspoon.com"),
+  // Base d'une instance morss (ex. "https://morss.exemple.com"),
   // utilisée en repli par /api/article-proxy quand le fetch direct d'un
   // article échoue (403, anti-bot NYTimes/Cloudflare...) — voir settings.ts.
   morssBaseUrl        String?

@@ -36,7 +36,7 @@ export type AppSettings = {
    *  (ton sarcastique/passif-agressif façon Ackboo, Canard PC). Sans effet
    *  sur /direct, toujours sans IA quel que soit ce réglage. */
   writingStyle: string;
-  /** Base d'une instance morss (ex. "https://morss.obsidianspoon.com"),
+  /** Base d'une instance morss (ex. "https://morss.exemple.com"),
    *  utilisée en repli par /api/article-proxy quand le fetch direct d'un
    *  article échoue (403, blocage anti-bot type NYTimes/Cloudflare...) —
    *  morss fait la requête depuis SA propre IP, qui n'est pas forcément

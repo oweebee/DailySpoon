@@ -103,7 +103,7 @@ Dans Coolify :
 4. Au démarrage, `web` et `worker` attendent que `db` soit prête (healthcheck), puis exécutent
    automatiquement `prisma migrate deploy` avant de se lancer (voir `docker-entrypoint.sh`).
 5. Pas de port à ouvrir toi-même : dans la configuration du service `web` sur Coolify, renseigne
-   le champ **Domains** (ex: `https://dailyspoon.obsidianspoon.com`) et vérifie que le port exposé
+   le champ **Domains** (ex: `https://ton-sous-domaine.exemple.com`) et vérifie que le port exposé
    détecté est bien `3000`. Coolify configure Traefik automatiquement (certificat HTTPS compris) et
    route ce domaine directement vers le conteneur via son réseau interne. Assure-toi juste que le
    sous-domaine pointe (DNS) vers ton serveur Coolify.
