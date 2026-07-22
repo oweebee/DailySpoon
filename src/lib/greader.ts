@@ -363,7 +363,13 @@ function buildItem(a: {
     published: publishedSec,
     title: a.sourceTitle, // texte BRUT du flux, jamais l'IA
     summary: { content: a.sourceExcerpt || "" },
-    alternate: [{ href: a.sourceUrl, type: "text/html" }],
+    // IMPORTANT : n'émettre QUE { href } dans alternate/canonical. Le parseur
+    // strict de certains lecteurs (Readrops) lit href puis exige la fin de
+    // l'objet ; tout champ derrière (ex. "type") provoque une ParseException
+    // « Expected END_OBJECT but was NAME at $.items[0].alternate[0].href » qui
+    // fait échouer TOUTE la synchro (bug Readrops connu, cf. FreshRSS #4567 —
+    // même cause que l'itemRefs.id plus haut).
+    alternate: [{ href: a.sourceUrl }],
     canonical: [{ href: a.sourceUrl }],
     categories,
     origin: { streamId: feedStreamId(a.feedId, a.feedTitle), title: a.feedTitle, htmlUrl },
