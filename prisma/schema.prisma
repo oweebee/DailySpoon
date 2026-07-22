@@ -180,6 +180,21 @@ model Article {
 
   favorite       Boolean   @default(false) // marqué favori depuis l'étoile shérif, page /favoris
   favoritedAt    DateTime? // date de mise en favori, affichée sur /favoris
+
+  // Compatibilité API Google Reader (voir src/lib/greader.ts) — permet de
+  // connecter DailySpoon à un lecteur externe type Readrops comme s'il
+  // s'agissait d'un FreshRSS.
+  // - greaderId : identifiant numérique STABLE exigé par l'API Google Reader
+  //   (les item id y sont des entiers 64 bits, pas des cuid). Séquence
+  //   dédiée (SERIAL), attribuée automatiquement par la base (jamais fournie
+  //   à l'insertion) — voir la migration.
+  // - readState : état lu/non-lu, propre à l'API Google Reader (l'UI de
+  //   DailySpoon n'a pas cette notion). false = non lu (nouvel article),
+  //   basculé par edit-tag depuis le lecteur externe. Les articles déjà en
+  //   base à la migration sont marqués lus (true) pour ne pas apparaître
+  //   comme des milliers de non-lus au premier branchement.
+  greaderId      Int       @unique @default(autoincrement())
+  readState      Boolean   @default(false)
   medal          Boolean   @default(false) // flux "médaillé" (voir MedalFeed) : badge sur la photo + éligible à la une
 
   // false si le flux est exclu ou la catégorie décochée dans /admin au

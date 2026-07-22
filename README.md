@@ -10,6 +10,13 @@ catégorie, avec recherche dans tout l'historique et bouton « Télégraphier le
 **favoris** (`/favoris`, étoile shérif), et les **archives** (`/archive`, chaque impression figée
 telle quelle, consultable par date).
 
+Les articles s'ouvrent **directement dans l'appli** (fenêtre de lecture propre, extraction façon
+Reader View, avec repli morss pour les sites qui bloquent), sans quitter DailySpoon. Deux
+intégrations optionnelles complètent le tout : **notifications Telegram** (photo + légende poussée
+pour chaque nouvel article des flux cochés « notification ») et **Wallabag** (mettre un article en
+favori l'envoie à ton instance Wallabag pour archivage, avec un tag `DailySpoon`). L'appli est aussi
+**installable en PWA** sur mobile et bureau (icône sur l'écran d'accueil).
+
 ## Stack
 
 - Next.js 14 (App Router) + Tailwind — front + API routes
@@ -57,11 +64,13 @@ Copie `.env.example` vers `.env` (en local) ou renseigne-les directement dans Co
 - `EDITION_HOUR` / `EDITION_MINUTE` / `EDITION_TZ` — heure de génération quotidienne (par défaut 6h00 Europe/Paris)
 
 La plupart des réglages applicatifs (FreshRSS, fournisseur IA Anthropic/Gemini et modèles, heure
-et activation du planning, style d'écriture, rétention, instance morss, intervalle des flux
-perso...) se règlent ensuite directement dans `/admin/settings`, sans redéploiement — les
-variables d'environnement ne servent que de valeurs de repli quand un champ y est laissé vide
-(`AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `RETENTION_DAYS`, `EDITION_SCHEDULE_ENABLED`,
-`WRITING_STYLE`, `MORSS_BASE_URL` existent aussi en variables d'env pour ça).
+et activation du planning, style d'écriture, rétention, instance morss, intervalle des flux perso,
+notifications Telegram, intégration Wallabag...) se règlent ensuite directement dans
+`/admin/settings`, sans redéploiement — les variables d'environnement ne servent que de valeurs de
+repli quand un champ y est laissé vide (`AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`,
+`RETENTION_DAYS`, `EDITION_SCHEDULE_ENABLED`, `WRITING_STYLE`, `MORSS_BASE_URL`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHAT_ID`, `WALLABAG_BASE_URL`, `WALLABAG_CLIENT_ID`, `WALLABAG_CLIENT_SECRET`,
+`WALLABAG_USERNAME`, `WALLABAG_PASSWORD` existent aussi en variables d'env pour ça).
 
 ## 3. Pousser le code sur GitHub
 
@@ -115,7 +124,10 @@ Une fois déployé :
    du planning d'édition — un bouton **Tester les réglages** vérifie la connexion avant
    d'enregistrer. Ces valeurs remplacent les variables d'environnement correspondantes une fois
    enregistrées ici, sans redéploiement ; laisse un champ vide pour revenir à la variable
-   d'environnement.
+   d'environnement. C'est aussi ici que se configurent les deux intégrations optionnelles :
+   **Telegram** (jeton du bot + id du chat, avec un bouton de test d'envoi) et **Wallabag** (URL de
+   l'instance + client id/secret OAuth2 + identifiant/mot de passe, avec un bouton « Tester la
+   connexion »).
 3. Dans `/admin/categories`, coche les catégories FreshRSS à inclure (liste chargée en direct
    depuis FreshRSS), règle indépendamment « En direct » et « Impression IA » par catégorie, et
    ajoute si tu veux des flux RSS personnalisés (avec leurs catégories personnalisées) et des
@@ -147,6 +159,22 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
   style et les tokens consommés de cette impression précise) — régénérer le même jour n'écrase
   jamais une impression précédente. Les doublons stricts et les brouillons vides ne sont pas
   conservés.
+- Les articles se lisent dans une fenêtre interne (extraction façon Reader View côté serveur, servie
+  depuis notre propre domaine pour contourner les blocages iframe des sites) ; quand le site source
+  bloque le fetch serveur, un repli **morss** est tenté (si une instance est configurée), et en
+  dernier recours l'aperçu déjà récupéré depuis le flux est affiché. **En direct** reste toujours
+  100 % sans IA : sa fenêtre de lecture et ses vignettes montrent le texte brut du flux, jamais un
+  résumé réécrit par l'IA (même après une impression IA).
+- **Notifications Telegram** (optionnel) : coche « notification » sur un flux dans
+  `/admin/categories` pour recevoir une photo + légende dans ton canal Telegram à chaque nouvel
+  article de ce flux. Configuration et bouton de test dans `/admin/settings`.
+- **Wallabag** (optionnel) : une fois l'instance renseignée dans `/admin/settings`, mettre un
+  article en favori envoie son lien à Wallabag pour archivage, avec le tag `DailySpoon`. Envoi
+  uniquement à l'ajout du favori (jamais au retrait), best-effort et non bloquant (un souci Wallabag
+  ne fait jamais échouer la mise en favori locale ; les échecs sont tracés dans `/admin/logs`).
+- **PWA** : DailySpoon est installable sur mobile et bureau (« Ajouter à l'écran d'accueil » /
+  « Installer »), avec sa propre icône ; sur mobile, le bouton/geste retour referme la fenêtre de
+  lecture d'un article plutôt que de quitter la page.
 - La rétention de l'historique (articles ET éditions) se règle dans `/admin/settings` (2 ans par
   défaut, 0 = illimité) ; les articles marqués favoris ne sont jamais purgés.
 - Un journal technique (`/admin/logs`) trace récupérations de flux, générations et appels IA, avec

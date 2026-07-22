@@ -7,7 +7,17 @@ import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 // - /admin/login et /api/admin/login : nécessaires pour se connecter
 // - /api/cron/generate : appelé par le cron avec CRON_SECRET (la route
 //   fait sa propre vérification d'auth)
-const PUBLIC_PATHS = ["/admin/login", "/api/admin/login", "/api/cron/generate"];
+// - /api/greader.php : API Google Reader pour lecteurs externes type Readrops
+//   (voir src/lib/greader.ts). Readrops ne possède pas le cookie de session
+//   admin : il s'authentifie via l'en-tête "Authorization: GoogleLogin auth=…"
+//   (jeton obtenu par ClientLogin, dérivé du mot de passe admin) — la route
+//   fait donc sa PROPRE vérification d'auth sur chaque appel.
+const PUBLIC_PATHS = [
+  "/admin/login",
+  "/api/admin/login",
+  "/api/cron/generate",
+  "/api/greader.php"
+];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

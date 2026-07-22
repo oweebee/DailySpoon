@@ -27,23 +27,49 @@ export default async function DirectPage() {
   // item.origin.streamId manquait à l'ingestion) est du FreshRSS et doit
   // disparaître : un feedId null n'est jamais un flux perso, l'inclure "par
   // prudence" laissait justement passer tous les vieux articles FreshRSS.
-  const [latestEdition, articles, selectedCategories] = await Promise.all([
+  // Filtre commun à toutes les requêtes d'articles ci-dessous : voir plus haut
+  // (FreshRSS désactivé -> uniquement les flux perso "custom-feed:").
+  const feedFilter = freshrssEnabled ? {} : { feedId: { startsWith: "custom-feed:" } };
+
+  const [latestEdition, selectedCategories, distinctLabels] = await Promise.all([
     // "generatedAt" en second critère : plusieurs éditions peuvent désormais
     // partager la même date (une par régénération), sinon l'ordre entre
     // elles n'est pas garanti et le masthead pourrait afficher une date
     // correcte mais issue d'une édition qui n'est pas vraiment la dernière.
     prisma.edition.findFirst({ orderBy: [{ date: "desc" }, { generatedAt: "desc" }] }),
+    prisma.selectedCategory.findMany({ orderBy: { order: "asc" } }),
+    // Les LIBELLÉS de catégorie distincts présents parmi les articles à
+    // afficher — pour ensuite récupérer les plus récents CATÉGORIE PAR
+    // CATÉGORIE (voir plus bas).
     prisma.article.findMany({
-      where: {
-        processed: true,
-        included: true,
-        ...(freshrssEnabled ? {} : { feedId: { startsWith: "custom-feed:" } })
-      },
-      orderBy: { publishedAt: "desc" },
-      take: 1000
-    }),
-    prisma.selectedCategory.findMany({ orderBy: { order: "asc" } })
+      where: { processed: true, included: true, ...feedFilter },
+      select: { categoryLabel: true },
+      distinct: ["categoryLabel"]
+    })
   ]);
+
+  // Récupération des plus récents PAR CATÉGORIE plutôt qu'un plafond global.
+  // Avant, un simple `take: 1000` trié par date toutes catégories confondues
+  // coupait la queue la plus ancienne — et une catégorie qui publie moins vite
+  // (ex. un journal scientifique dont le dernier article date de plusieurs
+  // jours) voyait TOUS ses articles tomber hors de ces 1000, donc disparaissait
+  // ENTIÈREMENT d'« En direct » alors que ses articles étaient bien inclus (bug
+  // "catégorie Science absente", constaté avec 1288 articles inclus > 1000).
+  // Ici chaque catégorie est garantie représentée par ses propres articles
+  // récents, quelle que soit sa cadence de publication. Le plafond par
+  // catégorie reste large (bien au-delà de ce qu'une colonne affiche, même
+  // déroulée) — c'est juste un garde-fou de volume, pas une curation.
+  const PER_CATEGORY_LIMIT = 250;
+  const perCategory = await Promise.all(
+    distinctLabels.map((row) =>
+      prisma.article.findMany({
+        where: { processed: true, included: true, ...feedFilter, categoryLabel: row.categoryLabel },
+        orderBy: { publishedAt: "desc" },
+        take: PER_CATEGORY_LIMIT
+      })
+    )
+  );
+  const articles = perCategory.flat();
   const categoryOrder = selectedCategories.map((c) => ({ freshrssId: c.freshrssId, label: c.label }));
   const editionDate = latestEdition?.date ?? new Date();
 
