@@ -38,15 +38,23 @@ function proxyVideoUrl(absoluteUrl: string): string {
 function looksLikeLazyPlaceholder(src: string): boolean {
   if (!src.trim()) return true;
   if (src.startsWith("data:image") && src.length < 200) return true;
-  return /placeholder|blank\.gif|spacer\.gif|1x1\.(?:gif|png)/i.test(src);
+  // "gray.svg"/"backgrounds/gray..." (Gamekult confirmé en usage réel, voir
+  // resolveImgSrc) : image de fond grise servant de squelette de chargement
+  // tant que le JS du site n'a pas injecté la vraie image — jamais du vrai
+  // contenu, quel que soit le nom exact du fichier de fond utilisé.
+  return /placeholder|blank\.gif|spacer\.gif|1x1\.(?:gif|png)|\/backgrounds?\/gray/i.test(src);
 }
 
 /** Beaucoup de sites (Gamekult confirmé en usage réel) chargent leurs
  *  images en lazy-load : le vrai chemin n'est présent que dans un attribut
- *  data-* (data-src, data-lazy-src, data-original, ou le premier candidat
- *  d'un data-srcset), tant que "src" ne contient qu'un pixel/placeholder —
- *  sans ce repli, l'image proxifiée pointe vers ce placeholder et reste
- *  invisible. Retourne l'URL à utiliser, ou null si vraiment aucune trouvée. */
+ *  data-* (data-src, data-lazy-src, data-original, data-img-src-default, ou
+ *  le premier candidat d'un data-srcset), tant que "src" ne contient qu'un
+ *  pixel/placeholder — sans ce repli, l'image proxifiée pointe vers ce
+ *  placeholder et reste invisible. Retourne l'URL à utiliser, ou null si
+ *  vraiment aucune trouvée (voir rewriteContentImages : dans ce cas précis,
+ *  mieux vaut retirer l'image que servir/afficher le placeholder gris tel
+ *  quel).
+ */
 function resolveImgSrc(el: Element): string | null {
   const src = el.getAttribute("src");
   if (src && !looksLikeLazyPlaceholder(src)) return src;
@@ -54,9 +62,19 @@ function resolveImgSrc(el: Element): string | null {
     el.getAttribute("data-src") ||
     el.getAttribute("data-lazy-src") ||
     el.getAttribute("data-original") ||
+    el.getAttribute("data-img-src-default") ||
     el.getAttribute("data-srcset")?.split(",")[0]?.trim().split(/\s+/)[0] ||
     null;
-  return lazyCandidate || src || null;
+  // Contrairement à avant, on ne retombe PLUS sur "src" tel quel quand aucun
+  // candidat lazy n'a été trouvé : "src" à ce stade N'EST QUE le placeholder
+  // (on vient d'établir looksLikeLazyPlaceholder(src) === true ci-dessus) —
+  // le proxifier ne ferait qu'afficher un rectangle gris vide. Vu en usage
+  // réel sur Gamekult : le vrai chemin n'est présent NULLE PART dans le HTML
+  // statique (chargé par le JS du site via un simple index numérique,
+  // data-gt-index, jamais l'URL elle-même) — pas de repli possible dans ce
+  // cas, autant retirer l'image (voir rewriteContentImages) plutôt que
+  // montrer un carré gris cassé.
+  return lazyCandidate || null;
 }
 
 /** Réécrit tous les src d'images/sources d'un fragment de contenu déjà
@@ -74,11 +92,27 @@ function rewriteContentImages(contentDom: JSDOM, baseUrl: string): void {
       } catch {
         // URL déjà relative/invalide, on laisse tel quel plutôt que de planter.
       }
+    } else {
+      const currentSrc = el.getAttribute("src") || "";
+      if (looksLikeLazyPlaceholder(currentSrc)) {
+        // Aucun vrai chemin récupérable (voir resolveImgSrc) : on retire
+        // l'image plutôt que de servir le placeholder gris (un carré gris
+        // cassé est pire qu'une absence d'image). Si c'était le seul contenu
+        // de son <p> parent (cas Gamekult : chaque image lazy est seule dans
+        // son propre <p>), on retire aussi ce <p> devenu vide pour ne pas
+        // laisser un paragraphe blanc fantôme dans le texte.
+        const parent = el.parentElement;
+        el.remove();
+        if (parent && parent.tagName === "P" && !(parent.textContent || "").trim() && parent.children.length === 0) {
+          parent.remove();
+        }
+      }
     }
     el.removeAttribute("srcset");
     el.removeAttribute("data-src");
     el.removeAttribute("data-lazy-src");
     el.removeAttribute("data-original");
+    el.removeAttribute("data-img-src-default");
     el.removeAttribute("data-srcset");
   });
 }
@@ -171,6 +205,21 @@ function isSubstantiveParagraph(el: Element): boolean {
   return true;
 }
 
+// trimLeadingJunk/trimTrailingJunk ne regardent que les enfants DIRECTS de
+// root — mais certains sites (Gamekult confirmé en usage réel, avec le
+// hissage de hoistNestedArticleIfClearlyBetter ci-dessous) enveloppent CHAQUE
+// paragraphe réel dans son propre <div> plutôt que de le poser à plat comme
+// enfant direct : `isSubstantiveParagraph(enfant)` renvoie alors toujours
+// false (l'enfant est un DIV, jamais littéralement un P/BLOCKQUOTE), même
+// quand il CONTIENT un vrai paragraphe. Ce repli élargit la détection : un
+// enfant compte comme "réel" s'il EST un paragraphe substantiel OU s'il en
+// CONTIENT un (recherche récursive) — sans changer le comportement pour tous
+// les sites déjà couverts (un <p> plat continue de se tester tel quel).
+function containsSubstantiveParagraph(el: Element): boolean {
+  if (el.tagName === "P" || el.tagName === "BLOCKQUOTE") return isSubstantiveParagraph(el);
+  return Array.from(el.querySelectorAll("p, blockquote")).some((p) => isSubstantiveParagraph(p));
+}
+
 // Titres qui annoncent quasi-systématiquement une section "articles
 // similaires/récents" en toute fin de page (widget Jetpack Related Posts et
 // équivalents WordPress) — un signal beaucoup plus fiable que "dernier
@@ -219,7 +268,7 @@ function trimTrailingJunk(root: Element): void {
   let lastRealIdx = -1;
   let firstRelatedHeadingIdx = -1;
   children.forEach((el, i) => {
-    if (isSubstantiveParagraph(el)) lastRealIdx = i;
+    if (containsSubstantiveParagraph(el)) lastRealIdx = i;
     if (firstRelatedHeadingIdx === -1 && isRelatedPostsHeading(el)) firstRelatedHeadingIdx = i;
   });
 
@@ -266,11 +315,71 @@ function isLeadingJunkElement(el: Element): boolean {
   return LEADING_JUNK_EXACT_PHRASES.includes(text);
 }
 
+// Sur certains sites (Gamekult confirmé en usage réel), tout le chrome de la
+// page (bandeau "Soutenez-nous", méga-menu mobile replié dans un <nav>,
+// fil d'Ariane, bandeau paywall...) se retrouve dans le bloc que Readability
+// extrait comme contenu, mais PAS en siblings directs du vrai texte comme le
+// supposent trimLeadingJunk/trimTrailingJunk ci-dessous (qui ne regardent que
+// root.children, un seul niveau) — chrome et texte réel sont noyés ensemble
+// dans une pile de wrappers imbriqués (vu en usage réel : DIV>DIV>DIV>
+// SECTION>SECTION>ARTICLE avant d'atteindre le vrai texte), si bien que le
+// tout premier enfant DIRECT de root n'est JAMAIS un <p> substantiel et les
+// deux fonctions ci-dessous abandonnent aussitôt (firstRealIdx/lastRealIdx
+// restent à -1).
+//
+// Signal de repli : un <article> DESCENDANT (pas root lui-même) est une
+// convention HTML5 sémantique fiable pour "voici le vrai contenu" — s'il en
+// existe un contenant une quantité substantielle de texte, on hisse
+// directement SON contenu à la place de celui de root, ce qui élimine d'un
+// coup tout le chrome qui l'entoure, quelle que soit sa profondeur
+// d'imbrication. Choisit le PLUS FOURNI en texte si plusieurs <article>
+// existent (ex. cartes "articles similaires", elles aussi parfois balisées
+// <article> mais avec très peu de texte chacune) plutôt que le premier
+// trouvé, et exige un minimum de texte (200 caractères) pour ne jamais
+// prendre une simple carte de suggestion pour le vrai article. Ne modifie
+// rien si aucun <article> descendant ne se distingue clairement (sécurité :
+// mieux vaut laisser trimLeadingJunk/trimTrailingJunk (ou rien) faire leur
+// travail habituel que de hisser le mauvais candidat).
+const MIN_HOISTED_ARTICLE_TEXT_LENGTH = 200;
+
+function substantiveTextLength(el: Element): number {
+  let total = 0;
+  el.querySelectorAll("p, blockquote").forEach((p) => {
+    if (isSubstantiveParagraph(p)) total += (p.textContent || "").trim().length;
+  });
+  return total;
+}
+
+function hoistNestedArticleIfClearlyBetter(root: Element): void {
+  const candidates = Array.from(root.querySelectorAll("article")).filter((el) => el !== root);
+  if (candidates.length === 0) return;
+
+  let best: Element | null = null;
+  let bestLen = 0;
+  for (const el of candidates) {
+    const len = substantiveTextLength(el);
+    if (len > bestLen) {
+      best = el;
+      bestLen = len;
+    }
+  }
+  if (!best || bestLen < MIN_HOISTED_ARTICLE_TEXT_LENGTH) return;
+
+  // Rien à gagner (et un risque de perdre du vrai texte) si le meilleur
+  // <article> trouvé représente déjà la quasi-totalité du texte substantiel
+  // de root : dans ce cas root n'a probablement pas de chrome imbriqué
+  // ailleurs qui vaille la peine d'être coupé par ce hissage.
+  const rootLen = substantiveTextLength(root);
+  if (bestLen >= rootLen - 10) return;
+
+  root.innerHTML = best.innerHTML;
+}
+
 function trimLeadingJunk(root: Element): void {
   const children = Array.from(root.children);
   let firstRealIdx = -1;
   for (let i = 0; i < children.length; i++) {
-    if (isSubstantiveParagraph(children[i])) {
+    if (containsSubstantiveParagraph(children[i])) {
       firstRealIdx = i;
       break;
     }
@@ -1232,6 +1341,12 @@ export async function GET(req: NextRequest) {
 
     const rootEl = contentDom.window.document.getElementById("root");
     if (rootEl) {
+      // AVANT trimTrailingJunk/trimLeadingJunk (voir leur commentaire de
+      // tête) : élimine d'abord le chrome noyé sur plusieurs niveaux
+      // d'imbrication (Gamekult...) si un <article> descendant se dégage
+      // clairement, puis les deux passes habituelles nettoient ce qui reste
+      // (byline dupliqué, "articles similaires" en fin d'ARTICLE lui-même).
+      hoistNestedArticleIfClearlyBetter(rootEl);
       trimTrailingJunk(rootEl);
       trimLeadingJunk(rootEl);
     }
