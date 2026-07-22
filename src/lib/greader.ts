@@ -318,10 +318,13 @@ export async function streamItemsIds(params: StreamParams) {
   const hasMore = rows.length > params.n;
   const page = hasMore ? rows.slice(0, params.n) : rows;
 
+  // IMPORTANT : n'émettre QUE { id } ici. Le parseur de certains lecteurs
+  // (Readrops) lit l'id puis attend immédiatement la fin de l'objet — tout
+  // champ supplémentaire (timestampUsec, directStreamIds…) provoque une
+  // ParseException « Expected END_OBJECT but was NAME at $.itemRefs[0].id ».
+  // C'est aussi le comportement par défaut de FreshRSS pour cet endpoint.
   const itemRefs = page.map((r) => ({
-    id: toDecimalItemId(r.greaderId),
-    timestampUsec: usec(r.publishedAt),
-    directStreamIds: [feedStreamId(r.feedId, r.feedTitle)]
+    id: toDecimalItemId(r.greaderId)
   }));
 
   const result: { itemRefs: typeof itemRefs; continuation?: string } = { itemRefs };
