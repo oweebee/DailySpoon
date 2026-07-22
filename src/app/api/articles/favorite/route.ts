@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendFavoriteToWallabag } from "@/lib/wallabagSend";
 
 async function assertAuthed(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -19,10 +20,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "articleId et favorite sont requis" }, { status: 400 });
   }
 
-  await prisma.article.update({
+  const updated = await prisma.article.update({
     where: { id: articleId },
-    data: { favorite, favoritedAt: favorite ? new Date() : null }
+    data: { favorite, favoritedAt: favorite ? new Date() : null },
+    select: { sourceUrl: true }
   });
+
+  // Intégration Wallabag (si configurée dans /admin/settings) : mettre en
+  // favori envoie le lien de l'article à Wallabag pour archivage. UNIQUEMENT
+  // à l'ajout (favorite === true), jamais au retrait (choix explicite : on ne
+  // supprime rien côté Wallabag). Best-effort et non bloquant : on n'attend
+  // PAS la fin de l'envoi pour répondre, et sendFavoriteToWallabag ne lève
+  // jamais (échec tracé dans /admin/logs) — un souci Wallabag ne doit pas
+  // faire échouer la mise en favori locale ni ralentir l'UI. Ne fait rien
+  // silencieusement si l'intégration n'est pas configurée.
+  if (favorite && updated.sourceUrl) {
+    void sendFavoriteToWallabag(updated.sourceUrl);
+  }
 
   return NextResponse.json({ ok: true });
 }

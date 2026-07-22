@@ -59,6 +59,16 @@ export type AppSettings = {
    *  notification, voir NotifyFeed et src/lib/telegramNotify.ts). */
   telegramBotToken: string;
   telegramChatId: string;
+  /** Intégration Wallabag : mettre un article en favori envoie son lien à
+   *  Wallabag pour archivage (voir src/lib/wallabagSend.ts). Wallabag n'a pas
+   *  de simple clé API — il exige un flux OAuth2 "password grant", d'où ces 5
+   *  champs. wallabagBaseUrl vide (ou l'un des identifiants manquant) =
+   *  intégration inactive, le favori ne fait rien de plus qu'avant. */
+  wallabagBaseUrl: string;
+  wallabagClientId: string;
+  wallabagClientSecret: string;
+  wallabagUsername: string;
+  wallabagPassword: string;
 };
 
 /**
@@ -91,7 +101,14 @@ export async function getSettings(): Promise<AppSettings> {
     customFeedsIntervalMinutes: row?.customFeedsIntervalMinutes ?? 60,
     logRetentionMinutes: row?.logRetentionMinutes ?? 1440,
     telegramBotToken: row?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "",
-    telegramChatId: row?.telegramChatId || process.env.TELEGRAM_CHAT_ID || ""
+    telegramChatId: row?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "",
+    // On retire un éventuel "/" final de l'URL de l'instance (comme morssBaseUrl)
+    // pour construire proprement les chemins ensuite (voir wallabagSend.ts).
+    wallabagBaseUrl: (row?.wallabagBaseUrl || process.env.WALLABAG_BASE_URL || "").replace(/\/+$/, ""),
+    wallabagClientId: row?.wallabagClientId || process.env.WALLABAG_CLIENT_ID || "",
+    wallabagClientSecret: row?.wallabagClientSecret || process.env.WALLABAG_CLIENT_SECRET || "",
+    wallabagUsername: row?.wallabagUsername || process.env.WALLABAG_USERNAME || "",
+    wallabagPassword: row?.wallabagPassword || process.env.WALLABAG_PASSWORD || ""
   };
 }
 
@@ -108,7 +125,12 @@ const STRING_FIELDS = [
   "writingStyle",
   "morssBaseUrl",
   "telegramBotToken",
-  "telegramChatId"
+  "telegramChatId",
+  "wallabagBaseUrl",
+  "wallabagClientId",
+  "wallabagClientSecret",
+  "wallabagUsername",
+  "wallabagPassword"
 ] as const;
 
 export type SettingsInput = Partial<{
@@ -132,6 +154,11 @@ export type SettingsInput = Partial<{
   logRetentionMinutes: number | null;
   telegramBotToken: string | null;
   telegramChatId: string | null;
+  wallabagBaseUrl: string | null;
+  wallabagClientId: string | null;
+  wallabagClientSecret: string | null;
+  wallabagUsername: string | null;
+  wallabagPassword: string | null;
 }>;
 
 /**

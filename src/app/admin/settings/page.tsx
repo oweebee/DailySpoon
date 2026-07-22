@@ -23,6 +23,11 @@ type SettingsForm = {
   customFeedsIntervalMinutes: string;
   telegramBotToken: string;
   telegramChatId: string;
+  wallabagBaseUrl: string;
+  wallabagClientId: string;
+  wallabagClientSecret: string;
+  wallabagUsername: string;
+  wallabagPassword: string;
 };
 
 const EMPTY: SettingsForm = {
@@ -44,7 +49,12 @@ const EMPTY: SettingsForm = {
   morssBaseUrl: "",
   customFeedsIntervalMinutes: "60",
   telegramBotToken: "",
-  telegramChatId: ""
+  telegramChatId: "",
+  wallabagBaseUrl: "",
+  wallabagClientId: "",
+  wallabagClientSecret: "",
+  wallabagUsername: "",
+  wallabagPassword: ""
 };
 
 // Styles d'écriture disponibles pour la réécriture IA — "normal" (ton
@@ -118,6 +128,9 @@ export default function AdminSettingsPage() {
   );
   const [notifyError, setNotifyError] = useState<string | null>(null);
 
+  const [testingWallabag, setTestingWallabag] = useState(false);
+  const [wallabagResult, setWallabagResult] = useState<TestResult | null>(null);
+
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
@@ -149,7 +162,12 @@ export default function AdminSettingsPage() {
               ? s.customFeedsIntervalMinutes.toString()
               : "60",
           telegramBotToken: s.telegramBotToken || "",
-          telegramChatId: s.telegramChatId || ""
+          telegramChatId: s.telegramChatId || "",
+          wallabagBaseUrl: s.wallabagBaseUrl || "",
+          wallabagClientId: s.wallabagClientId || "",
+          wallabagClientSecret: s.wallabagClientSecret || "",
+          wallabagUsername: s.wallabagUsername || "",
+          wallabagPassword: s.wallabagPassword || ""
         });
         // Clé déjà enregistrée : charge tout de suite la liste des moteurs
         // disponibles, pour ne pas obliger à cliquer avant de pouvoir choisir.
@@ -227,7 +245,12 @@ export default function AdminSettingsPage() {
       customFeedsIntervalMinutes:
         form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes),
       telegramBotToken: form.telegramBotToken,
-      telegramChatId: form.telegramChatId
+      telegramChatId: form.telegramChatId,
+      wallabagBaseUrl: form.wallabagBaseUrl,
+      wallabagClientId: form.wallabagClientId,
+      wallabagClientSecret: form.wallabagClientSecret,
+      wallabagUsername: form.wallabagUsername,
+      wallabagPassword: form.wallabagPassword
     };
   }
 
@@ -275,6 +298,33 @@ export default function AdminSettingsPage() {
       setNotifyError(body.error || "Échec du test.");
     } else {
       setNotifyResults(body.results || []);
+    }
+  }
+
+  // Test Wallabag : tente juste d'obtenir un token OAuth2 (password grant)
+  // avec les identifiants du formulaire, sans rien archiver — confirme que
+  // l'URL de l'instance + client id/secret + identifiant/mot de passe sont
+  // corrects avant de compter dessus pour l'envoi au moment d'un favori.
+  async function testWallabag() {
+    setTestingWallabag(true);
+    setWallabagResult(null);
+    const res = await fetch("/api/admin/settings/test-wallabag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        wallabagBaseUrl: form.wallabagBaseUrl,
+        wallabagClientId: form.wallabagClientId,
+        wallabagClientSecret: form.wallabagClientSecret,
+        wallabagUsername: form.wallabagUsername,
+        wallabagPassword: form.wallabagPassword
+      })
+    });
+    const body = await res.json().catch(() => ({}));
+    setTestingWallabag(false);
+    if (!res.ok) {
+      setWallabagResult({ ok: false, message: body.error || "Échec du test." });
+    } else {
+      setWallabagResult({ ok: body.ok, message: body.message });
     }
   }
 
@@ -474,6 +524,72 @@ export default function AdminSettingsPage() {
                 ))}
               </ul>
             )}
+          </fieldset>
+
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Wallabag</legend>
+            <p className="text-xs italic text-sepia">
+              Mettre un article en favori (l’étoile) envoie son lien à Wallabag pour l’archiver.
+              Wallabag n’a pas de simple clé API : crée un client dans Wallabag (Développeur → Gérer
+              les clients API) pour obtenir le client id et le secret, puis renseigne aussi ton
+              identifiant et mot de passe Wallabag. Tout laisser vide désactive l’intégration.
+            </p>
+            <Field
+              label="URL de l’instance"
+              value={form.wallabagBaseUrl}
+              onChange={(v) => set("wallabagBaseUrl", v)}
+              placeholder="https://wallabag.exemple.com"
+            />
+            <Field
+              label="Client ID"
+              value={form.wallabagClientId}
+              onChange={(v) => set("wallabagClientId", v)}
+              type="password"
+              placeholder="1_xxxxxxxxxxxxxxxxxxxxxxxx"
+            />
+            <Field
+              label="Client secret"
+              value={form.wallabagClientSecret}
+              onChange={(v) => set("wallabagClientSecret", v)}
+              type="password"
+              placeholder="xxxxxxxxxxxxxxxxxxxxxxxx"
+            />
+            <Field
+              label="Identifiant Wallabag"
+              value={form.wallabagUsername}
+              onChange={(v) => set("wallabagUsername", v)}
+              placeholder="mon-compte"
+            />
+            <Field
+              label="Mot de passe Wallabag"
+              value={form.wallabagPassword}
+              onChange={(v) => set("wallabagPassword", v)}
+              type="password"
+              placeholder="••••••••"
+            />
+            {wallabagResult && (
+              <p className={`text-sm italic ${wallabagResult.ok ? "text-sepia" : "text-journal"}`}>
+                {wallabagResult.ok ? "✓ " : "✗ "}
+                {wallabagResult.message}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={testWallabag}
+                disabled={
+                  testingWallabag ||
+                  !form.wallabagBaseUrl ||
+                  !form.wallabagClientId ||
+                  !form.wallabagClientSecret ||
+                  !form.wallabagUsername ||
+                  !form.wallabagPassword
+                }
+                className="border border-ink/40 px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-journal hover:bg-ink/5 disabled:opacity-50"
+              >
+                {testingWallabag ? "Test en cours..." : "Tester la connexion"}
+              </button>
+            </div>
           </fieldset>
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">

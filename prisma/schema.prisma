@@ -393,6 +393,18 @@ model Settings {
   // tester la connexion depuis /admin/settings.
   telegramBotToken    String?
   telegramChatId      String?
+  // Intégration Wallabag (read-it-later auto-hébergé) : mettre un article en
+  // favori (étoile shérif) envoie son lien source à Wallabag pour qu'il
+  // l'archive. L'API Wallabag n'a pas de simple clé — elle exige un flux
+  // OAuth2 "password grant" : URL de l'instance + client id/secret (créés
+  // dans Wallabag → API clients management) + identifiant/mot de passe du
+  // compte. Tout vide = intégration inactive (le favori ne fait rien de plus
+  // qu'avant). Voir src/lib/wallabagSend.ts et src/lib/settings.ts.
+  wallabagBaseUrl      String?
+  wallabagClientId     String?
+  wallabagClientSecret String?
+  wallabagUsername     String?
+  wallabagPassword     String?
   updatedAt           DateTime @default(now()) @updatedAt
 }
 
