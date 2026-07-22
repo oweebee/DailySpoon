@@ -84,9 +84,13 @@ async function credentialMatches(provided: string): Promise<boolean> {
 
 /** Réponse texte de /accounts/ClientLogin. Email accepté tel quel (on ne gère
  *  qu'un seul compte, "dailyspoon") ; seul le mot de passe est vérifié (voir
- *  credentialMatches). Renvoie null si le mot de passe est faux. */
+ *  credentialMatches). Renvoie null si le mot de passe est faux.
+ *  On .trim() le mot de passe reçu : certains lecteurs ajoutent un espace ou un
+ *  retour à la ligne parasite en fin de champ, ce qui, avec la comparaison à
+ *  longueur stricte de constantTimeEqual, provoquerait un 403 alors que le code
+ *  est bon. */
 export async function clientLogin(password: string): Promise<string | null> {
-  if (!(await credentialMatches(password))) return null;
+  if (!(await credentialMatches(password.trim()))) return null;
   const token = await buildAuthToken();
   return `SID=${token}\nLSID=${token}\nAuth=${token}\n`;
 }

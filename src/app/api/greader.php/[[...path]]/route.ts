@@ -13,6 +13,7 @@ import {
   editTag,
   markAllAsRead
 } from "@/lib/greader";
+import { writeLog } from "@/lib/logger";
 
 // Prisma -> runtime Node complet (pas edge). Toujours dynamique (dépend de la
 // base et de l'en-tête d'auth, jamais mis en cache).
@@ -66,7 +67,29 @@ async function handle(req: NextRequest, path: string[] | undefined): Promise<Nex
     const email = param(url, form, "Email") || "";
     const passwd = param(url, form, "Passwd") || "";
     const body = await clientLogin(passwd);
-    if (!body) return textResponse("Error=BadAuthentication", 403);
+    // Diagnostic (temporaire) : sur ÉCHEC seulement, on trace ce qui est
+    // réellement arrivé — sans jamais écrire le mot de passe en clair. On note
+    // sa longueur, ses 2 premiers/derniers caractères et les codes de tout
+    // caractère non-alphanumérique (pour repérer un espace/retour/caractère
+    // invisible ajouté par le lecteur). But : trancher "code faux" vs "requête
+    // déformée en transit" sans deviner.
+    if (!body) {
+      const p = passwd;
+      const hidden = [...p]
+        .map((c, i) => (/[a-zA-Z0-9]/.test(c) ? null : `@${i}=${c.charCodeAt(0)}`))
+        .filter(Boolean)
+        .join(",");
+      const preview = p.length <= 4 ? "" : `${p.slice(0, 2)}…${p.slice(-2)}`;
+      void writeLog(
+        "warn",
+        "greader",
+        "ClientLogin refusé (403)",
+        `method=${req.method} ct=${req.headers.get("content-type") || "-"} ` +
+          `emailLen=${email.length} passwdLen=${p.length} preview=${preview} ` +
+          `nonAlnum=[${hidden}] ua=${(req.headers.get("user-agent") || "-").slice(0, 80)}`
+      );
+      return textResponse("Error=BadAuthentication", 403);
+    }
     void email; // accepté tel quel : un seul compte "dailyspoon"
     return textResponse(body);
   }
