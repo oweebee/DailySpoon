@@ -49,7 +49,21 @@ function paramAll(url: URL, form: URLSearchParams | null, key: string): string[]
 
 async function readForm(req: NextRequest): Promise<URLSearchParams | null> {
   if (req.method !== "POST") return null;
+  const ct = req.headers.get("content-type") || "";
   try {
+    // Les lecteurs n'envoient pas tous le même format de corps : Readrops
+    // (okhttp) poste les identifiants en multipart/form-data, d'autres en
+    // application/x-www-form-urlencoded. req.formData() gère NATIVEMENT les
+    // deux ; on convertit ensuite en URLSearchParams pour le reste du code.
+    // (Un mauvais parsing ici renvoyait Email/Passwd vides -> 403 alors que
+    // le mot de passe était bon.)
+    if (ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded")) {
+      const fd = await req.formData();
+      const sp = new URLSearchParams();
+      for (const [k, v] of fd.entries()) if (typeof v === "string") sp.append(k, v);
+      return sp;
+    }
+    // Repli : corps texte brut (certains clients n'envoient pas de content-type).
     const text = await req.text();
     return new URLSearchParams(text);
   } catch {
