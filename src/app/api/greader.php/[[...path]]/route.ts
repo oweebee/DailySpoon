@@ -203,10 +203,27 @@ function parseStreamParams(url: URL, form: URLSearchParams | null) {
   };
 }
 
+// Trace TEMPORAIRE de diagnostic : journalise chaque requête greader réelle
+// (méthode + endpoint + statut). Objectif : voir la séquence exacte que le
+// lecteur envoie au refresh et repérer un éventuel endpoint non géré (404
+// texte que le client tente de parser en JSON -> « Exception: null »). À
+// retirer une fois la synchro stabilisée.
+async function handleLogged(req: NextRequest, path: string[] | undefined): Promise<NextResponse> {
+  const endpoint = "/" + (path || []).join("/");
+  const res = await handle(req, path);
+  void writeLog(
+    res.status >= 400 ? "warn" : "info",
+    "greader-trace",
+    `${req.method} ${endpoint}`,
+    `status=${res.status} ct=${req.headers.get("content-type") || "-"}`
+  );
+  return res;
+}
+
 export async function GET(req: NextRequest, ctx: { params: { path?: string[] } }) {
-  return handle(req, ctx.params.path);
+  return handleLogged(req, ctx.params.path);
 }
 
 export async function POST(req: NextRequest, ctx: { params: { path?: string[] } }) {
-  return handle(req, ctx.params.path);
+  return handleLogged(req, ctx.params.path);
 }
