@@ -84,10 +84,16 @@ export function Masthead({ date }: { date: Date }) {
         <div className="double-rule" />
       </div>
 
-      {/* Ligne de date entre deux filets */}
-      <div className="flex items-center justify-between py-1.5 text-xs uppercase tracking-[0.2em]">
+      {/* Ligne de date entre deux filets — en mobile, la date et le menu ne
+          tiennent pas côte à côte (la date se repliait sur 3 lignes serrées et
+          le menu débordait hors de l'écran, "Admin" tronqué). On les empile
+          donc, centrés, en dessous du seuil sm ; le menu passe à la ligne
+          proprement (flex-wrap) au lieu de déborder. Au-delà de sm, on retrouve
+          exactement l'ancienne disposition sur une seule ligne (date à gauche,
+          menu à droite). */}
+      <div className="flex flex-col items-center gap-1.5 py-1.5 text-xs uppercase tracking-[0.2em] sm:flex-row sm:justify-between sm:gap-0">
         <span className="capitalize">{formatted}</span>
-        <nav className="space-x-6">
+        <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1 sm:flex-nowrap sm:gap-y-0 sm:space-x-6">
           <Link href="/direct" className="text-journal hover:underline">
             En direct
           </Link>
