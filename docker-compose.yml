@@ -1,59 +1,62 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: 'postgres:16-alpine'
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-dailyspoon}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dailyspoon}
-      POSTGRES_DB: ${POSTGRES_DB:-dailyspoon}
+      POSTGRES_USER: '${POSTGRES_USER:-dailyspoon}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-dailyspoon}'
+      POSTGRES_DB: '${POSTGRES_DB:-dailyspoon}'
     volumes:
-      - dailyspoon_db_data:/var/lib/postgresql/data
+      - 'dailyspoon_db_data:/var/lib/postgresql/data'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dailyspoon}"]
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U ${POSTGRES_USER:-dailyspoon}'
       interval: 5s
       timeout: 5s
       retries: 10
-
+    labels:
+      - docker-volume-backup.stop-during-backup=true
   web:
     build: .
-    command: ["web"]
+    command:
+      - web
     restart: unless-stopped
     expose:
-      - "3000"
+      - '3000'
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-dailyspoon}:${POSTGRES_PASSWORD:-dailyspoon}@db:5432/${POSTGRES_DB:-dailyspoon}
-      FRESHRSS_BASE_URL: ${FRESHRSS_BASE_URL}
-      FRESHRSS_USERNAME: ${FRESHRSS_USERNAME}
-      FRESHRSS_API_PASSWORD: ${FRESHRSS_API_PASSWORD}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      ADMIN_SECRET: ${ADMIN_SECRET}
-      CRON_SECRET: ${CRON_SECRET}
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-dailyspoon}:${POSTGRES_PASSWORD:-dailyspoon}@db:5432/${POSTGRES_DB:-dailyspoon}'
+      FRESHRSS_BASE_URL: '${FRESHRSS_BASE_URL}'
+      FRESHRSS_USERNAME: '${FRESHRSS_USERNAME}'
+      FRESHRSS_API_PASSWORD: '${FRESHRSS_API_PASSWORD}'
+      ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
+      ANTHROPIC_MODEL: '${ANTHROPIC_MODEL:-claude-sonnet-4-5}'
+      ADMIN_PASSWORD: '${ADMIN_PASSWORD}'
+      ADMIN_SECRET: '${ADMIN_SECRET}'
+      CRON_SECRET: '${CRON_SECRET}'
       NODE_ENV: production
-
   worker:
     build: .
-    command: ["worker"]
+    command:
+      - worker
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-dailyspoon}:${POSTGRES_PASSWORD:-dailyspoon}@db:5432/${POSTGRES_DB:-dailyspoon}
-      FRESHRSS_BASE_URL: ${FRESHRSS_BASE_URL}
-      FRESHRSS_USERNAME: ${FRESHRSS_USERNAME}
-      FRESHRSS_API_PASSWORD: ${FRESHRSS_API_PASSWORD}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
-      EDITION_HOUR: ${EDITION_HOUR:-6}
-      EDITION_MINUTE: ${EDITION_MINUTE:-0}
-      EDITION_TZ: ${EDITION_TZ:-Europe/Paris}
-      RUN_ON_START: ${RUN_ON_START:-false}
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-dailyspoon}:${POSTGRES_PASSWORD:-dailyspoon}@db:5432/${POSTGRES_DB:-dailyspoon}'
+      FRESHRSS_BASE_URL: '${FRESHRSS_BASE_URL}'
+      FRESHRSS_USERNAME: '${FRESHRSS_USERNAME}'
+      FRESHRSS_API_PASSWORD: '${FRESHRSS_API_PASSWORD}'
+      ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
+      ANTHROPIC_MODEL: '${ANTHROPIC_MODEL:-claude-sonnet-4-5}'
+      EDITION_HOUR: '${EDITION_HOUR:-6}'
+      EDITION_MINUTE: '${EDITION_MINUTE:-0}'
+      EDITION_TZ: '${EDITION_TZ:-Europe/Paris}'
+      RUN_ON_START: '${RUN_ON_START:-false}'
       NODE_ENV: production
-
 volumes:
-  dailyspoon_db_data:
+  dailyspoon_db_data: null
