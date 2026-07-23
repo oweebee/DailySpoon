@@ -3,6 +3,7 @@ import { Readability } from "@mozilla/readability";
 import { getSettings } from "./settings";
 import { writeLog } from "./logger";
 import { cleanArticleUrl } from "./text";
+import { cleanExtractedArticle } from "./articleClean";
 
 // Intégration Wallabag (read-it-later auto-hébergé). Wallabag n'expose pas de
 // simple clé API : chaque appel exige un access_token OAuth2 obtenu via un
@@ -116,16 +117,29 @@ async function fetchHtml(url: string, timeoutMs: number): Promise<{ html: string
   }
 }
 
-/** Passe le HTML dans Readability et renvoie l'article propre s'il est
- *  suffisamment fourni, sinon null. */
+/** Passe le HTML dans Readability, puis applique le MÊME nettoyage de chrome
+ *  que la modale de lecture (/api/article-proxy) — hissage d'un <article>
+ *  imbriqué mieux fourni, retrait des bandeaux newsletter/CTA en fin, retrait
+ *  des menus/résumés IA en tête (ex. l'encart "Ce qu'il faut retenir" +
+ *  disclaimer liens affiliés de korben.info). Sans ce nettoyage, une
+ *  extraction Readability brute renvoyait tout ce chrome mélangé au texte
+ *  réel en un seul bloc dans Wallabag (vu en usage réel). Renvoie l'article
+ *  propre s'il reste suffisamment fourni après nettoyage, sinon null. */
 function readabilityExtract(html: string, url: string): ExtractedArticle | null {
   if (!html || html.length < 500) return null;
   try {
     const dom = new JSDOM(html, { url });
     const article = new Readability(dom.window.document).parse();
-    const text = article?.content?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || "";
-    if (article?.content && text.length >= MIN_EXTRACTED_TEXT) {
-      return { title: article.title?.trim() || null, content: article.content };
+    if (!article?.content) return null;
+
+    const contentDom = new JSDOM(`<div id="root">${article.content}</div>`);
+    const rootEl = contentDom.window.document.getElementById("root");
+    if (rootEl) cleanExtractedArticle(rootEl);
+    const cleanedHtml = rootEl ? rootEl.innerHTML : article.content;
+
+    const text = cleanedHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (text.length >= MIN_EXTRACTED_TEXT) {
+      return { title: article.title?.trim() || null, content: cleanedHtml };
     }
   } catch {
     /* Readability/jsdom en échec */
