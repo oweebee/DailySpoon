@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
-import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl } from "./text";
+import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl, cleanArticleUrl } from "./text";
 import { writeLog } from "./logger";
 
 export type RawItem = {
@@ -503,7 +503,10 @@ export async function fetchNewItemsFromSelectedCategories(): Promise<RawItem[]> 
     const exists = await prisma.article.findUnique({ where: { freshrssItemId: item.id } });
     if (exists) continue;
 
-    const canonicalUrl = item.canonical?.[0]?.href || item.alternate?.[0]?.href || "";
+    // Débarrassée des paramètres de suivi (utm_*, fbclid…) : c'est la forme
+    // stockée dans sourceUrl, donc réutilisée propre partout ensuite (lien
+    // "ouvrir l'article", Wallabag, lecteur externe).
+    const canonicalUrl = cleanArticleUrl(item.canonical?.[0]?.href || item.alternate?.[0]?.href || "");
 
     // Certains flux (ex. Korben) fournissent un "summary.content" qui n'est
     // que balisage (image, encart) sans texte réel — stripHtml renverrait

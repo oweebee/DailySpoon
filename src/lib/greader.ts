@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { getSettings } from "./settings";
 import { isCorrectPassword, sessionTokenForPassword } from "./auth";
 import { sendFavoriteToWallabag } from "./wallabagSend";
+import { cleanArticleUrl } from "./text";
 import type { Prisma } from "@prisma/client";
 
 // Implémentation SERVEUR de l'API Google Reader, pour connecter DailySpoon à un
@@ -365,9 +366,12 @@ function buildItem(a: {
   if (a.readState) categories.push(STREAM_READ);
   if (a.favorite) categories.push(STREAM_STARRED);
   if (a.categoryLabel) categories.push(`${LABEL_PREFIX}${a.categoryLabel}`);
+  // URL propre (sans paramètres de suivi) : couvre aussi les articles déjà
+  // stockés avant le nettoyage à l'ingestion.
+  const cleanUrl = cleanArticleUrl(a.sourceUrl) || a.sourceUrl;
   let htmlUrl = "";
   try {
-    htmlUrl = new URL(a.sourceUrl).origin;
+    htmlUrl = new URL(cleanUrl).origin;
   } catch {
     /* ignore */
   }
@@ -387,8 +391,8 @@ function buildItem(a: {
     // « Expected END_OBJECT but was NAME at $.items[0].alternate[0].href » qui
     // fait échouer TOUTE la synchro (bug Readrops connu, cf. FreshRSS #4567 —
     // même cause que l'itemRefs.id plus haut).
-    alternate: [{ href: a.sourceUrl }],
-    canonical: [{ href: a.sourceUrl }],
+    alternate: [{ href: cleanUrl }],
+    canonical: [{ href: cleanUrl }],
     categories,
     origin: { streamId: feedStreamId(a.feedId, a.feedTitle), title: a.feedTitle, htmlUrl },
     author: ""

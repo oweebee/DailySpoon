@@ -5,6 +5,7 @@ import { ArticleImage } from "./ArticleImage";
 import { FavoriteStar } from "./FavoriteStar";
 import { SpoonDivider } from "./SpoonDivider";
 import { todayRangeInTz } from "../lib/tz";
+import { cleanArticleUrl } from "../lib/text";
 
 export type ArticleLike = {
   id: string;
@@ -53,6 +54,12 @@ export function directText(a: ArticleLike): string {
     (a.sourceExcerpt && a.sourceExcerpt.trim()) ||
     "Aucun aperçu fourni par le flux — consulte la source pour lire l'article complet."
   );
+}
+// URL d'ouverture de l'article, débarrassée des paramètres de suivi (utm_*…).
+// Le nettoyage se fait aussi à l'ingestion (voir customFeeds/freshrss) ; ici on
+// couvre EN PLUS les articles déjà stockés avant ce correctif, sans migration.
+export function directHref(a: { sourceUrl: string }): string {
+  return cleanArticleUrl(a.sourceUrl) || a.sourceUrl;
 }
 
 export function EditionView({
@@ -305,7 +312,7 @@ export function SourceLine({
       }`}
     >
       {formatted && <span>{formatted} · </span>}
-      <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="hover:underline">
+      <ArticleLink href={directHref(article)} title={directTitle(article)} className="hover:underline">
         Source : {article.feedTitle || article.sourceTitle}
       </ArticleLink>
       {showFavorite && <FavoriteStar articleId={article.id} initialFavorite={article.favorite} />}
@@ -321,12 +328,12 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
   return (
     <article className={`flex flex-col text-center ${className}`}>
       <h2 className="mx-auto mb-4 max-w-2xl font-display text-xl font-black leading-tight md:text-2xl">
-        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="hover:underline">
+        <ArticleLink href={directHref(article)} title={directTitle(article)} className="hover:underline">
           {directTitle(article)}
         </ArticleLink>
       </h2>
       {article.imageUrl && (
-        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="mb-4 block aspect-[16/9] w-full">
+        <ArticleLink href={directHref(article)} title={directTitle(article)} className="mb-4 block aspect-[16/9] w-full">
           <ArticleImage
             src={article.imageUrl}
             alt={directTitle(article)}
@@ -348,12 +355,12 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
   return (
     <article className={className}>
       <h3 className="mb-2 max-w-2xl font-display text-xl font-black leading-tight md:text-2xl">
-        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="hover:underline">
+        <ArticleLink href={directHref(article)} title={directTitle(article)} className="hover:underline">
           {directTitle(article)}
         </ArticleLink>
       </h3>
       {article.imageUrl && (
-        <ArticleLink href={article.sourceUrl} title={directTitle(article)} className="mb-2 block aspect-[4/3] w-full">
+        <ArticleLink href={directHref(article)} title={directTitle(article)} className="mb-2 block aspect-[4/3] w-full">
           <ArticleImage
             src={article.imageUrl}
             alt={directTitle(article)}

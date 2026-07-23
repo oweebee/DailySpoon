@@ -202,6 +202,37 @@ export function extractFirstImageSrc(html: string | null | undefined, baseUrl?: 
   return null;
 }
 
+// Paramètres de SUIVI ajoutés par les flux RSS / réseaux sociaux. On les retire
+// de l'URL d'un article pour ne garder que sa forme canonique — celle qui
+// s'ouvre proprement dans le navigateur ET que Wallabag/un lecteur externe
+// attend (certains sites, ex. korben.info avec ?utm_medium=feed, servent une
+// variante "flux" appauvrie sur ces paramètres). On ne touche QU'aux
+// paramètres de tracking ; les paramètres fonctionnels (?p=123, ?id=…) restent.
+const TRACKING_PREFIX = /^(utm_|mc_|pk_|ga_|hsa_|_hs|matomo_|piwik_)/i;
+const TRACKING_EXACT = new Set([
+  "fbclid", "gclid", "dclid", "gbraid", "wbraid", "gclsrc", "msclkid", "yclid",
+  "twclid", "ttclid", "igshid", "mkt_tok", "mc_cid", "mc_eid", "_hsenc", "_hsmi"
+]);
+
+/** Retire les paramètres de suivi d'une URL d'article (voir ci-dessus).
+ *  Best effort : URL vide -> "", URL malformée -> renvoyée telle quelle. */
+export function cleanArticleUrl(raw: string | null | undefined): string {
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    const kept = new URLSearchParams();
+    for (const [k, v] of u.searchParams) {
+      if (TRACKING_PREFIX.test(k) || TRACKING_EXACT.has(k.toLowerCase())) continue;
+      kept.append(k, v);
+    }
+    const qs = kept.toString();
+    u.search = qs ? `?${qs}` : "";
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
 /**
  * Est-ce que cette URL passe déjà PAR l'instance morss configurée ?
  * Utilisé partout où on envisage un repli via morss après un échec direct

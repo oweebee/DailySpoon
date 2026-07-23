@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { EditionView, SourceLine, formatStamp, directTitle, directText, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
+import { EditionView, SourceLine, formatStamp, directTitle, directText, directHref, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
 
@@ -157,7 +157,7 @@ function SearchResults({ results, searching }: { results: ArticleLike[] | null; 
         >
           {article.imageUrl && (
             <ArticleLink
-              href={article.sourceUrl}
+              href={directHref(article)}
               title={directTitle(article)}
               className="mb-2 block aspect-[16/9] w-full"
             >

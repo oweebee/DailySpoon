@@ -1,7 +1,7 @@
 import Parser from "rss-parser";
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
-import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl } from "./text";
+import { stripHtml, extractFirstImageSrc, stripLeadingChrome, isAlreadyMorssUrl, cleanArticleUrl } from "./text";
 import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
 import { ingestRawItems } from "./generateEdition";
 import { writeLog } from "./logger";
@@ -610,7 +610,11 @@ export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
         let excerpt = rawContent ? stripHtml(rawContent).trim() : (item.contentSnippet || "").trim();
         if (excerpt) excerpt = stripLeadingChrome(excerpt);
 
-        const canonicalUrl = item.link || "";
+        // URL de l'article débarrassée des paramètres de suivi du flux (utm_*,
+        // fbclid…) : c'est la forme stockée, donc TOUT ce qui la consomme
+        // ensuite (lien "ouvrir l'article", envoi Wallabag, lecteur externe)
+        // reçoit l'URL canonique propre — pas la variante "?utm_medium=feed".
+        const canonicalUrl = cleanArticleUrl(item.link || "");
         // Base pour résoudre une éventuelle image en chemin relatif (voir
         // extractFirstImageSrc) : l'URL canonique de l'ARTICLE si le flux la
         // fournit, jamais l'URL du flux lui-même (qui peut être une URL

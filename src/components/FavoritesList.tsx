@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArticleLink } from "./ArticleLink";
 import { FavoriteStar } from "./FavoriteStar";
-import { formatPublished } from "./EditionView";
+import { formatPublished, directHref } from "./EditionView";
 
 export type FavoriteArticle = {
   id: string;
@@ -36,7 +36,7 @@ export function FavoritesList({ articles }: { articles: FavoriteArticle[] }) {
         <li key={article.id} className="flex items-center justify-between gap-4 border-b border-ink/30 py-3">
           <div>
             <ArticleLink
-              href={article.sourceUrl}
+              href={directHref(article)}
               title={article.headline || article.sourceTitle}
               className="font-display font-bold hover:underline"
             >

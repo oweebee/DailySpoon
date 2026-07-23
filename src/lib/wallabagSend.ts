@@ -1,5 +1,8 @@
+import { JSDOM } from "jsdom";
+import { Readability } from "@mozilla/readability";
 import { getSettings } from "./settings";
 import { writeLog } from "./logger";
+import { cleanArticleUrl } from "./text";
 
 // Intégration Wallabag (read-it-later auto-hébergé). Wallabag n'expose pas de
 // simple clé API : chaque appel exige un access_token OAuth2 obtenu via un
@@ -82,35 +85,54 @@ async function getAccessToken(creds: WallabagCreds): Promise<string> {
   return data.access_token as string;
 }
 
-// Paramètres de SUIVI ajoutés par les flux RSS / réseaux sociaux, à retirer
-// avant d'envoyer l'URL à Wallabag. Sans ça, l'URL n'est pas la forme canonique
-// de l'article : certains sites (ex. korben.info avec ?utm_medium=feed) servent
-// une variante "flux" dont Wallabag n'extrait AUCUN contenu, alors que la même
-// URL nettoyée — celle qu'on ajouterait à la main — fonctionne. On ne touche
-// qu'aux paramètres de tracking ; les paramètres fonctionnels (?p=123, ?id=…)
-// sont conservés.
-const TRACKING_PREFIX = /^(utm_|mc_|pk_|ga_|hsa_|_hs|matomo_|piwik_)/i;
-const TRACKING_EXACT = new Set([
-  "fbclid", "gclid", "dclid", "gbraid", "wbraid", "gclsrc", "msclkid", "yclid",
-  "twclid", "ttclid", "igshid", "mkt_tok", "mc_cid", "mc_eid", "_hsenc", "_hsmi"
-]);
+// User-Agent "navigateur" pour l'extraction : certains sites renvoient une
+// page vide/allégée à un UA inconnu (c'est justement ce qui fait échouer le
+// fetch interne de Wallabag sur des sites comme korben.info/gamekult).
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-/** Retire les paramètres de suivi d'une URL d'article (voir ci-dessus). Best
- *  effort : si l'URL est malformée, on la renvoie telle quelle. */
-export function cleanArticleUrl(raw: string): string {
+const MIN_EXTRACTED_TEXT = 200; // en-deçà, on considère l'extraction ratée
+
+export type ExtractedArticle = { title: string | null; content: string };
+
+/** Récupère la page et en extrait l'article propre (Readability, même techno
+ *  que /api/article-proxy et Firefox Reader View). Renvoie le HTML de l'article
+ *  + son titre, ou null si le fetch échoue ou si le contenu extrait est trop
+ *  maigre. Best effort : ne lève jamais. */
+async function extractArticle(url: string): Promise<ExtractedArticle | null> {
+  let res: Response;
   try {
-    const u = new URL(raw);
-    const kept = new URLSearchParams();
-    for (const [k, v] of u.searchParams) {
-      if (TRACKING_PREFIX.test(k) || TRACKING_EXACT.has(k.toLowerCase())) continue;
-      kept.append(k, v);
-    }
-    const qs = kept.toString();
-    u.search = qs ? `?${qs}` : "";
-    return u.toString();
+    res = await fetchWithTimeout(
+      url,
+      { headers: { "User-Agent": BROWSER_UA, Accept: "text/html,application/xhtml+xml,*/*" } },
+      12000
+    );
   } catch {
-    return raw;
+    return null;
   }
+  if (!res.ok) return null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct && !/text\/html|xml/i.test(ct)) return null;
+
+  let html: string;
+  try {
+    html = await res.text();
+  } catch {
+    return null;
+  }
+  if (!html || html.length < 500) return null;
+
+  try {
+    const dom = new JSDOM(html, { url });
+    const article = new Readability(dom.window.document).parse();
+    const text = article?.content?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || "";
+    if (article?.content && text.length >= MIN_EXTRACTED_TEXT) {
+      return { title: article.title?.trim() || null, content: article.content };
+    }
+  } catch {
+    /* Readability/jsdom en échec : on renverra null (envoi URL seule). */
+  }
+  return null;
 }
 
 // Tag posé sur chaque entrée créée depuis DailySpoon — permet de retrouver/
@@ -124,7 +146,21 @@ const WALLABAG_TAG = "DailySpoon";
  *  Wallabag déduplique lui-même par URL : renvoyer deux fois la même URL ne
  *  crée pas de doublon, il met à jour l'entrée existante (et lui ajoute le tag
  *  s'il manquait) — donc re-cocher un favori déjà envoyé est sans risque. */
-async function postEntry(creds: WallabagCreds, token: string, url: string): Promise<void> {
+async function postEntry(
+  creds: WallabagCreds,
+  token: string,
+  url: string,
+  extracted?: ExtractedArticle | null
+): Promise<void> {
+  const payload: Record<string, unknown> = { url, tags: WALLABAG_TAG };
+  // Si on a réussi à extraire l'article, on le fournit directement : Wallabag
+  // l'enregistre tel quel SANS re-fetcher la page (cf. doc API, champ
+  // "content") — ce qui règle le cas des sites dont SON fetch interne ne tire
+  // rien (korben.info, gamekult…) alors que le nôtre y arrive.
+  if (extracted?.content) {
+    payload.content = extracted.content;
+    if (extracted.title) payload.title = extracted.title;
+  }
   const res = await fetchWithTimeout(
     `${creds.baseUrl}/api/entries.json`,
     {
@@ -134,7 +170,7 @@ async function postEntry(creds: WallabagCreds, token: string, url: string): Prom
         Accept: "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ url, tags: WALLABAG_TAG })
+      body: JSON.stringify(payload)
     },
     12000
   );
@@ -178,14 +214,28 @@ export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> 
   };
   if (!isWallabagConfigured(creds)) return; // intégration inactive : aucun appel
 
-  // URL nettoyée des paramètres de suivi (utm_*, fbclid…) pour que Wallabag
-  // reçoive la forme canonique de l'article et l'extraie correctement.
+  // URL nettoyée des paramètres de suivi (utm_*, fbclid…) : forme canonique.
   const cleanUrl = cleanArticleUrl(articleUrl);
+
+  // On extrait le contenu nous-mêmes pour le fournir à Wallabag (voir
+  // postEntry). D'abord en direct ; si ça échoue et qu'une instance morss est
+  // configurée, on retente via morss (qui fetch depuis SA propre IP, utile
+  // quand le site bloque les requêtes serveur directes). Si tout échoue, on
+  // enverra quand même l'URL seule et Wallabag tentera son propre fetch.
+  let extracted = await extractArticle(cleanUrl);
+  if (!extracted && s.morssBaseUrl) {
+    extracted = await extractArticle(`${s.morssBaseUrl}/${cleanUrl}`);
+  }
 
   try {
     const token = await getAccessToken(creds);
-    await postEntry(creds, token, cleanUrl);
-    await writeLog("info", "wallabag", `Article envoyé à Wallabag : ${cleanUrl}`);
+    await postEntry(creds, token, cleanUrl, extracted);
+    await writeLog(
+      "info",
+      "wallabag",
+      `Article envoyé à Wallabag : ${cleanUrl}`,
+      extracted ? "contenu extrait fourni (pas de re-fetch Wallabag)" : "URL seule (extraction échouée, Wallabag fetchera)"
+    );
   } catch (err) {
     await writeLog(
       "warn",

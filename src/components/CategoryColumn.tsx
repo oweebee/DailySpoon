@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ArticleLike } from "./EditionView";
-import { SourceLine, formatStamp, directTitle, directText } from "./EditionView";
+import { SourceLine, formatStamp, directTitle, directText, directHref } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
 import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
@@ -172,7 +172,7 @@ export function CategoryColumn({
           <article key={article.id} className="border-2 border-ink bg-ink/[0.07] p-4">
             {article.imageUrl && (
               <ArticleLink
-                href={article.sourceUrl}
+                href={directHref(article)}
                 title={directTitle(article)}
                 className="mb-2 block aspect-[16/9] w-full"
               >
