@@ -479,10 +479,10 @@ export async function editTag(rawIds: string[], add: string[], remove: string[])
       // Wallabag, non bloquant. On récupère les URLs concernées pour les pousser.
       const rows = await prisma.article.findMany({
         where: { greaderId: { in: ids } },
-        select: { sourceUrl: true }
+        select: { sourceUrl: true, sourceTitle: true, sourceExcerpt: true }
       });
       for (const r of rows) {
-        if (r.sourceUrl) void sendFavoriteToWallabag(r.sourceUrl);
+        if (r.sourceUrl) void sendFavoriteToWallabag(r.sourceUrl, { title: r.sourceTitle, excerpt: r.sourceExcerpt });
       }
     }
   }

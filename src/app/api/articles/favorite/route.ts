@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const updated = await prisma.article.update({
     where: { id: articleId },
     data: { favorite, favoritedAt: favorite ? new Date() : null },
-    select: { sourceUrl: true }
+    select: { sourceUrl: true, sourceTitle: true, sourceExcerpt: true }
   });
 
   // Intégration Wallabag (si configurée dans /admin/settings) : mettre en
@@ -35,7 +35,10 @@ export async function POST(req: NextRequest) {
   // faire échouer la mise en favori locale ni ralentir l'UI. Ne fait rien
   // silencieusement si l'intégration n'est pas configurée.
   if (favorite && updated.sourceUrl) {
-    void sendFavoriteToWallabag(updated.sourceUrl);
+    void sendFavoriteToWallabag(updated.sourceUrl, {
+      title: updated.sourceTitle,
+      excerpt: updated.sourceExcerpt
+    });
   }
 
   return NextResponse.json({ ok: true });
