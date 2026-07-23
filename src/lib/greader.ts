@@ -23,6 +23,7 @@ import type { Prisma } from "@prisma/client";
 // ————————————————————————————————————————————————————————————————
 const STREAM_READING_LIST = "user/-/state/com.google/reading-list"; // tout
 const STREAM_READ = "user/-/state/com.google/read";
+const STREAM_UNREAD = "user/-/state/com.google/unread";
 const STREAM_STARRED = "user/-/state/com.google/starred";
 const LABEL_PREFIX = "user/-/label/";
 const FEED_PREFIX = "feed/";
@@ -99,10 +100,18 @@ export async function clientLogin(password: string): Promise<string | null> {
 // Conversions d'identifiants d'articles
 // ————————————————————————————————————————————————————————————————
 
-/** Forme longue attendue dans le contenu d'un item : hexadécimal 64 bits
- *  (16 caractères) préfixé. */
+/** Forme longue de l'id d'un item, telle qu'attendue par le lecteur.
+ *  CRITIQUE : elle doit être IDENTIQUE, octet pour octet, à celle que Readrops
+ *  RECONSTRUIT à partir de la forme décimale renvoyée par stream/items/ids. Son
+ *  adapter fait exactement : hex(decimal).padStart(longueur_de_la_chaîne_décimale).
+ *  Si on padde à 16 (comme le fait FreshRSS avec ses gros id 64 bits) alors que
+ *  nos id sont petits, l'id de l'article (« ...000000000000ceb ») ne coïncide
+ *  jamais avec l'id d'état lu/non-lu reconstruit par Readrops (« ...0ceb ») :
+ *  la synchro lu/non-lu et les compteurs tombent alors à 0. On réplique donc
+ *  EXACTEMENT sa formule (padStart sur la longueur du décimal). */
 function toLongItemId(greaderId: number): string {
-  return ITEM_LONG_PREFIX + BigInt(greaderId).toString(16).padStart(16, "0");
+  const decimal = String(greaderId);
+  return ITEM_LONG_PREFIX + greaderId.toString(16).padStart(decimal.length, "0");
 }
 
 /** Forme courte/décimale, utilisée dans itemRefs (stream/items/ids). */
@@ -152,6 +161,7 @@ async function baseWhere(): Promise<Prisma.ArticleWhereInput> {
 function streamToWhere(streamId: string | null): Prisma.ArticleWhereInput {
   if (!streamId || streamId === STREAM_READING_LIST) return {};
   if (streamId === STREAM_READ) return { readState: true };
+  if (streamId === STREAM_UNREAD) return { readState: false };
   if (streamId === STREAM_STARRED) return { favorite: true };
   if (streamId.startsWith(LABEL_PREFIX)) return { categoryLabel: streamId.slice(LABEL_PREFIX.length) };
   if (streamId.startsWith(FEED_PREFIX)) {
@@ -162,9 +172,14 @@ function streamToWhere(streamId: string | null): Prisma.ArticleWhereInput {
   return {};
 }
 
-/** Filtre d'EXCLUSION (xt=…) — surtout xt=read pour ne remonter que le non-lu. */
+/** Filtre d'EXCLUSION (xt=…). Readrops s'en sert pour distinguer lu/non-lu :
+ *  - xt=read   -> exclure les lus   -> ne garder que le NON-lu
+ *  - xt=unread -> exclure les non-lus -> ne garder que le LU (readIds au refresh)
+ *  Sans le cas xt=unread, readIds renvoyait TOUS les articles et le lecteur les
+ *  marquait tous « lus » (compteurs à 0, tout apparaît déjà lu). */
 function excludeToWhere(xt: string | null): Prisma.ArticleWhereInput {
   if (xt === STREAM_READ) return { readState: false };
+  if (xt === STREAM_UNREAD) return { readState: true };
   if (xt === STREAM_STARRED) return { favorite: false };
   return {};
 }
@@ -361,7 +376,10 @@ function buildItem(a: {
     crawlTimeMsec: String(a.fetchedAt.getTime()),
     timestampUsec: usec(a.publishedAt ?? a.fetchedAt),
     published: publishedSec,
-    title: a.sourceTitle, // texte BRUT du flux, jamais l'IA
+    // texte BRUT du flux, jamais l'IA. Jamais vide : l'adapter de Readrops
+    // exige un titre non vide (nextNonEmptyString), un titre "" ferait échouer
+    // le parsing de TOUS les items.
+    title: (a.sourceTitle && a.sourceTitle.trim()) || a.feedTitle || "(sans titre)",
     summary: { content: a.sourceExcerpt || "" },
     // IMPORTANT : n'émettre QUE { href } dans alternate/canonical. Le parseur
     // strict de certains lecteurs (Readrops) lit href puis exige la fin de
