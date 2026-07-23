@@ -1,6 +1,5 @@
 import { getSettings } from "./settings";
 import { writeLog } from "./logger";
-import { cleanArticleUrl } from "./text";
 
 // Intégration Wallabag (read-it-later auto-hébergé). Wallabag n'expose pas de
 // simple clé API : chaque appel exige un access_token OAuth2 obtenu via un
@@ -14,15 +13,18 @@ import { cleanArticleUrl } from "./text";
 // évite tout la complexité (invalidation, expiration, concurrence) d'un cache
 // de token à durée de vie limitée (expires_in ~1h).
 //
-// SIMPLE PAR CONCEPTION : on envoie juste l'URL (nettoyée de ses paramètres de
-// suivi, voir cleanArticleUrl) et on laisse WALLABAG faire son propre fetch +
-// extraction — c'est son métier, il a son propre moteur (readability +
-// fichiers de config par site). Une tentative précédente d'extraire l'article
-// nous-mêmes côté serveur (fetch + Readability + nettoyage de chrome) s'est
-// avérée inutile ET plus fragile : vérifié en direct, Wallabag récupère très
-// bien ces mêmes articles quand l'URL est propre — le vrai bug n'était jamais
-// "Wallabag n'y arrive pas", c'était l'URL polluée par ?utm_medium=feed qui
-// perturbait son parseur basé sur des règles par domaine.
+// LE PLUS SIMPLE POSSIBLE, PAR CONCEPTION : on envoie le lien de l'article
+// EXACTEMENT comme il est stocké (article.sourceUrl), SANS AUCUNE
+// modification (ni nettoyage de paramètres, ni contenu de repli fourni à sa
+// place) — Wallabag reçoit le même lien que si on le collait à la main ou
+// via l'extension Wallabagger en navigant normalement, et fait 100% du
+// travail lui-même (son propre fetch + extraction, avec ses fichiers de
+// config par site). Si son fetch échoue, on réessaie plusieurs fois (lui
+// redonner sa chance, pas lui substituer notre propre texte) ; s'il échoue
+// quand même après ça, l'entrée reste dans l'état où Wallabag lui-même
+// l'aurait laissée (page "impossible de récupérer le contenu", avec son
+// bouton "Réessayer" natif) — DailySpoon ne réécrit jamais le contenu à sa
+// place.
 
 export type WallabagCreds = {
   baseUrl: string;
@@ -101,27 +103,13 @@ const WALLABAG_TAG = "DailySpoon";
 
 const MIN_WALLABAG_CONTENT = 200; // en-deçà, on considère que le fetch de Wallabag a échoué
 
-function escapeForHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** Poste une entrée sur Wallabag (créée OU mise à jour : Wallabag déduplique
- *  par URL, un second POST sur la même URL met juste à jour l'entrée
- *  existante plutôt que d'en créer une seconde). Renvoie la longueur du
- *  contenu que WALLABAG a réussi à en tirer, pour savoir si son propre fetch
- *  a fonctionné. */
-async function postEntry(
-  creds: WallabagCreds,
-  token: string,
-  url: string,
-  content?: string,
-  title?: string | null
-): Promise<{ contentLen: number }> {
-  const payload: Record<string, unknown> = { url, tags: WALLABAG_TAG };
-  if (content) {
-    payload.content = content;
-    if (title) payload.title = title;
-  }
+/** Poste le lien tel quel sur Wallabag (créé OU mis à jour : Wallabag
+ *  déduplique par URL, un second POST sur la même URL met juste à jour
+ *  l'entrée existante plutôt que d'en créer une seconde). AUCUN champ
+ *  "content" n'est jamais envoyé : Wallabag fait TOUJOURS son propre fetch.
+ *  Renvoie la longueur du contenu qu'il en a tiré, pour savoir si ça a
+ *  marché. */
+async function postEntry(creds: WallabagCreds, token: string, url: string): Promise<{ contentLen: number }> {
   const res = await fetchWithTimeout(
     `${creds.baseUrl}/api/entries.json`,
     {
@@ -131,7 +119,7 @@ async function postEntry(
         Accept: "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ url, tags: WALLABAG_TAG })
     },
     15000
   );
@@ -156,25 +144,20 @@ export async function testWallabagConnection(creds: WallabagCreds): Promise<Wall
 }
 
 /**
- * Envoie best-effort un lien d'article à Wallabag, à partir des réglages
- * enregistrés (getSettings). NE LÈVE JAMAIS : conçu pour être appelé depuis la
- * route de mise en favori sans jamais faire échouer cette dernière — un
- * problème Wallabag (mal configuré, hors-ligne...) ne doit pas empêcher de
- * mettre un article en favori localement. En cas d'échec, on trace juste un
- * avertissement dans /admin/logs. Ne fait rien (silencieusement) si
+ * Envoie best-effort le lien D'ORIGINE d'un article à Wallabag, à partir des
+ * réglages enregistrés (getSettings). NE LÈVE JAMAIS : conçu pour être appelé
+ * depuis la route de mise en favori sans jamais faire échouer cette dernière
+ * — un problème Wallabag (mal configuré, hors-ligne...) ne doit pas empêcher
+ * de mettre un article en favori localement. En cas d'échec, on trace juste
+ * un avertissement dans /admin/logs. Ne fait rien (silencieusement) si
  * l'intégration n'est pas configurée.
  *
- * Envoie l'URL SEULE d'abord — Wallabag fait son propre fetch/extraction
- * (vérifié en direct : ça marche très bien une fois l'URL nettoyée de ses
- * paramètres de suivi). Si son fetch échoue quand même (contenu vide/trop
- * court en retour), on retente en fournissant `fallback.excerpt` (déjà en
- * base, capturé sans réseau à l'ingestion) comme filet de sécurité — mieux
- * qu'une entrée totalement vide, sans machinerie d'extraction côté serveur.
+ * Le lien envoyé est EXACTEMENT `article.sourceUrl`, sans aucune
+ * modification. Si le fetch de Wallabag échoue, on lui redonne sa chance
+ * plusieurs fois (espacé, en tâche de fond, jamais attendu par le clic
+ * favori) — jamais on ne lui substitue un contenu maison.
  */
-export async function sendFavoriteToWallabag(
-  articleUrl: string,
-  fallback?: { title?: string | null; excerpt?: string | null }
-): Promise<void> {
+export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> {
   if (!articleUrl) return;
   const s = await getSettings();
   const creds: Partial<WallabagCreds> = {
@@ -186,44 +169,40 @@ export async function sendFavoriteToWallabag(
   };
   if (!isWallabagConfigured(creds)) return; // intégration inactive : aucun appel
 
-  // URL nettoyée des paramètres de suivi (utm_*, fbclid…) : c'est cette forme
-  // canonique que le parseur de Wallabag sait exploiter.
-  const cleanUrl = cleanArticleUrl(articleUrl);
-
   try {
     const token = await getAccessToken(creds);
-    let attempt = await postEntry(creds, token, cleanUrl);
 
-    // Échec observé en pratique : korben.info bloque parfois cette IP de
-    // façon intermittente (confirmé : la même URL a réussi puis échoué à
-    // quelques heures d'écart) — un simple nouvel essai après une courte
-    // pause suffit souvent, avant de se rabattre sur l'extrait de secours.
-    if (attempt.contentLen < MIN_WALLABAG_CONTENT) {
-      await new Promise((r) => setTimeout(r, 4000));
-      attempt = await postEntry(creds, token, cleanUrl);
+    // korben.info (entre autres) bloque parfois l'IP du serveur de façon
+    // intermittente — prouvé : le même lien a réussi puis échoué à quelques
+    // heures d'écart. sendFavoriteToWallabag tourne en tâche de fond (jamais
+    // attendu par la réponse HTTP du clic favori) : on peut donc redonner sa
+    // chance à Wallabag plusieurs fois, espacé, sans ralentir l'interface.
+    const RETRY_DELAYS_MS = [5000, 15000, 30000];
+    let attempt = await postEntry(creds, token, articleUrl);
+    let tries = 1;
+    for (const delay of RETRY_DELAYS_MS) {
+      if (attempt.contentLen >= MIN_WALLABAG_CONTENT) break;
+      await new Promise((r) => setTimeout(r, delay));
+      attempt = await postEntry(creds, token, articleUrl);
+      tries++;
     }
 
     if (attempt.contentLen >= MIN_WALLABAG_CONTENT) {
-      await writeLog("info", "wallabag", `Article envoyé à Wallabag : ${cleanUrl}`, `Wallabag a extrait le contenu (${attempt.contentLen}o)`);
-      return;
-    }
-
-    // Deux essais infructueux : filet de sécurité avec l'extrait déjà en
-    // base, si on en a un.
-    if (fallback?.excerpt?.trim()) {
-      await postEntry(creds, token, cleanUrl, `<p>${escapeForHtml(fallback.excerpt.trim())}</p>`, fallback.title);
       await writeLog(
-        "warn",
+        "info",
         "wallabag",
-        `Article envoyé à Wallabag : ${cleanUrl}`,
-        `Wallabag n'a rien extrait après 2 essais (${attempt.contentLen}o) — extrait du flux fourni en repli`
+        `Article envoyé à Wallabag : ${articleUrl}`,
+        `Wallabag a extrait le contenu lui-même (${attempt.contentLen}o, essai ${tries}/${RETRY_DELAYS_MS.length + 1})`
       );
     } else {
+      // Échec définitif : on laisse Wallabag dans l'état où il se serait mis
+      // tout seul (page "impossible de récupérer le contenu" + son propre
+      // bouton "Réessayer") — jamais de contenu de repli imposé à sa place.
       await writeLog(
         "warn",
         "wallabag",
-        `Article envoyé à Wallabag : ${cleanUrl}`,
-        `Wallabag n'a rien extrait après 2 essais (${attempt.contentLen}o) et aucun extrait de repli disponible`
+        `Article envoyé à Wallabag : ${articleUrl}`,
+        `Wallabag n'a rien pu extraire après ${tries} essais (${attempt.contentLen}o) — laissé tel quel, réessayable depuis Wallabag`
       );
     }
   } catch (err) {
@@ -231,7 +210,7 @@ export async function sendFavoriteToWallabag(
       "warn",
       "wallabag",
       `Échec de l'envoi à Wallabag : ${(err as Error)?.message || "erreur inconnue"}`,
-      cleanUrl
+      articleUrl
     );
   }
 }
