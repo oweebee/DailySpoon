@@ -82,6 +82,37 @@ async function getAccessToken(creds: WallabagCreds): Promise<string> {
   return data.access_token as string;
 }
 
+// Paramètres de SUIVI ajoutés par les flux RSS / réseaux sociaux, à retirer
+// avant d'envoyer l'URL à Wallabag. Sans ça, l'URL n'est pas la forme canonique
+// de l'article : certains sites (ex. korben.info avec ?utm_medium=feed) servent
+// une variante "flux" dont Wallabag n'extrait AUCUN contenu, alors que la même
+// URL nettoyée — celle qu'on ajouterait à la main — fonctionne. On ne touche
+// qu'aux paramètres de tracking ; les paramètres fonctionnels (?p=123, ?id=…)
+// sont conservés.
+const TRACKING_PREFIX = /^(utm_|mc_|pk_|ga_|hsa_|_hs|matomo_|piwik_)/i;
+const TRACKING_EXACT = new Set([
+  "fbclid", "gclid", "dclid", "gbraid", "wbraid", "gclsrc", "msclkid", "yclid",
+  "twclid", "ttclid", "igshid", "mkt_tok", "mc_cid", "mc_eid", "_hsenc", "_hsmi"
+]);
+
+/** Retire les paramètres de suivi d'une URL d'article (voir ci-dessus). Best
+ *  effort : si l'URL est malformée, on la renvoie telle quelle. */
+export function cleanArticleUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const kept = new URLSearchParams();
+    for (const [k, v] of u.searchParams) {
+      if (TRACKING_PREFIX.test(k) || TRACKING_EXACT.has(k.toLowerCase())) continue;
+      kept.append(k, v);
+    }
+    const qs = kept.toString();
+    u.search = qs ? `?${qs}` : "";
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
 // Tag posé sur chaque entrée créée depuis DailySpoon — permet de retrouver/
 // filtrer dans Wallabag tout ce qui vient d'ici (l'API accepte "tags" en
 // chaîne de libellés séparés par des virgules ; un seul ici). Wallabag crée
@@ -147,16 +178,20 @@ export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> 
   };
   if (!isWallabagConfigured(creds)) return; // intégration inactive : aucun appel
 
+  // URL nettoyée des paramètres de suivi (utm_*, fbclid…) pour que Wallabag
+  // reçoive la forme canonique de l'article et l'extraie correctement.
+  const cleanUrl = cleanArticleUrl(articleUrl);
+
   try {
     const token = await getAccessToken(creds);
-    await postEntry(creds, token, articleUrl);
-    await writeLog("info", "wallabag", `Article envoyé à Wallabag : ${articleUrl}`);
+    await postEntry(creds, token, cleanUrl);
+    await writeLog("info", "wallabag", `Article envoyé à Wallabag : ${cleanUrl}`);
   } catch (err) {
     await writeLog(
       "warn",
       "wallabag",
       `Échec de l'envoi à Wallabag : ${(err as Error)?.message || "erreur inconnue"}`,
-      articleUrl
+      cleanUrl
     );
   }
 }
