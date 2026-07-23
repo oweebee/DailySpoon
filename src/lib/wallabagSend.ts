@@ -192,29 +192,38 @@ export async function sendFavoriteToWallabag(
 
   try {
     const token = await getAccessToken(creds);
-    const first = await postEntry(creds, token, cleanUrl);
+    let attempt = await postEntry(creds, token, cleanUrl);
 
-    if (first.contentLen >= MIN_WALLABAG_CONTENT) {
-      await writeLog("info", "wallabag", `Article envoyé à Wallabag : ${cleanUrl}`, `Wallabag a extrait le contenu (${first.contentLen}o)`);
+    // Échec observé en pratique : korben.info bloque parfois cette IP de
+    // façon intermittente (confirmé : la même URL a réussi puis échoué à
+    // quelques heures d'écart) — un simple nouvel essai après une courte
+    // pause suffit souvent, avant de se rabattre sur l'extrait de secours.
+    if (attempt.contentLen < MIN_WALLABAG_CONTENT) {
+      await new Promise((r) => setTimeout(r, 4000));
+      attempt = await postEntry(creds, token, cleanUrl);
+    }
+
+    if (attempt.contentLen >= MIN_WALLABAG_CONTENT) {
+      await writeLog("info", "wallabag", `Article envoyé à Wallabag : ${cleanUrl}`, `Wallabag a extrait le contenu (${attempt.contentLen}o)`);
       return;
     }
 
-    // Wallabag n'a rien pu tirer de son côté : filet de sécurité avec
-    // l'extrait déjà en base, si on en a un.
+    // Deux essais infructueux : filet de sécurité avec l'extrait déjà en
+    // base, si on en a un.
     if (fallback?.excerpt?.trim()) {
       await postEntry(creds, token, cleanUrl, `<p>${escapeForHtml(fallback.excerpt.trim())}</p>`, fallback.title);
       await writeLog(
         "warn",
         "wallabag",
         `Article envoyé à Wallabag : ${cleanUrl}`,
-        `Wallabag n'a rien extrait (${first.contentLen}o) — extrait du flux fourni en repli`
+        `Wallabag n'a rien extrait après 2 essais (${attempt.contentLen}o) — extrait du flux fourni en repli`
       );
     } else {
       await writeLog(
         "warn",
         "wallabag",
         `Article envoyé à Wallabag : ${cleanUrl}`,
-        `Wallabag n'a rien extrait (${first.contentLen}o) et aucun extrait de repli disponible`
+        `Wallabag n'a rien extrait après 2 essais (${attempt.contentLen}o) et aucun extrait de repli disponible`
       );
     }
   } catch (err) {
