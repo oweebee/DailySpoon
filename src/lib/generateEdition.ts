@@ -347,14 +347,18 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
     // échec FreshRSS (désactivé, auth, connexion...) est traité comme "0
     // item récupéré de ce côté-là" et la génération continue normalement
     // avec le reste (flux perso déjà synchronisés juste avant, articles déjà
-    // en base...). Reste bien loggué en erreur dans /admin/logs pour rester
-    // visible, même si ce n'est plus bloquant.
-    await writeLog(
-      "error",
-      "freshrss",
-      "Échec de récupération FreshRSS (auth/connexion/désactivé)",
-      (err as Error)?.message
-    );
+    // en base...).
+    const message = (err as Error)?.message || "";
+    // FreshRSS désactivé (case décochée dans /admin/settings) est un état
+    // normal et volontaire, PAS un incident — le logguer en "error" à
+    // chaque génération polluait /admin/logs sans raison tant que
+    // l'utilisateur n'a pas réactivé l'intégration lui-même. On ne trace
+    // donc plus ce cas du tout ; les vrais échecs (identifiants invalides,
+    // instance injoignable, FreshRSS mal configuré...) restent en "error",
+    // bien visibles comme avant.
+    if (!message.includes("n'est pas activé")) {
+      await writeLog("error", "freshrss", "Échec de récupération FreshRSS (auth/connexion)", message);
+    }
     rawItems = [];
   }
 

@@ -4,7 +4,7 @@ import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
-import { isAlreadyMorssUrl } from "@/lib/text";
+import { isAlreadyMorssUrl, splitIntoReadableParagraphs } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 import { hoistNestedArticleIfClearlyBetter, trimTrailingJunk, trimLeadingJunk } from "@/lib/articleClean";
 
@@ -21,6 +21,17 @@ export const dynamic = "force-dynamic";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// fallbackExcerpt (sourceExcerpt en base) est stocké aplati en une seule
+// ligne (voir stripHtml) — aucun paragraphe d'origine n'est récupérable. On
+// reconstruit un découpage approximatif par regroupement de phrases plutôt
+// que d'afficher tout le texte dans un unique <p> (voir
+// splitIntoReadableParagraphs).
+function excerptToParagraphsHtml(excerpt: string): string {
+  return splitIntoReadableParagraphs(excerpt)
+    .map((p) => `<p>${escapeHtml(p)}</p>`)
+    .join("");
 }
 
 function proxyImageUrl(absoluteUrl: string): string {
@@ -804,7 +815,7 @@ export async function GET(req: NextRequest) {
   function excerptFallbackBodyHtml(notice: string): string {
     const noticeBox = `<div class="notice-box">${escapeHtml(notice)}</div>`;
     if (!fallbackExcerpt) return noticeBox;
-    return `<p>${escapeHtml(fallbackExcerpt)}</p>${noticeBox}`;
+    return `${excerptToParagraphsHtml(fallbackExcerpt)}${noticeBox}`;
   }
 
   // Certains posts Reddit à média donnent, dans le flux RSS (surtout via un
@@ -884,7 +895,7 @@ export async function GET(req: NextRequest) {
         renderPage({
           title: fallbackTitle || "Post Reddit",
           siteName: "reddit.com",
-          bodyHtml: `<p>${escapeHtml(fallbackExcerpt)}</p><div class="notice-box">Texte tel que récupéré depuis le flux (même texte qu'en vignette). Pour le texte original et les commentaires, utilise « Voir l'original » en haut de page.</div>`,
+          bodyHtml: `${excerptToParagraphsHtml(fallbackExcerpt)}<div class="notice-box">Texte tel que récupéré depuis le flux (même texte qu'en vignette). Pour le texte original et les commentaires, utilise « Voir l'original » en haut de page.</div>`,
           originalUrl,
           articleId,
           favorite

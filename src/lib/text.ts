@@ -202,6 +202,64 @@ export function extractFirstImageSrc(html: string | null | undefined, baseUrl?: 
   return null;
 }
 
+// stripHtml() (ci-dessus) aplatit volontairement tout le HTML en une seule
+// ligne continue — aucune frontière de paragraphe n'est conservée nulle part
+// en aval. Résultat concret : quand un article retombe sur son extrait de
+// repli (sourceExcerpt, stocké ainsi depuis l'ingestion) — que ce soit dans
+// la modale de lecture de DailySpoon (article-proxy) ou dans l'entrée créée
+// chez Wallabag — ce texte s'affiche comme un unique "mur de texte" sans
+// aucun retour à la ligne. Les VRAIS paragraphes d'origine sont perdus pour
+// de bon (perte d'info à l'ingestion, pas récupérable après coup) : ce qui
+// suit est une RECONSTRUCTION approximative par regroupement de phrases —
+// pas un retour aux paragraphes d'origine, juste un découpage plus lisible
+// qu'un bloc unique.
+const SENTENCE_BOUNDARY = /([.!?…])\s+(?=[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ«"“])/g;
+const TARGET_PARAGRAPH_LENGTH = 380; // caractères visés par paragraphe reconstruit
+
+/**
+ * Découpe un extrait plat (sans paragraphes) en plusieurs paragraphes
+ * lisibles, en regroupant les phrases jusqu'à atteindre une longueur cible.
+ * Heuristique volontairement simple (pas de gestion des abréviations
+ * "M.", "etc.", nombres décimaux...) : le but est juste d'éviter le bloc
+ * unique, pas de reproduire une segmentation parfaite. Renvoie [text] tel
+ * quel si le texte est déjà court ou si le découpage ne trouve aucune
+ * frontière de phrase exploitable.
+ */
+export function splitIntoReadableParagraphs(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  if (trimmed.length <= TARGET_PARAGRAPH_LENGTH) return [trimmed];
+
+  const sentences = trimmed.split(SENTENCE_BOUNDARY);
+  // .split() avec un groupe capturant intercale le séparateur capturé
+  // (la ponctuation) comme élément à part — on le recolle à la phrase qui
+  // précède plutôt que de le perdre ou de le laisser seul.
+  const merged: string[] = [];
+  for (let i = 0; i < sentences.length; i++) {
+    if (/^[.!?…]$/.test(sentences[i]) && merged.length > 0) {
+      merged[merged.length - 1] += sentences[i];
+    } else if (sentences[i]) {
+      merged.push(sentences[i]);
+    }
+  }
+  if (merged.length <= 1) return [trimmed];
+
+  const paragraphs: string[] = [];
+  let current = "";
+  for (const sentence of merged) {
+    const candidate = current ? `${current} ${sentence}` : sentence;
+    if (current && candidate.length > TARGET_PARAGRAPH_LENGTH) {
+      paragraphs.push(current.trim());
+      current = sentence;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.trim()) paragraphs.push(current.trim());
+
+  return paragraphs.length > 0 ? paragraphs : [trimmed];
+}
+
 // Paramètres de SUIVI ajoutés par les flux RSS / réseaux sociaux. On les retire
 // de l'URL d'un article pour ne garder que sa forme canonique — celle qui
 // s'ouvre proprement dans le navigateur ET que Wallabag/un lecteur externe
