@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { getSettings } from "./settings";
 import { writeLog } from "./logger";
-import { cleanArticleUrl } from "./text";
+import { cleanArticleUrl, isAlreadyMorssUrl } from "./text";
 
 // Intégration Wallabag (read-it-later auto-hébergé). Wallabag n'expose pas de
 // simple clé API : chaque appel exige un access_token OAuth2 obtenu via un
@@ -94,34 +94,32 @@ const BROWSER_UA =
 const MIN_EXTRACTED_TEXT = 200; // en-deçà, on considère l'extraction ratée
 
 export type ExtractedArticle = { title: string | null; content: string };
+export type ExtractResult = { article: ExtractedArticle | null; diag: string };
 
-/** Récupère la page et en extrait l'article propre (Readability, même techno
- *  que /api/article-proxy et Firefox Reader View). Renvoie le HTML de l'article
- *  + son titre, ou null si le fetch échoue ou si le contenu extrait est trop
- *  maigre. Best effort : ne lève jamais. */
-async function extractArticle(url: string): Promise<ExtractedArticle | null> {
-  let res: Response;
+const ACCEPT_HTML = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+
+/** Un seul fetch HTML, avec le MÊME User-Agent que /api/article-proxy (celui
+ *  qui réussit là où le fetch interne de Wallabag échoue). Renvoie le HTML ou
+ *  un message d'erreur (jamais d'exception). */
+async function fetchHtml(url: string, timeoutMs: number): Promise<{ html: string } | { error: string }> {
   try {
-    res = await fetchWithTimeout(
+    const res = await fetchWithTimeout(
       url,
-      { headers: { "User-Agent": BROWSER_UA, Accept: "text/html,application/xhtml+xml,*/*" } },
-      12000
+      { headers: { "User-Agent": BROWSER_UA, Accept: ACCEPT_HTML } },
+      timeoutMs
     );
-  } catch {
-    return null;
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    const html = await res.text();
+    return { html };
+  } catch (err) {
+    return { error: (err as Error)?.message || "réseau" };
   }
-  if (!res.ok) return null;
-  const ct = res.headers.get("content-type") || "";
-  if (ct && !/text\/html|xml/i.test(ct)) return null;
+}
 
-  let html: string;
-  try {
-    html = await res.text();
-  } catch {
-    return null;
-  }
+/** Passe le HTML dans Readability et renvoie l'article propre s'il est
+ *  suffisamment fourni, sinon null. */
+function readabilityExtract(html: string, url: string): ExtractedArticle | null {
   if (!html || html.length < 500) return null;
-
   try {
     const dom = new JSDOM(html, { url });
     const article = new Readability(dom.window.document).parse();
@@ -130,9 +128,39 @@ async function extractArticle(url: string): Promise<ExtractedArticle | null> {
       return { title: article.title?.trim() || null, content: article.content };
     }
   } catch {
-    /* Readability/jsdom en échec : on renverra null (envoi URL seule). */
+    /* Readability/jsdom en échec */
   }
   return null;
+}
+
+/** Récupère la page et en extrait l'article propre. RÉPLIQUE la logique de
+ *  /api/article-proxy (fetchArticleHtml) : fetch direct avec UA navigateur,
+ *  puis, si échec, repli via l'instance morss au format officiel
+ *  "morss/:html/<url sans schéma>" — c'est ce format (et pas "morss/<url>")
+ *  qui marche. Renvoie l'article + un diagnostic lisible du chemin suivi. */
+async function extractArticle(cleanUrl: string, morssBaseUrl: string): Promise<ExtractResult> {
+  // 1) Direct
+  const direct = await fetchHtml(cleanUrl, 10000);
+  if ("html" in direct) {
+    const art = readabilityExtract(direct.html, cleanUrl);
+    if (art) return { article: art, diag: `direct ok (${direct.html.length}o)` };
+  }
+  const directDiag = "html" in direct ? `direct: readability maigre` : `direct: ${direct.error}`;
+
+  // 2) Repli morss (format /:html/<url sans schéma>), si configuré
+  if (morssBaseUrl && !isAlreadyMorssUrl(cleanUrl, morssBaseUrl)) {
+    const stripped = cleanUrl.replace(/^https?:\/\//, "");
+    const morssUrl = `${morssBaseUrl.replace(/\/+$/, "")}/:html/${stripped}`;
+    const viaMorss = await fetchHtml(morssUrl, 12000);
+    if ("html" in viaMorss) {
+      const art = readabilityExtract(viaMorss.html, cleanUrl);
+      if (art) return { article: art, diag: `morss ok (${viaMorss.html.length}o)` };
+      return { article: null, diag: `${directDiag} ; morss: readability maigre` };
+    }
+    return { article: null, diag: `${directDiag} ; morss: ${viaMorss.error}` };
+  }
+
+  return { article: null, diag: `${directDiag} ; pas de repli morss` };
 }
 
 // Tag posé sur chaque entrée créée depuis DailySpoon — permet de retrouver/
@@ -218,14 +246,9 @@ export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> 
   const cleanUrl = cleanArticleUrl(articleUrl);
 
   // On extrait le contenu nous-mêmes pour le fournir à Wallabag (voir
-  // postEntry). D'abord en direct ; si ça échoue et qu'une instance morss est
-  // configurée, on retente via morss (qui fetch depuis SA propre IP, utile
-  // quand le site bloque les requêtes serveur directes). Si tout échoue, on
-  // enverra quand même l'URL seule et Wallabag tentera son propre fetch.
-  let extracted = await extractArticle(cleanUrl);
-  if (!extracted && s.morssBaseUrl) {
-    extracted = await extractArticle(`${s.morssBaseUrl}/${cleanUrl}`);
-  }
+  // postEntry) : fetch direct + repli morss, exactement comme /api/article-proxy.
+  // Si tout échoue, on envoie quand même l'URL seule (Wallabag tentera).
+  const { article: extracted, diag } = await extractArticle(cleanUrl, s.morssBaseUrl || "");
 
   try {
     const token = await getAccessToken(creds);
@@ -234,7 +257,9 @@ export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> 
       "info",
       "wallabag",
       `Article envoyé à Wallabag : ${cleanUrl}`,
-      extracted ? "contenu extrait fourni (pas de re-fetch Wallabag)" : "URL seule (extraction échouée, Wallabag fetchera)"
+      extracted
+        ? `contenu extrait fourni (${diag}) — pas de re-fetch Wallabag`
+        : `URL seule — extraction échouée (${diag})`
     );
   } catch (err) {
     await writeLog(
