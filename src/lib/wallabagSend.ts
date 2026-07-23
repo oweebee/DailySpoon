@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { getSettings } from "./settings";
 import { writeLog } from "./logger";
-import { cleanArticleUrl, isAlreadyMorssUrl } from "./text";
+import { cleanArticleUrl } from "./text";
 
 // Intégration Wallabag (read-it-later auto-hébergé). Wallabag n'expose pas de
 // simple clé API : chaque appel exige un access_token OAuth2 obtenu via un
@@ -133,34 +133,22 @@ function readabilityExtract(html: string, url: string): ExtractedArticle | null 
   return null;
 }
 
-/** Récupère la page et en extrait l'article propre. RÉPLIQUE la logique de
- *  /api/article-proxy (fetchArticleHtml) : fetch direct avec UA navigateur,
- *  puis, si échec, repli via l'instance morss au format officiel
- *  "morss/:html/<url sans schéma>" — c'est ce format (et pas "morss/<url>")
- *  qui marche. Renvoie l'article + un diagnostic lisible du chemin suivi. */
-async function extractArticle(cleanUrl: string, morssBaseUrl: string): Promise<ExtractResult> {
-  // 1) Direct
+/** Récupère la page et en extrait l'article propre : fetch direct avec UA
+ *  navigateur, puis Readability. PAS de repli morss ici : vérifié en direct
+ *  (voir log MorssException) — cette instance morss REJETTE toute URL qui
+ *  n'est pas un flux RSS/Atom ("Link provided is not a valid feed"), donc
+ *  structurellement incapable de servir la page d'UN article isolé, quel que
+ *  soit le format d'URL essayé. Un site qui bloque le fetch direct du VPS
+ *  (ex. korben.info, 403) reste donc sans extraction possible ici — voir
+ *  sendFavoriteToWallabag pour le repli sur l'extrait déjà en base. */
+async function extractArticle(cleanUrl: string): Promise<ExtractResult> {
   const direct = await fetchHtml(cleanUrl, 10000);
   if ("html" in direct) {
     const art = readabilityExtract(direct.html, cleanUrl);
     if (art) return { article: art, diag: `direct ok (${direct.html.length}o)` };
+    return { article: null, diag: "direct: readability maigre" };
   }
-  const directDiag = "html" in direct ? `direct: readability maigre` : `direct: ${direct.error}`;
-
-  // 2) Repli morss (format /:html/<url sans schéma>), si configuré
-  if (morssBaseUrl && !isAlreadyMorssUrl(cleanUrl, morssBaseUrl)) {
-    const stripped = cleanUrl.replace(/^https?:\/\//, "");
-    const morssUrl = `${morssBaseUrl.replace(/\/+$/, "")}/:html/${stripped}`;
-    const viaMorss = await fetchHtml(morssUrl, 12000);
-    if ("html" in viaMorss) {
-      const art = readabilityExtract(viaMorss.html, cleanUrl);
-      if (art) return { article: art, diag: `morss ok (${viaMorss.html.length}o)` };
-      return { article: null, diag: `${directDiag} ; morss: readability maigre` };
-    }
-    return { article: null, diag: `${directDiag} ; morss: ${viaMorss.error}` };
-  }
-
-  return { article: null, diag: `${directDiag} ; pas de repli morss` };
+  return { article: null, diag: `direct: ${direct.error}` };
 }
 
 // Tag posé sur chaque entrée créée depuis DailySpoon — permet de retrouver/
@@ -229,8 +217,19 @@ export async function testWallabagConnection(creds: WallabagCreds): Promise<Wall
  * mettre un article en favori localement. En cas d'échec, on trace juste un
  * avertissement dans /admin/logs. Ne fait rien (silencieusement) si
  * l'intégration n'est pas configurée.
+ *
+ * `fallback` (sourceTitle/sourceExcerpt DÉJÀ en base, capturés sans réseau à
+ * l'ingestion) : utilisé comme DERNIER recours si l'extraction en direct
+ * échoue (site qui bloque le fetch serveur, ex. korben.info). Pas l'article
+ * complet, mais un vrai extrait plutôt qu'une entrée Wallabag totalement vide
+ * — le repli morss a été retiré : cette instance morss REJETTE toute URL qui
+ * n'est pas un flux RSS/Atom, donc structurellement inutilisable ici pour
+ * extraire un article isolé (vérifié en direct, voir MorssException).
  */
-export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> {
+export async function sendFavoriteToWallabag(
+  articleUrl: string,
+  fallback?: { title?: string | null; excerpt?: string | null }
+): Promise<void> {
   if (!articleUrl) return;
   const s = await getSettings();
   const creds: Partial<WallabagCreds> = {
@@ -245,10 +244,18 @@ export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> 
   // URL nettoyée des paramètres de suivi (utm_*, fbclid…) : forme canonique.
   const cleanUrl = cleanArticleUrl(articleUrl);
 
-  // On extrait le contenu nous-mêmes pour le fournir à Wallabag (voir
-  // postEntry) : fetch direct + repli morss, exactement comme /api/article-proxy.
-  // Si tout échoue, on envoie quand même l'URL seule (Wallabag tentera).
-  const { article: extracted, diag } = await extractArticle(cleanUrl, s.morssBaseUrl || "");
+  const { article: fetched, diag } = await extractArticle(cleanUrl);
+  let extracted = fetched;
+  let contentSource = fetched ? `direct (${diag})` : null;
+
+  // Dernier recours : l'extrait du flux, déjà en base, aucune requête réseau.
+  if (!extracted && fallback?.excerpt?.trim()) {
+    extracted = {
+      title: fallback.title?.trim() || null,
+      content: `<p>${escapeForHtml(fallback.excerpt.trim())}</p>`
+    };
+    contentSource = `extrait du flux (${diag})`;
+  }
 
   try {
     const token = await getAccessToken(creds);
@@ -257,9 +264,7 @@ export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> 
       "info",
       "wallabag",
       `Article envoyé à Wallabag : ${cleanUrl}`,
-      extracted
-        ? `contenu extrait fourni (${diag}) — pas de re-fetch Wallabag`
-        : `URL seule — extraction échouée (${diag})`
+      contentSource ? `contenu fourni — ${contentSource}` : `URL seule — extraction échouée (${diag})`
     );
   } catch (err) {
     await writeLog(
@@ -269,4 +274,8 @@ export async function sendFavoriteToWallabag(articleUrl: string): Promise<void> 
       cleanUrl
     );
   }
+}
+
+function escapeForHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

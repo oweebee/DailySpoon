@@ -477,8 +477,13 @@ export async function editTag(rawIds: string[], add: string[], remove: string[])
     if (favorite) {
       // Comme l'étoile web (voir /api/articles/favorite) : envoi best-effort à
       // Wallabag, non bloquant. On récupère les URLs concernées pour les pousser.
-      const rows = await prisma.article.findMany({ where: { greaderId: { in: ids } }, select: { sourceUrl: true } });
-      for (const r of rows) if (r.sourceUrl) void sendFavoriteToWallabag(r.sourceUrl);
+      const rows = await prisma.article.findMany({
+        where: { greaderId: { in: ids } },
+        select: { sourceUrl: true, sourceTitle: true, sourceExcerpt: true }
+      });
+      for (const r of rows) {
+        if (r.sourceUrl) void sendFavoriteToWallabag(r.sourceUrl, { title: r.sourceTitle, excerpt: r.sourceExcerpt });
+      }
     }
   }
 }
