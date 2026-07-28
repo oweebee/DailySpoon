@@ -1,0 +1,193 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Rye&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #f0f0f0;
+  color: #1a1a1a;
+  /* En PWA plein écran (display: "fullscreen"), le contenu peut s'étendre
+     sous l'encoche/la barre de statut et l'indicateur d'accueil (iOS) —
+     on réserve cet espace ici plutôt que de laisser le masthead ou le bas
+     de page se faire manger, "env(...)" valant 0px sur tout ce qui n'est
+     pas concerné (navigateur classique, Android, desktop). */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  /* La bande tout en haut (sous l'encoche/la barre de statut, hauteur =
+     safe-area-inset-top) doit être noire plutôt que dans le gris clair du
+     reste des marges — peint par-dessus le fond uni via un dégradé calé
+     sur exactement cette hauteur, sans toucher au reste du fond. */
+  background-image: linear-gradient(#1a1a1a, #1a1a1a);
+  background-repeat: no-repeat;
+  background-size: 100% env(safe-area-inset-top);
+  background-position: top;
+  /* Pas de texture ici : uniquement sur le bloc de contenu lui-même
+     (.paper-panel, utilisé par tous les <main>) — les marges de part et
+     d'autre restent unies, comme avant. */
+}
+
+/* Texture papier froissé fournie par l'utilisateur (déjà rétrécie/pensée
+   pour se répéter sans raccord visible) — appliquée uniquement sur le bloc
+   de contenu principal (<main>), pas sur les marges du site. Couleur
+   d'origine de l'image, sans opacité/filtre qui l'éclaircirait (d'où
+   "bg-paper/70" remplacé par cette classe plutôt que gardé en plus). */
+.paper-panel {
+  background-color: #f0f0f0;
+  /* Image telle quelle, sans voile ni filtre — l'utilisateur ajuste la
+     couleur/le contraste directement dans le fichier image lui-même. */
+  background-image: url("/textures/journal.jpg");
+}
+
+/* Lettrine de une, comme dans les vieux quotidiens */
+.drop-cap::first-letter {
+  float: left;
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 900;
+  font-size: 3.4em;
+  line-height: 0.85;
+  padding-right: 0.08em;
+  padding-top: 0.05em;
+}
+
+/* Double filet horizontal typique des mastheads */
+.double-rule {
+  border-top: 3px solid #1a1a1a;
+  border-bottom: 1px solid #1a1a1a;
+  height: 6px;
+}
+
+.rule-thin {
+  border-top: 1px solid #1a1a1a;
+}
+
+/* Texte justifié avec césure pour l'effet colonne de presse */
+.newsprint {
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* Bouton "timbre" : vrai fond de timbre-poste vierge (illustration fournie
+   par l'utilisateur, voir public/stamps/), plutôt que l'ancien contour
+   pointillé dessiné en CSS — le bord perforé/festonné fait maintenant partie
+   de l'image elle-même. Rotation légère et ombre portée conservées, qui se
+   redressent légèrement au survol comme si on décollait le timbre. Trois
+   fonds (stamp-sm/md/lg, voir .stamp-bg-*) selon la longueur du texte du
+   bouton — attribué au cas par cas côté JSX. */
+/* "filter: drop-shadow(...)" plutôt que "box-shadow" : box-shadow suit
+   TOUJOURS le rectangle de la boîte, pas la vraie silhouette (transparente,
+   perforée) de l'image de fond — ça laissait voir un halo rectangulaire
+   derrière le timbre, à travers ses propres perforations. drop-shadow suit
+   le canal alpha réel du contenu (donc de l'image), silhouette comprise. */
+.stamp-button {
+  position: relative;
+  transform: rotate(-1.5deg);
+  filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.stamp-button:hover {
+  transform: rotate(0deg) scale(1.03);
+  filter: drop-shadow(3px 5px 10px rgba(26, 26, 26, 0.32));
+}
+
+.stamp-button:active {
+  transform: rotate(0deg) scale(0.97);
+  filter: drop-shadow(1px 2px 4px rgba(26, 26, 26, 0.28));
+}
+
+/* Timbre "EN DIRECT" du masthead — règle 100% autonome, ne réutilise PAS
+   .stamp-button : le combo des deux classes sur le même élément se
+   disputait la propriété "transform" (rotation de l'une, translateY de
+   centrage vertical Tailwind de l'autre), et la rotation ne s'affichait
+   jamais en pratique malgré "!important". Ici le centrage vertical se fait
+   SANS transform (inset-y-0 + my-auto côté Tailwind, voir Masthead.tsx), et
+   "transform" ne sert donc plus qu'à la rotation — plus aucune ambiguïté
+   possible.
+   PAS de "position" ici volontairement : les classes Tailwind @tailwind
+   utilities vivent dans un layer CSS nommé, qui perd TOUJOURS face à une
+   règle non "layered" comme celle-ci, quels que soient l'ordre ou la
+   spécificité — "position: relative" ici écrasait alors le "absolute" posé
+   en JSX (Masthead.tsx), transformant le timbre en bloc pleine largeur qui,
+   une fois pivoté, traversait tout l'écran en diagonale. La position se
+   règle donc entièrement via les classes Tailwind côté JSX (relative en
+   mobile, absolute en desktop).
+   PAS de rotation ici (contrairement à .stamp-button) : le FOND du timbre
+   "En direct" reste bien droit, sur demande explicite — seul le texte à
+   l'intérieur garde l'inclinaison (voir .stamp-live-text plus bas et
+   Masthead.tsx, qui l'enveloppe dans un <span> séparé). drop-shadow (pas
+   box-shadow) pour la même raison que .stamp-button — voir plus haut. */
+.stamp-live {
+  filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
+}
+
+/* Texte "En direct" — pivoté indépendamment du fond de timbre (voir
+   .stamp-live juste au-dessus, plus de rotation sur le conteneur). */
+.stamp-live-text {
+  display: inline-block;
+  transform: rotate(-9deg);
+}
+
+/* Fonds de timbre — 3 tailles/ratios (voir public/stamps/). Le ratio RÉEL de
+   chaque image est imposé au bouton via "aspect-ratio" (plutôt que
+   d'étirer l'image aux dimensions du bouton, ce qui déformait les
+   perforations rondes en ovales — moche, et une vraie déformation du visuel
+   fourni) : c'est donc la largeur du bouton (texte + padding horizontal)
+   qui pilote sa hauteur, jamais l'inverse. "background-size: contain" en
+   filet de sécurité, au cas où le contenu forcerait une largeur qui ne
+   respecte plus exactement le ratio. PAS de "display" ici volontairement :
+   une règle CSS non "layered" comme celle-ci passe TOUJOURS devant les
+   classes Tailwind (même avec des utilitaires responsives type
+   hidden/md:flex) — y toucher casserait l'affichage conditionnel
+   mobile/desktop du timbre "En direct" (voir Masthead.tsx). Le
+   flex/items-center/justify-center se pose donc côté JSX, en utilitaires
+   Tailwind classiques.
+   sm = le plus "carré" pour les libellés courts (En direct), md =
+   intermédiaire pour la plupart des boutons, lg = le plus large/plat pour
+   le texte le plus long (Lancer l'impression). Ratios = dimensions réelles
+   des fichiers dans public/stamps/. */
+.stamp-bg-sm,
+.stamp-bg-md,
+.stamp-bg-lg {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+.stamp-bg-sm { background-image: url("/stamps/stamp-sm.png"); aspect-ratio: 600 / 406; }
+.stamp-bg-md { background-image: url("/stamps/stamp-md.png"); aspect-ratio: 700 / 270; }
+.stamp-bg-lg { background-image: url("/stamps/stamp-lg.png"); aspect-ratio: 900 / 205; }
+
+/* Ouverture du lecteur d'article interne : la page pivote depuis sa
+   tranche gauche pour s'ouvrir face à l'écran, comme une page de journal
+   qu'on tourne, plutôt qu'un simple fondu/zoom de fenêtre. */
+@keyframes page-turn {
+  from {
+    transform: perspective(1600px) rotateY(-85deg);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(1600px) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+.page-turn {
+  transform-origin: left center;
+  backface-visibility: hidden;
+  animation: page-turn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes modal-backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-backdrop-fade {
+  animation: modal-backdrop-fade 0.25s ease-out forwards;
+}

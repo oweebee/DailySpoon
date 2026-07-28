@@ -1,0 +1,88 @@
+services:
+  db:
+    image: 'postgres:16-alpine'
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: '${POSTGRES_USER:-dailyspoon}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-dailyspoon}'
+      POSTGRES_DB: '${POSTGRES_DB:-dailyspoon}'
+    volumes:
+      - 'dailyspoon_db_data:/var/lib/postgresql/data'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U ${POSTGRES_USER:-dailyspoon}'
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    labels:
+      - docker-volume-backup.stop-during-backup=true
+  web:
+    build: .
+    command:
+      - web
+    restart: unless-stopped
+    expose:
+      - '3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-dailyspoon}:${POSTGRES_PASSWORD:-dailyspoon}@db:5432/${POSTGRES_DB:-dailyspoon}'
+      FRESHRSS_BASE_URL: '${FRESHRSS_BASE_URL}'
+      FRESHRSS_USERNAME: '${FRESHRSS_USERNAME}'
+      FRESHRSS_API_PASSWORD: '${FRESHRSS_API_PASSWORD}'
+      ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
+      ANTHROPIC_MODEL: '${ANTHROPIC_MODEL:-claude-sonnet-4-5}'
+      ADMIN_PASSWORD: '${ADMIN_PASSWORD}'
+      ADMIN_SECRET: '${ADMIN_SECRET}'
+      CRON_SECRET: '${CRON_SECRET}'
+      NODE_ENV: production
+  worker:
+    build: .
+    command:
+      - worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-dailyspoon}:${POSTGRES_PASSWORD:-dailyspoon}@db:5432/${POSTGRES_DB:-dailyspoon}'
+      FRESHRSS_BASE_URL: '${FRESHRSS_BASE_URL}'
+      FRESHRSS_USERNAME: '${FRESHRSS_USERNAME}'
+      FRESHRSS_API_PASSWORD: '${FRESHRSS_API_PASSWORD}'
+      ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
+      ANTHROPIC_MODEL: '${ANTHROPIC_MODEL:-claude-sonnet-4-5}'
+      EDITION_HOUR: '${EDITION_HOUR:-6}'
+      EDITION_MINUTE: '${EDITION_MINUTE:-0}'
+      EDITION_TZ: '${EDITION_TZ:-Europe/Paris}'
+      RUN_ON_START: '${RUN_ON_START:-false}'
+      NODE_ENV: production
+  # Morss (pictuga/morss), intégré ici plutôt que géré comme une app Coolify
+  # séparée — voir morss/Dockerfile (cloné depuis GitHub à chaque build, donc
+  # toujours à jour). VPN OpenVPN optionnel, désactivé par défaut, réglable
+  # depuis /admin/settings côté DailySpoon (Settings.vpnEnabled/
+  # vpnOvpnConfig) — voir morss/entrypoint.sh. cap_add/devices sont
+  # nécessaires pour que le tunnel puisse se monter le jour où il est activé
+  # ; sans réglage VPN enregistré, ce conteneur se comporte comme un morss
+  # tout à fait normal, ces droits ne servent à rien de plus.
+  morss:
+    build: ./morss
+    restart: unless-stopped
+    expose:
+      - '8000'
+      - '8001'
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - '/dev/net/tun'
+    depends_on:
+      - web
+    environment:
+      INTERNAL_API_URL: 'http://web:3000'
+      # Réutilise CRON_SECRET (déjà utilisé pour /api/cron/generate) plutôt
+      # que d'ajouter un secret de plus à gérer — même rôle : un jeton
+      # partagé pour un appel de service à service, sans session admin.
+      VPN_CONFIG_SECRET: '${CRON_SECRET}'
+volumes:
+  dailyspoon_db_data: null

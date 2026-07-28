@@ -1,0 +1,492 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// A FreshRSS category/label the user has chosen to include in DailySpoon's
+// daily edition. Feed management itself (adding/removing RSS URLs) stays
+// entirely inside FreshRSS — DailySpoon only remembers which of FreshRSS's
+// existing categories it should pull from.
+model SelectedCategory {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique // FreshRSS category stream id, e.g. "user/1005921/label/Tech"
+  label      String // human-readable category name, e.g. "Tech"
+  order      Int      @default(0) // display order of the column in EditionView, set from /admin/categories
+  createdAt  DateTime @default(now())
+}
+
+// Carte "Impression IA" dans /admin/categories : réglage INDÉPENDANT de
+// SelectedCategory (En Direct). Liste toute catégorie FreshRSS pour laquelle
+// l'utilisateur a explicitement décoché "inclure dans l'impression IA" —
+// absence de ligne = activée par défaut. generateEdition.ts travaille
+// directement sur ce réglage (voir getAiPrintEligibilityWhere), à la source
+// de TOUT le vivier récupéré depuis FreshRSS, que la catégorie soit
+// sélectionnée pour En Direct ou non. Reste quand même soumis aux flux
+// explicitement blacklistés (ExcludedFeed) : un flux exclu reste exclu
+// partout, y compris ici.
+model AiPrintCategory {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique
+  label      String
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+// A single FreshRSS feed (subscription) the user has explicitly excluded,
+// regardless of its category — its articles are skipped when fetching, and
+// any already-stored articles from it are purged everywhere in the app.
+model ExcludedFeed {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique // FreshRSS feed stream id (subscription "id"/origin.streamId)
+  label      String
+  createdAt  DateTime @default(now())
+}
+
+// A feed decorated with the "médaille" (war-honor-medal style badge) in
+// /admin/categories. Articles from these feeds get a medal badge on their
+// photo in EditionView, and are the pool the 3 "À la une" hero slots are
+// picked from (most recent first).
+model MedalFeed {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique
+  label      String
+  createdAt  DateTime @default(now())
+}
+
+// Flux (FreshRSS ou perso, même id synthétique que MedalFeed/ExcludedFeed)
+// coché "notification" dans /admin/categories — liste des flux à pousser via
+// le bot Telegram (voir Settings.telegramBotToken/ChatId). Envoi effectif
+// déclenché depuis ingestRawItems (generateEdition.ts) pour chaque tout
+// nouvel article de ces flux, via src/lib/telegramNotify.ts (photo fixe +
+// légende titre/extrait/lien, calqué sur le workflow n8n "News - Telegram").
+model NotifyFeed {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique
+  label      String
+  createdAt  DateTime @default(now())
+}
+
+// Catégorie personnalisée créée directement depuis /admin/categories (par
+// opposition aux catégories FreshRSS, gérées côté FreshRSS) — un seul niveau
+// (catégorie -> flux), pas de sous-catégories imbriquées, pour rester
+// cohérent avec la structure FreshRSS existante. Traitée EXACTEMENT comme
+// une catégorie FreshRSS partout en aval (En direct, Impression IA...) via
+// un id synthétique "custom-cat:<id>" réutilisé directement comme
+// SelectedCategory.freshrssId/AiPrintCategory.freshrssId — pas de table de
+// réglages parallèle à maintenir.
+model CustomCategory {
+  id        String       @id @default(cuid())
+  label     String
+  order     Int          @default(0)
+  createdAt DateTime     @default(now())
+  feeds     CustomFeed[]
+}
+
+// Flux RSS/Atom ajouté à la main (URL directe, pas géré par FreshRSS).
+// Récupéré par src/lib/customFeeds.ts, au même intervalle GLOBAL pour tous
+// les flux personnalisés (Settings.customFeedsIntervalMinutes) — pas de
+// réglage par flux. Les articles récupérés subissent EXACTEMENT le même
+// traitement que ceux de FreshRSS (stripHtml/stripLeadingChrome/
+// fallbackProcess...), stockés avec un feedId synthétique
+// "custom-feed:<id>" réutilisé directement comme
+// ExcludedFeed.freshrssId/MedalFeed.freshrssId.
+//
+// Catégorie de destination : EXACTEMENT un des deux couples ci-dessous est
+// renseigné, choisi à la création/édition du flux (voir /admin/categories) :
+//   - customCategoryId : une CustomCategory (FK, cascade à sa suppression) ;
+//   - freshrssCategoryId/Label : une vraie catégorie FreshRSS existante,
+//     copiée telle quelle (pas de table locale pour les catégories
+//     FreshRSS, donc pas de FK possible) — permet d'intégrer un flux perso
+//     directement dans une catégorie FreshRSS déjà sélectionnée : les
+//     articles héritent alors du même traitement (affichage En direct,
+//     génération IA) qu'un flux FreshRSS normal de cette catégorie,
+//     puisque SelectedCategory/AiPrintCategory sont déjà indexées sur cet
+//     id FreshRSS réel.
+model CustomFeed {
+  id                     String          @id @default(cuid())
+  url                    String
+  title                  String
+  customCategoryId       String?
+  customCategory         CustomCategory? @relation(fields: [customCategoryId], references: [id], onDelete: Cascade)
+  freshrssCategoryId     String?
+  freshrssCategoryLabel  String?
+  lastFetchedAt          DateTime?
+  // Message d'erreur du dernier échec de récupération (parsing RSS impossible,
+  // hôte injoignable, timeout...) — null si la dernière tentative a réussi.
+  // Affiché en rouge dans /admin/categories : sans ça, un flux qui échoue en
+  // silence dans le worker (erreur seulement loguée côté serveur, invisible
+  // depuis l'admin) semblait juste "ne jamais apparaître en En direct" sans
+  // aucune explication.
+  lastFetchError         String?
+  createdAt              DateTime        @default(now())
+
+  @@index([customCategoryId])
+}
+
+// Bascule GROUPÉE : masque en un clic TOUS les flux personnalisés rattachés
+// à cette catégorie FreshRSS (freshrssCategoryId), SANS toucher à leurs
+// cases individuelles "inclure le flux" (ExcludedFeed) ni à la catégorie
+// FreshRSS elle-même (ses vrais flux restent inchangés). Absence de ligne =
+// activé par défaut (les réglages par flux perso s'appliquent normalement).
+// Recoché, chaque flux perso retrouve exactement son propre réglage
+// individuel — rien n'est écrasé silencieusement dans l'autre sens.
+model DisabledCustomFeedsCategory {
+  id                 String   @id @default(cuid())
+  freshrssCategoryId String   @unique
+  label              String
+  createdAt          DateTime @default(now())
+}
+
+model Article {
+  id             String    @id @default(cuid())
+  freshrssItemId String    @unique // FreshRSS item id, used for dedupe
+  feedId         String? // FreshRSS feed stream id (item.origin.streamId), for precise exclusion
+  feedTitle      String // origin feed name as reported by FreshRSS
+  categoryLabel  String? // FreshRSS category/tag this item came from
+  sourceUrl      String
+  sourceTitle    String
+  sourceExcerpt  String?   @db.Text
+  imageUrl       String? // illustration extracted from the feed's content/enclosure, if any
+  publishedAt    DateTime?
+  fetchedAt      DateTime  @default(now())
+
+  // AI-processed fields
+  processed      Boolean   @default(false)
+  headline       String?
+  summary        String?   @db.Text
+  category       String? // final rubrique assigned by AI for the edition
+  priorityScore  Int? // higher = more important, used to pick hero + ordering
+  // Résumé court et percutant, spécifique à la une IA de la page d'accueil
+  // (distinct de `summary`, plus développé, utilisé partout ailleurs — En
+  // direct, favoris, archive). Produit par curateFrontPage (une passe par
+  // génération, pas de coût supplémentaire) en même temps que priorityScore.
+  // Null si la curation échoue ou si aucune clé IA n'est configurée : la une
+  // retombe alors sur `summary` (voir FrontPageView).
+  frontPageSummary String? @db.Text
+  // true seulement si cet article est passé par un vrai appel IA
+  // (processBatch/processBatchGemini) — false pour fallbackProcess, qu'il
+  // s'agisse d'un article non "included", d'un dépassement du plafond
+  // MAX_AI_ITEMS_PER_CATEGORY, de l'absence de clé IA ou de "Aspirer les
+  // news" (forceNoAi). La une de la page d'accueil (page.tsx) et la passe de
+  // curation (curateFrontPageScores) ne retiennent QUE aiRewritten=true : la
+  // une doit être une vraie "impression IA", jamais du texte brut non
+  // retravaillé — ces articles restent normalement visibles ailleurs (En
+  // direct, recherche, archive).
+  aiRewritten    Boolean   @default(false)
+
+  favorite       Boolean   @default(false) // marqué favori depuis l'étoile shérif, page /favoris
+  favoritedAt    DateTime? // date de mise en favori, affichée sur /favoris
+
+  // Compatibilité API Google Reader (voir src/lib/greader.ts) — permet de
+  // connecter DailySpoon à un lecteur externe type Readrops comme s'il
+  // s'agissait d'un FreshRSS.
+  // - greaderId : identifiant numérique STABLE exigé par l'API Google Reader
+  //   (les item id y sont des entiers 64 bits, pas des cuid). Séquence
+  //   dédiée (SERIAL), attribuée automatiquement par la base (jamais fournie
+  //   à l'insertion) — voir la migration.
+  // - readState : état lu/non-lu, propre à l'API Google Reader (l'UI de
+  //   DailySpoon n'a pas cette notion). false = non lu (nouvel article),
+  //   basculé par edit-tag depuis le lecteur externe. Les articles déjà en
+  //   base à la migration sont marqués lus (true) pour ne pas apparaître
+  //   comme des milliers de non-lus au premier branchement.
+  greaderId      Int       @unique @default(autoincrement())
+  readState      Boolean   @default(false)
+  medal          Boolean   @default(false) // flux "médaillé" (voir MedalFeed) : badge sur la photo + éligible à la une
+
+  // false si le flux est exclu ou la catégorie décochée dans /admin au
+  // moment de la récupération (ou recalculé immédiatement si l'admin change
+  // le réglage après coup). Ces articles restent en base — pour rester
+  // trouvables par la recherche — mais sont exclus des vues normales
+  // (accueil, En direct). Ils ne passent jamais par l'IA (toujours texte
+  // brut), y compris si une clé Anthropic est configurée.
+  included       Boolean   @default(true)
+
+  edition        Edition?  @relation(fields: [editionId], references: [id])
+  editionId      String?
+
+  @@index([editionId])
+  @@index([favorite])
+  @@index([medal])
+  @@index([included])
+  // Index de perf ajoutés avant que la table ne grossisse (migration
+  // 20260719000000_perf_indexes) :
+  // - feedId : tous les updateMany/groupBy par flux (exclusion, médaille,
+  //   recompute des flux perso, suppression) filtrent dessus ;
+  // - categoryLabel : bascules de catégorie (/api/admin/categories POST) et
+  //   nettoyage à la suppression d'une catégorie perso ;
+  // - publishedAt : tri principal de /direct, bornes de jour de la
+  //   génération et de la recherche par date ;
+  // - (included, publishedAt) : la requête exacte de /direct
+  //   (where included orderBy publishedAt desc take 1000) ;
+  // - sourceUrl : lookup de l'Article à CHAQUE ouverture d'article via
+  //   /api/article-proxy (findFirst par sourceUrl — full scan sinon).
+  @@index([feedId])
+  @@index([categoryLabel])
+  @@index([publishedAt])
+  @@index([included, publishedAt])
+  @@index([sourceUrl])
+  // headline/summary/sourceTitle/feedTitle/category ont chacun un index GIN
+  // trigram (pg_trgm), créé en SQL brut dans la migration
+  // 20260716100000_article_search_trgm — non représentable ici sans le
+  // preview feature postgresqlExtensions, volontairement omis pour ne pas
+  // complexifier `prisma generate`. Accélère /api/articles/search (recherche
+  // "contient" sur ces colonnes) à mesure que la table grossit.
+}
+
+model Edition {
+  id          String    @id @default(cuid())
+  // Jour calendaire — plus @unique : chaque régénération crée désormais sa
+  // propre édition, conservée telle quelle (voir EditionArticle plus bas),
+  // au lieu d'écraser la précédente du même jour.
+  date        DateTime  @db.Date
+  headline    String? // front-page headline
+  status      String    @default("draft") // draft | published | failed
+  generatedAt DateTime  @default(now())
+  // Nombre total d'articles "included" du jour couvert par cette édition
+  // (avant le plafond IA par catégorie, MAX_AI_ITEMS_PER_CATEGORY) — le vivier
+  // de départ, à distinguer de snapshot.length qui ne compte que ceux
+  // réellement réécrits par l'IA et retenus sur la une (voir generateEdition.ts).
+  // null pour les éditions générées avant ce champ.
+  sourcePoolCount Int?
+  // Tokens IA réellement consommés par CETTE génération précise (tous appels
+  // confondus : réécriture par lots + curation de la une + recherche des
+  // sujets tendance) — remontés depuis la réponse de l'API (usage côté
+  // Anthropic, usageMetadata côté Gemini), pas une estimation. 0 en mode
+  // "Aspirer les news" (forceNoAi) ou si aucune clé IA n'est configurée ;
+  // null pour les éditions générées avant ce champ. Voir src/lib/aiPricing.ts
+  // pour la conversion en coût — affiché dans /admin (statistiques).
+  inputTokens      Int?
+  outputTokens     Int?
+  estimatedCostUsd Float?
+  // Métadonnées IA figées pour CETTE génération précise (affichées dans
+  // /archive à côté de la date) — jamais recalculées après coup, contrairement
+  // à Settings qui ne reflète que le réglage ACTUEL. null en mode "Aspirer les
+  // news" (forceNoAi, aucune IA) ou pour les éditions générées avant ces
+  // champs. aiProvider : "anthropic" | "gemini". aiModel : nom exact du modèle
+  // utilisé (anthropicModel ou geminiModel selon aiProvider). writingStyle :
+  // valeur RÉSOLUE ("normal"/"ackboo"/"darksasuke"...), jamais "random" tel
+  // quel — voir resolveWritingStyle dans src/lib/ai.ts.
+  aiProvider       String?
+  aiModel          String?
+  writingStyle     String?
+  articles    Article[]
+  snapshot    EditionArticle[]
+
+  // (date, generatedAt) : "dernière édition" de l'accueil//direct
+  // (orderBy date desc, generatedAt desc) ; (status, date) : recherche de la
+  // dernière édition PUBLIÉE du jour (anti-doublon de generateEdition,
+  // accueil, archives).
+  @@index([date, generatedAt])
+  @@index([status, date])
+}
+
+// Photo figée du contenu de la une IA tel qu'il était EXACTEMENT au moment de
+// cette génération précise. Nécessaire car Article (la table "vivante",
+// utilisée par /direct, la recherche et les favoris) ne garde qu'une seule
+// valeur d'"editionId" par article — à la génération suivante, un article
+// déjà vu est réattribué à la NOUVELLE édition, ce qui viderait
+// silencieusement les éditions précédentes de leurs articles si on ne
+// gardait qu'Article comme source pour les archives. Une ligne EditionArticle
+// n'est jamais modifiée ni réattribuée après coup : elle reste fidèle à
+// l'impression du jour où elle a été créée, même si l'article vivant
+// correspondant change ensuite de contenu ou change d'édition.
+//
+// Simple table de LIAISON (édition x article) — le contenu réel vit dans
+// ArticleSnapshotContent, partagé entre toutes les éditions du jour où
+// l'article n'a pas changé (voir plus bas). Sans ça, régénérer 5 fois dans la
+// même journée dupliquait 5 fois le texte complet d'un article resté
+// identique entre-temps.
+model EditionArticle {
+  id        String   @id @default(cuid())
+  edition   Edition  @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  editionId String
+  articleId String // référence informative vers l'Article vivant d'origine (pas de contrainte stricte : il peut depuis avoir été purgé)
+
+  content   ArticleSnapshotContent @relation(fields: [contentId], references: [id])
+  contentId String
+
+  @@index([editionId])
+  @@index([contentId])
+}
+
+// Contenu figé partagé, dédupliqué par empreinte (contentHash = hachage des
+// champs ci-dessous) : deux régénérations le même jour où un article n'a
+// strictement pas changé (même score IA, même résumé, même médaille...)
+// pointent vers la MÊME ligne ici au lieu d'en dupliquer une copie complète
+// à chaque fois. Dès qu'un seul champ change (nouvelle passe de curation IA,
+// médaille retirée, image retrouvée...), une nouvelle ligne est créée pour
+// cette nouvelle combinaison — le contenu ici n'est donc jamais modifié après
+// coup, seulement créé une fois par combinaison distincte.
+model ArticleSnapshotContent {
+  id               String    @id @default(cuid())
+  contentHash      String    @unique
+  headline         String?
+  summary          String?   @db.Text
+  frontPageSummary String?   @db.Text
+  category         String?
+  priorityScore    Int?
+  imageUrl         String?
+  sourceUrl        String
+  sourceTitle      String
+  feedTitle        String
+  categoryLabel    String?
+  publishedAt      DateTime?
+  medal            Boolean   @default(false)
+
+  editionArticles  EditionArticle[]
+}
+
+// Runtime-configurable settings, editable from /admin/settings instead of
+// redeploying with new environment variables. Single row (id = "singleton").
+// Any field left null falls back to the matching environment variable —
+// see src/lib/settings.ts.
+model Settings {
+  id                  String   @id @default("singleton")
+  freshrssBaseUrl     String?
+  freshrssUsername    String?
+  freshrssApiPassword String?
+  // Interrupteur EXPLICITE, décoché par défaut (null/false) : tant qu'il
+  // n'est pas coché dans /admin/settings, FreshRSS est traité comme "pas
+  // configuré" même si l'URL/identifiant/mot de passe sont renseignés (en
+  // base OU via les variables d'environnement FRESHRSS_*) — voir
+  // config() dans src/lib/freshrss.ts. Volontairement dans l'autre sens que
+  // les autres booléens de ce modèle (qui sont activés par défaut) : ici on
+  // veut qu'un simple redémarrage/redeploy avec des FRESHRSS_* déjà réglés
+  // ne réactive jamais tout seul l'intégration si l'utilisateur l'a
+  // explicitement coupée depuis l'admin.
+  freshrssEnabled     Boolean?
+  anthropicApiKey     String?
+  anthropicModel      String?
+  // Fournisseur IA utilisé pour la réécriture/résumé/priorisation des
+  // articles : "anthropic" (défaut) ou "gemini". Change uniquement le
+  // fournisseur utilisé quand une IA est effective — /direct ("Aspirer les
+  // news") reste toujours sans IA quel que soit ce réglage.
+  aiProvider          String?
+  geminiApiKey        String?
+  geminiModel         String?
+  editionHour         Int?
+  editionMinute       Int?
+  editionTz           String?
+  // false = génération automatique quotidienne (worker) désactivée ; dans ce
+  // cas la page d'accueil affiche un bouton "Lancer l'impression du
+  // journal" pour déclencher la génération à la main. null/true = planning
+  // actif comme d'habitude, pas de bouton sur l'accueil.
+  editionScheduleEnabled Boolean?
+  retentionDays       Int? // rétention de l'historique en jours ; 0 = illimité ; null = défaut (730 = 2 ans)
+  // Style d'écriture de l'IA qui réécrit/résume les articles : "normal"
+  // (défaut, ton journalistique neutre) ou "ackboo" (ton sarcastique,
+  // passif-agressif, cynique et drôle inspiré d'Ackboo/Canard PC). Sans
+  // effet sur /direct, qui reste toujours sans IA.
+  writingStyle        String?
+  // Intervalle GLOBAL (en minutes) de récupération des flux RSS
+  // personnalisés (voir CustomFeed/customFeeds.ts) — un seul réglage pour
+  // tous les flux personnalisés, pas par flux/catégorie. null = défaut
+  // (60 minutes, voir settings.ts). Valeurs proposées dans /admin/settings :
+  // 5/15/30/60/180/360/480/1440/10080 (5mn à 1 semaine).
+  customFeedsIntervalMinutes Int?
+  // Horodatage du dernier balayage complet des flux personnalisés — permet
+  // à fetchCustomFeedItems() de savoir si l'intervalle ci-dessus est déjà
+  // écoulé, indépendamment de la cadence à laquelle le worker l'appelle.
+  customFeedsLastFetchedAt  DateTime?
+  // Rétention (en minutes) de la page de logs (/admin/logs, LogEntry
+  // ci-dessous) : 60 (1h), 1440 (1j, défaut), 10080 (1 semaine), 43200
+  // (1 mois), 0 = illimité (jamais purgé). Complètement indépendant de
+  // retentionDays (qui ne concerne que les articles/éditions).
+  logRetentionMinutes Int?
+  // Bot Telegram utilisé pour pousser les flux cochés "notification" (voir
+  // NotifyFeed ci-dessus) — jeton du bot (@BotFather) et id du chat/canal de
+  // destination. L'envoi effectif (déclenchement, mise en forme du message)
+  // n'est pas encore branché : ces deux champs ne servent pour l'instant qu'à
+  // tester la connexion depuis /admin/settings.
+  telegramBotToken    String?
+  telegramChatId      String?
+  // Intégration Wallabag (read-it-later auto-hébergé) : mettre un article en
+  // favori (étoile shérif) envoie son lien source à Wallabag pour qu'il
+  // l'archive. L'API Wallabag n'a pas de simple clé — elle exige un flux
+  // OAuth2 "password grant" : URL de l'instance + client id/secret (créés
+  // dans Wallabag → API clients management) + identifiant/mot de passe du
+  // compte. Tout vide = intégration inactive (le favori ne fait rien de plus
+  // qu'avant). Voir src/lib/wallabagSend.ts et src/lib/settings.ts.
+  wallabagBaseUrl      String?
+  wallabagClientId     String?
+  wallabagClientSecret String?
+  wallabagUsername     String?
+  wallabagPassword     String?
+  // Mot de passe dédié pour l'API Google Reader (lecteur externe type
+  // Readrops, voir src/lib/greader.ts). Optionnel : s'il est vide, le
+  // ClientLogin accepte le mot de passe admin (rétrocompat). Recommandé de
+  // mettre ici un code SIMPLE (lettres/chiffres) : Readrops transmet ce mot
+  // de passe en form-urlencoded, où certains caractères spéciaux d'un mot de
+  // passe admin complexe se déforment (d'où des 403 « BadAuthentication »
+  // alors que le mot de passe est correct). Identifiant fixe côté client :
+  // "dailyspoon".
+  greaderApiPassword   String?
+  // Module VPN optionnel pour le conteneur morss intégré (voir docker-compose
+  // "morss" et morss/entrypoint.sh) : morss va chercher les flux/articles
+  // (Reddit, korben.info...) depuis SA PROPRE IP, potentiellement bloquée
+  // comme celle de ce serveur. Si activé, morss route SA sortie réseau via un
+  // tunnel OpenVPN (fichier .ovpn collé ci-dessous) — DailySpoon (web/worker)
+  // n'est PAS concerné, seul le conteneur morss change de comportement.
+  // Interrupteur explicite (comme freshrssEnabled) : false/null par défaut,
+  // jamais activé tout seul. Nécessite un REDÉMARRAGE du conteneur morss
+  // (pas juste enregistrer ce réglage) pour prendre effet — voir
+  // /api/internal/vpn-config, lu par morss/entrypoint.sh au démarrage.
+  vpnEnabled          Boolean?
+  // Contenu brut du fichier .ovpn (identifiants/certificats inclus) fourni
+  // par le fournisseur VPN — collé tel quel depuis /admin/settings. Stocké en
+  // clair en base, comme les autres identifiants de ce modèle.
+  vpnOvpnConfig       String?
+  updatedAt           DateTime @default(now()) @updatedAt
+}
+
+// Cache auto-rafraîchi de la liste des miroirs Redlib (front-end alternatif
+// à Reddit) actuellement fonctionnels — voir src/lib/reddit.ts. Évite de
+// garder une liste figée en dur, qui se périme dès qu'une instance publique
+// tombe ou se met à bloquer les requêtes serveur (Anubis/Cloudflare) : le
+// worker (voir worker/index.ts, même créneau que healthCheckRedditFeeds,
+// toutes les 6h) interroge la liste officielle
+// (github.com/redlib-org/redlib-instances) et sonde chaque candidat, puis
+// écrit ici le résultat. Les appelants (customFeeds.ts, article-proxy,
+// redditFeedHealth.ts) ne font QUE lire ce cache (rapide, aucun appel
+// réseau) — jamais de rafraîchissement synchrone dans le chemin d'une
+// requête utilisateur. Singleton (id = "singleton"), comme Settings, mais
+// délibérément SÉPARÉ de Settings : ceci est un cache d'état runtime, pas un
+// réglage utilisateur — donc exclu de l'export/import de configuration
+// (/api/admin/backup), pour la même raison que CustomFeed.lastFetchedAt.
+model RedlibInstanceCache {
+  id            String   @id @default("singleton")
+  instancesJson String // JSON.stringify(string[]) — miroirs sains connus, dans l'ordre de préférence
+  checkedAt     DateTime @default(now())
+}
+
+// Journal technique persistant (visible dans /admin/logs) : trace les
+// événements utiles pour diagnostiquer "est-ce que tout se passe bien" sans
+// devoir aller fouiller les logs bruts du conteneur Coolify — récupération
+// des flux (persos ET FreshRSS), génération d'édition, appels IA, tick du
+// worker. Volontairement séparé d'Article/Edition (données produit) : une
+// simple table d'événements, purgée par pruneOldLogs() selon
+// Settings.logRetentionMinutes, sans lien de clé étrangère vers rien
+// d'autre.
+model LogEntry {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  // "info" (déroulement normal), "warn" (dégradé mais pas bloquant, ex. un
+  // flux en échec parmi d'autres) ou "error" (échec net d'une opération).
+  level     String
+  // Origine courte, ex. "custom-feeds", "freshrss", "edition", "ai", "worker"
+  // — sert de filtre dans /admin/logs.
+  source    String
+  message   String
+  // Contexte additionnel optionnel (message d'erreur détaillé, nom du flux
+  // concerné...) — jamais de secret (clé API, mot de passe) : voir writeLog
+  // dans src/lib/logger.ts, qui ne reçoit que des chaînes déjà construites
+  // par l'appelant.
+  detail    String?  @db.Text
+
+  @@index([createdAt])
+  @@index([level])
+}

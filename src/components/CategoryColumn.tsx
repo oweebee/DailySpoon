@@ -1,0 +1,218 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import type { ArticleLike } from "./EditionView";
+import { SourceLine, formatStamp, directTitle, directText, directHref } from "./EditionView";
+import { ArticleImage } from "./ArticleImage";
+import { ArticleLink } from "./ArticleLink";
+import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
+
+const INITIAL_COUNT = 5;
+const STEP = 5;
+
+export function CategoryColumn({
+  label,
+  articles,
+  draggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
+  onDropHere,
+  clampSummary = false,
+  showMedal = true,
+  showDateStamp = true,
+  showFavorite = true,
+  scrollExpand = false,
+  autoInfinite = false,
+  highlightIndex = 0
+}: {
+  label: string;
+  articles: ArticleLike[];
+  /** Autorise le glisser-déposer du titre pour réorganiser les colonnes.
+   *  Désactivé si cette catégorie n'a pas d'équivalent dans les réglages
+   *  admin (ex. rubrique éditoriale choisie par l'IA) — rien à persister. */
+  draggable?: boolean;
+  isDragging?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onDropHere?: () => void;
+  /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
+   *  on ouvre l'article via la photo ou le lien source. */
+  clampSummary?: boolean;
+  /** La page d'accueil (FrontPageView) n'a pas la notion de médaille, de
+   *  tampon-date sur la photo (toujours l'édition du jour) ni de favoris —
+   *  ces trois options permettent de les masquer, tout en gardant le
+   *  comportement habituel (true) partout ailleurs (/direct, colonnes
+   *  classiques). */
+  showMedal?: boolean;
+  showDateStamp?: boolean;
+  showFavorite?: boolean;
+  /** Version bureau : au lieu de faire grandir la colonne (et donc pousser
+   *  toute la mise en page) à chaque clic sur "afficher plus", on bascule la
+   *  liste dans un encart à hauteur figée (celle qu'elle avait juste avant
+   *  le clic) avec sa propre barre de défilement interne. Les articles
+   *  suivants se révèlent au fur et à mesure du défilement à l'intérieur de
+   *  cet encart, jusqu'à épuisement de l'historique déjà chargé — la
+   *  colonne elle-même ne bouge plus jamais. Désactivé sur mobile (voir
+   *  autoInfinite). */
+  scrollExpand?: boolean;
+  /** Version mobile : pas de bouton du tout — les rubriques sont empilées
+   *  verticalement dans le flux normal de la page (voir CategoryGrid), donc
+   *  on charge directement le lot suivant dès qu'on approche du bas de la
+   *  liste déjà affichée en faisant défiler la page entière, sans jamais
+   *  demander de clic. root=null observe directement la fenêtre plutôt qu'un
+   *  conteneur à hauteur fixe. Mutuellement exclusif avec scrollExpand
+   *  (desktop). */
+  autoInfinite?: boolean;
+  /** Cyclé % 3 pour choisir une des 3 traces de surligneur (voir
+   *  CATEGORY_HIGHLIGHTS) affichée en fond du titre — index stable calculé
+   *  par CategoryGrid à partir de la position de la catégorie, pour ne
+   *  jamais répéter deux fois la même trace d'affilée. */
+  highlightIndex?: number;
+}) {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
+  const [expanded, setExpanded] = useState(false);
+  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const visible = articles.slice(0, visibleCount);
+  const remaining = articles.length - visible.length;
+
+  function handleShowMore() {
+    if (scrollExpand) {
+      // On fige la hauteur actuelle de l'encart avant de passer en mode
+      // défilement interne, pour que la colonne (et donc la page) ne bouge
+      // pas d'un pixel au clic.
+      if (listRef.current) setLockedHeight(listRef.current.getBoundingClientRect().height);
+      setExpanded(true);
+    }
+    setVisibleCount((c) => Math.min(c + STEP, articles.length));
+  }
+
+  // Défilement "à l'infini" : soit à l'intérieur de l'encart figé (desktop,
+  // une fois "expanded" après clic), soit directement sur le défilement de
+  // la page (mobile, autoInfinite, dès le départ — pas de clic requis). Dans
+  // le 2nd cas, root=null observe la fenêtre elle-même plutôt qu'un
+  // conteneur à hauteur fixe.
+  const watching = (scrollExpand && expanded) || autoInfinite;
+  useEffect(() => {
+    if (!watching) return;
+    const sentinel = sentinelRef.current;
+    const root = scrollExpand ? listRef.current : null;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((c) => Math.min(c + STEP, articles.length));
+        }
+      },
+      { root, rootMargin: "400px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [watching, scrollExpand, articles.length]);
+
+  return (
+    // Le filet/padding séparant les colonnes visuelles est désormais posé sur
+    // le conteneur de colonne dans CategoryGrid (une colonne = un bloc
+    // flex-col indépendant empilant SES catégories, plus une grille CSS où
+    // toutes les catégories d'une même "rangée" seraient forcées à la même
+    // hauteur) — plus besoin ici de calculer un filet par position
+    // (nth-child) dans une grille plate.
+    <section
+      onDragOver={draggable ? (e) => e.preventDefault() : undefined}
+      onDrop={
+        draggable
+          ? (e) => {
+              e.preventDefault();
+              onDropHere?.();
+            }
+          : undefined
+      }
+      className={isDragging ? "opacity-40" : ""}
+    >
+      <h2
+        draggable={draggable}
+        onDragStart={draggable ? onDragStart : undefined}
+        onDragEnd={draggable ? onDragEnd : undefined}
+        // Titre dans la couleur exacte du fond de l'image du site
+        // (moyenne échantillonnée sur public/textures/journal.jpg, #e5e3df —
+        // plus chaude que le gris plat "paper" du thème), partout, web
+        // comme mobile (plus de distinction responsive ici).
+        className={`relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] text-[#e5e3df] ${
+          draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
+        }`}
+      >
+        {/* Trace de surligneur en fond, sous le titre — hauteur fixe (le
+            ratio d'origine, très large et plat, n'est jamais déformé : seule
+            la hauteur est contrainte, la largeur suit), calée pour occuper
+            exactement l'espace intérieur du bandeau (py-1.5 + hauteur de
+            ligne du texte = 2rem) : son pixel le plus haut/bas touche
+            pile le filet du haut/bas, sans déborder dessus (overflow-hidden
+            sur le <h2>). */}
+        <img
+          src={CATEGORY_HIGHLIGHTS[highlightIndex % CATEGORY_HIGHLIGHTS.length]}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
+        />
+        <span className="relative">{label}</span>
+      </h2>
+      <div
+        ref={listRef}
+        style={expanded && lockedHeight ? { maxHeight: lockedHeight, overflowY: "auto" } : undefined}
+        className={`flex flex-col gap-4 ${expanded ? "pr-4" : ""}`}
+      >
+        {visible.map((article) => (
+          // Chaque article dans son propre encadré (bordure + fond gris) —
+          // même teinte que les encadrés de rubrique de la page IA
+          // (CATEGORY_BOX_TONES dans FrontPageView, bg-ink/[0.07]). Remplace
+          // l'ancien filet horizontal (divide-y) entre articles.
+          <article key={article.id} className="border-2 border-ink bg-ink/[0.07] p-4">
+            {article.imageUrl && (
+              <ArticleLink
+                href={directHref(article)}
+                title={directTitle(article)}
+                className="mb-2 block aspect-[16/9] w-full"
+              >
+                <ArticleImage
+                  src={article.imageUrl}
+                  alt={directTitle(article)}
+                  dateLabel={showDateStamp ? formatStamp(article.publishedAt) : null}
+                  medal={showMedal ? article.medal : false}
+                  className="h-full w-full"
+                />
+              </ArticleLink>
+            )}
+            <h3 className="font-display text-sm font-bold leading-snug">{directTitle(article)}</h3>
+            <p
+              className={`newsprint mt-1 text-sm leading-snug text-neutral-700 ${
+                clampSummary ? "line-clamp-[10]" : ""
+              }`}
+            >
+              {directText(article)}
+            </p>
+            <SourceLine article={article} showDate={!article.imageUrl} showFavorite={showFavorite} />
+          </article>
+        ))}
+        {(expanded || autoInfinite) && remaining > 0 && (
+          <div ref={sentinelRef} className="py-3 text-center text-[0.6rem] italic uppercase tracking-[0.2em] text-sepia/70">
+            Chargement de la suite…
+          </div>
+        )}
+      </div>
+
+      {!expanded && !autoInfinite && remaining > 0 && (
+        <button
+          onClick={handleShowMore}
+          className="mt-3 w-full border-t border-dashed border-ink/40 pt-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:text-ink hover:underline"
+        >
+          {scrollExpand
+            ? "Afficher plus d'articles"
+            : `Suite — encore ${Math.min(STEP, remaining)} de plus (${remaining} au total)`}
+        </button>
+      )}
+    </section>
+  );
+}

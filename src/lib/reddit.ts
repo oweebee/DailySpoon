@@ -1,0 +1,320 @@
+import { prisma } from "./prisma";
+import { JSDOM } from "jsdom";
+import { BROWSER_USER_AGENT } from "./text";
+
+/**
+ * Miroirs publics Redlib (front-end alternatif à Reddit, scrape sa propre
+ * infrastructure) — partagés entre la lecture d'un article individuel
+ * (article-proxy), le flux perso pointant directement vers reddit.com
+ * (customFeeds.ts) et le contournement de blocage au niveau d'un ABONNEMENT
+ * FreshRSS (redditFeedHealth.ts). Reddit bloque désormais la quasi-totalité
+ * des requêtes serveur-à-serveur (RSS compris) avec un 403, quel que soit le
+ * User-Agent — blocage réseau/IP, pas seulement JS.
+ *
+ * La liste change de fiabilité dans le temps (une instance publique peut
+ * tomber, se mettre derrière Cloudflare/Anubis, etc.) — voir
+ * getRedlibInstances() plus bas, qui la rafraîchit automatiquement au lieu
+ * de dépendre d'une liste figée en dur.
+ */
+
+export function isRedditHostname(hostname: string): boolean {
+  return /(^|\.)reddit\.com$/i.test(hostname);
+}
+
+// Les posts Reddit à média (image/vidéo) donnent souvent, dans le flux RSS
+// (surtout via un miroir Redlib), un lien direct vers le CDN média de
+// Reddit comme URL canonique de l'item — plutôt que le lien de la
+// discussion (reddit.com/.../comments/...). Ces domaines ne sont ni des
+// pages HTML classiques (Readability n'y trouve rien) ni embarquables en
+// iframe (Reddit bloque X-Frame-Options même sur ces sous-domaines) : il
+// faut les détecter à part pour les afficher directement plutôt que de
+// tomber sur la page de repli iframe (cassée, voir article-proxy).
+export function isRedditImageHostname(hostname: string): boolean {
+  return /(^|\.)i\.redd\.it$/i.test(hostname) || /(^|\.)preview\.redd\.it$/i.test(hostname);
+}
+
+export function isRedditVideoHostname(hostname: string): boolean {
+  return /(^|\.)v\.redd\.it$/i.test(hostname);
+}
+
+/** Reconstruit la même URL (chemin + query) sur un autre hôte — ex.
+ *  https://redlib.catsarch.com + /r/france/.rss depuis
+ *  https://www.reddit.com/r/france/.rss. Partagé entre redditFeedHealth.ts
+ *  (bascule des abonnements FreshRSS) et customFeeds.ts (repli à la volée
+ *  pour un flux personnalisé pointant directement vers reddit.com).
+ *
+ *  Force le suffixe ".rss" : les deux appelants sont des contextes de FLUX,
+ *  or on colle très souvent l'URL de la PAGE Reddit telle qu'affichée dans
+ *  le navigateur (".../r/SurvivalGaming/top/?t=week", sans ".rss"). Sans
+ *  cette normalisation, le miroir répond du HTML tout à fait valide, que
+ *  rss-parser rejette ensuite par "Feed not recognized as RSS 1 or 2" —
+ *  erreur trompeuse qui ressemble à un miroir cassé alors que c'est juste
+ *  la mauvaise URL qui a été demandée. La query (?t=week, tri temporel) est
+ *  conservée telle quelle : Redlib la comprend aussi bien sur le flux. */
+export function rehostRedditUrl(originalUrl: string, newBase: string): string | null {
+  try {
+    const parsed = new URL(originalUrl);
+    let path = parsed.pathname;
+    if (!/\.rss$/i.test(path)) {
+      path = path.endsWith("/") ? `${path}.rss` : `${path}/.rss`;
+    }
+    return `${newBase}${path}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
+// --- Lecture d'un listing Redlib en HTML -------------------------------
+
+/** Item minimal compatible avec ce que customFeeds.ts consomme d'un item
+ *  rss-parser (guid/link/title/enclosure/isoDate) — produit en parsant la
+ *  page HTML d'un miroir Redlib, car la quasi-totalité des instances
+ *  publiques ont désormais le RSS DÉSACTIVÉ (fonction opt-in côté Redlib,
+ *  REDLIB_ENABLE_RSS) : demander ".rss" y renvoie du HTML/vide, d'où les
+ *  échecs "Feed not recognized as RSS 1 or 2" vus dans /admin/logs. La page
+ *  HTML, elle, est toujours servie — on la transforme donc nous-mêmes en
+ *  items de flux. */
+export type RedditListingItem = {
+  title: string;
+  link: string;
+  guid: string;
+  isoDate?: string;
+  enclosure?: { url: string; type?: string };
+};
+
+/** Parse la page HTML d'un listing Redlib (ex. /r/IndieGaming/top?t=week) en
+ *  items de flux. Sélecteurs alignés sur les gabarits Redlib/Libreddit
+ *  (".post", "h2.post_title a", ".post_thumbnail", "span.created[title]") +
+ *  repli générique par balayage des liens "/comments/" si la structure
+ *  change — dans ce cas on perd miniatures/dates mais pas les articles. */
+export function parseRedlibListingHtml(html: string, instanceBase: string): RedditListingItem[] {
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+  const seen = new Set<string>();
+  const items: RedditListingItem[] = [];
+
+  const toCanonical = (href: string): { link: string; id: string } | null => {
+    const match = /\/r\/[^/]+\/comments\/([a-z0-9]+)/i.exec(href);
+    if (!match) return null;
+    const path = href.startsWith("http") ? new URL(href).pathname : href.split("?")[0];
+    return { link: `https://www.reddit.com${path}`, id: match[1] };
+  };
+
+  for (const post of Array.from(doc.querySelectorAll(".post"))) {
+    // Posts épinglés (règles du sub, mégathreads...) : pas des nouveautés.
+    if (post.classList.contains("stickied")) continue;
+
+    const anchor =
+      post.querySelector<HTMLAnchorElement>("h2.post_title a[href*='/comments/']") ||
+      post.querySelector<HTMLAnchorElement>(".post_title a[href*='/comments/']");
+    const href = anchor?.getAttribute("href");
+    if (!anchor || !href) continue;
+    const canonical = toCanonical(href);
+    const title = (anchor.textContent || "").trim();
+    if (!canonical || !title || seen.has(canonical.id)) continue;
+    seen.add(canonical.id);
+
+    // Miniature : Redlib met l'aperçu dans un <image href> SVG (listing
+    // compact) ou un <img src> (post média affiché en grand dans le listing).
+    const thumbEl =
+      post.querySelector(".post_thumbnail image") ||
+      post.querySelector(".post_thumbnail img") ||
+      post.querySelector(".post_media_image img") ||
+      post.querySelector("img.post_media_image");
+    const thumbRaw = thumbEl?.getAttribute("href") || thumbEl?.getAttribute("src") || null;
+    let enclosure: RedditListingItem["enclosure"];
+    if (thumbRaw) {
+      try {
+        enclosure = { url: new URL(thumbRaw, instanceBase).toString(), type: "image/jpeg" };
+      } catch {
+        // miniature illisible : tant pis, favicon en repli comme d'habitude
+      }
+    }
+
+    // Date : Redlib met la date absolue dans l'attribut title du span
+    // "created" (le texte visible n'est que du relatif type "13h ago").
+    const createdTitle = post.querySelector("span.created")?.getAttribute("title");
+    const createdDate = createdTitle ? new Date(createdTitle) : null;
+
+    items.push({
+      title,
+      link: canonical.link,
+      guid: canonical.link,
+      isoDate: createdDate && !isNaN(createdDate.getTime()) ? createdDate.toISOString() : undefined,
+      enclosure
+    });
+  }
+
+  // Repli générique si la structure ".post" n'a rien donné (gabarit modifié
+  // par une instance) : tous les liens vers une page de commentaires, en
+  // écartant les libellés de type "123 comments" — on garde, par post, le
+  // texte le plus long (le titre bat toujours le compteur de commentaires).
+  if (items.length === 0) {
+    const byId = new Map<string, { title: string; link: string }>();
+    for (const a of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href*='/comments/']"))) {
+      const href = a.getAttribute("href");
+      if (!href) continue;
+      const canonical = toCanonical(href);
+      const text = (a.textContent || "").trim();
+      if (!canonical || !text || /^\s*[\d.,km]*\s*comment/i.test(text)) continue;
+      const existing = byId.get(canonical.id);
+      if (!existing || text.length > existing.title.length) {
+        byId.set(canonical.id, { title: text, link: canonical.link });
+      }
+    }
+    for (const { title, link } of byId.values()) {
+      items.push({ title, link, guid: link });
+    }
+  }
+
+  return items;
+}
+
+// --- Cache auto-rafraîchi (RedlibInstanceCache) -----------------------
+
+const OFFICIAL_INSTANCES_URL = "https://raw.githubusercontent.com/redlib-org/redlib-instances/main/instances.json";
+
+// 6h : même cadence que healthCheckRedditFeeds (voir worker/index.ts), qui
+// appelle refreshRedlibInstanceCache() juste avant de tester les abonnements
+// FreshRSS eux-mêmes — la liste est donc toujours fraîche au moment où on en
+// a besoin, sans jamais faire de sondage réseau depuis le chemin d'une
+// requête utilisateur (voir getRedlibInstances(), qui ne fait que LIRE ce
+// cache).
+const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// Combien d'instances saines on garde au maximum, et combien de candidats on
+// sonde au pire avant d'abandonner (liste officielle + repli statique) —
+// borne dure pour qu'un rafraîchissement reste raisonnablement rapide même
+// si la liste officielle grossit.
+const MAX_HEALTHY_INSTANCES = 4;
+const MAX_CANDIDATES_PROBED = 8;
+const PROBE_TIMEOUT_MS = 6000;
+
+// Dernier repli si TOUT échoue (cache vide ET liste officielle injoignable
+// ET aucun candidat sondé ne répond) — vérifiées manuellement le 20/07/2026
+// comme servant du vrai contenu Reddit en HTML (les 4 anciennes de cette
+// liste — catsarch/privacyredirect/orangenet/privadency — ne répondaient
+// plus DU TOUT à ce moment-là). safereddit est absente de la liste
+// officielle (github.com/redlib-org/redlib-instances), nadeko y figure —
+// toutes deux ajoutées manuellement en tête des candidats sondés à chaque
+// rafraîchissement.
+const STATIC_FALLBACK = ["https://safereddit.com", "https://redlib.nadeko.net"];
+
+async function fetchOfficialInstanceCandidates(): Promise<string[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(OFFICIAL_INSTANCES_URL, { signal: controller.signal });
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      const list = Array.isArray(data?.instances) ? data.instances : [];
+      return list
+        // "cloudflare: true" = challenge JS quasi systématique pour une
+        // requête serveur-à-serveur sans navigateur réel — inutile de
+        // gaspiller un sondage dessus, voir aussi le filtre "anubis" dans
+        // probeRedlibInstance ci-dessous pour les instances qui ne
+        // l'annoncent pas mais le font quand même.
+        .filter((entry: any) => typeof entry.url === "string" && !entry.cloudflare)
+        .map((entry: any) => (entry.url as string).replace(/\/+$/, ""));
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    return [];
+  }
+}
+
+// Sonde légère : vérifie qu'une instance sert bien un vrai listing Reddit en
+// HTML (pas une page de challenge anti-bot ni une coquille vide) sur un
+// chemin toujours public (r/popular), sans dépendre d'un abonnement
+// particulier. On sonde le HTML et PAS le ".rss" : le RSS est une option
+// désactivée sur la quasi-totalité des instances publiques (voir
+// parseRedlibListingHtml plus haut) — c'est le listing HTML qu'on consomme
+// réellement, autant sonder exactement ce dont on a besoin.
+async function probeRedlibInstance(baseUrl: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${baseUrl}/r/popular`, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": BROWSER_USER_AGENT,
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      }
+    });
+    if (!res.ok) return false;
+    const text = await res.text();
+    if (text.length < 500) return false;
+    if (/anubis|checking your browser|cf-browser-verification/i.test(text)) return false;
+    // Un vrai listing contient des liens vers des pages de commentaires.
+    return text.includes("/comments/");
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function safeParseList(json: string | null | undefined): string[] | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) && parsed.every((v) => typeof v === "string") && parsed.length > 0
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sonde la liste officielle + le repli statique, et écrit le résultat dans
+ * RedlibInstanceCache. Fait du réseau (jusqu'à MAX_CANDIDATES_PROBED sondages
+ * de PROBE_TIMEOUT_MS chacun, au pire) — appelée UNIQUEMENT depuis le worker
+ * (voir worker/index.ts, même créneau toutes les 6h que
+ * healthCheckRedditFeeds), jamais depuis le chemin d'une requête utilisateur.
+ * Best-effort : ne lève jamais, garde l'ancien cache si le rafraîchissement
+ * ne trouve rien de sain.
+ */
+export async function refreshRedlibInstanceCache(): Promise<{ healthy: string[] }> {
+  const existing = await prisma.redlibInstanceCache.findUnique({ where: { id: "singleton" } }).catch(() => null);
+
+  const officialCandidates = await fetchOfficialInstanceCandidates();
+  const candidates = [...STATIC_FALLBACK, ...officialCandidates].slice(0, MAX_CANDIDATES_PROBED);
+
+  const healthy: string[] = [];
+  for (const candidate of candidates) {
+    if (healthy.length >= MAX_HEALTHY_INSTANCES) break;
+    if (await probeRedlibInstance(candidate)) healthy.push(candidate);
+  }
+
+  const result = healthy.length > 0 ? healthy : safeParseList(existing?.instancesJson) ?? STATIC_FALLBACK;
+
+  await prisma.redlibInstanceCache
+    .upsert({
+      where: { id: "singleton" },
+      update: { instancesJson: JSON.stringify(result), checkedAt: new Date() },
+      create: { id: "singleton", instancesJson: JSON.stringify(result), checkedAt: new Date() }
+    })
+    .catch(() => {});
+
+  return { healthy: result };
+}
+
+/**
+ * Lecture SEULE (pas de réseau) de la liste de miroirs Redlib actuellement
+ * sains, pour tous les appelants (customFeeds.ts, article-proxy,
+ * redditFeedHealth.ts). Si le cache n'a encore jamais été rempli (tout
+ * premier démarrage, avant le premier tick du worker à minute 5) ou est trop
+ * vieux (le worker semble à l'arrêt), retombe sur le repli statique plutôt
+ * que de bloquer l'appelant avec un sondage réseau synchrone.
+ */
+export async function getRedlibInstances(): Promise<string[]> {
+  const cached = await prisma.redlibInstanceCache.findUnique({ where: { id: "singleton" } }).catch(() => null);
+  const parsed = safeParseList(cached?.instancesJson);
+  if (parsed && cached && Date.now() - cached.checkedAt.getTime() < REFRESH_INTERVAL_MS * 4) {
+    return parsed;
+  }
+  return parsed ?? STATIC_FALLBACK;
+}

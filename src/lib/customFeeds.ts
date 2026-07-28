@@ -1,0 +1,768 @@
+import Parser from "rss-parser";
+import { prisma } from "./prisma";
+import { getSettings, MORSS_BASE_URL } from "./settings";
+import {
+  stripHtml,
+  extractFirstImageSrc,
+  stripLeadingChrome,
+  isAlreadyMorssUrl,
+  cleanArticleUrl,
+  BROWSER_USER_AGENT
+} from "./text";
+import { fetchOgMeta, faviconFallback, type RawItem } from "./freshrss";
+import { ingestRawItems } from "./generateEdition";
+import { writeLog } from "./logger";
+import { getRedlibInstances, isRedditHostname, rehostRedditUrl, parseRedlibListingHtml } from "./reddit";
+
+/**
+ * Flux RSS/Atom ajoutés à la main depuis /admin/categories (CustomFeed),
+ * SANS passer par FreshRSS — utile pour un flux qu'on ne veut pas gérer
+ * côté FreshRSS, ou en dépannage si FreshRSS est indisponible. Récupérés au
+ * même intervalle GLOBAL pour tous (Settings.customFeedsIntervalMinutes),
+ * et retraités exactement comme les items FreshRSS (même RawItem, même
+ * fallbackProcess en aval, voir generateEdition.ts) — traités "au même
+ * titre" partout dans l'app.
+ *
+ * Id synthétiques réutilisés directement comme freshrssId dans les tables
+ * de réglages existantes (SelectedCategory/ExcludedFeed/MedalFeed/
+ * AiPrintCategory), pour éviter toute logique parallèle en aval :
+ *   - catégorie personnalisée -> "custom-cat:<CustomCategory.id>"
+ *   - flux personnalisé       -> "custom-feed:<CustomFeed.id>"
+ */
+export function customCategoryFreshrssId(categoryId: string): string {
+  return `custom-cat:${categoryId}`;
+}
+export function customFeedFreshrssId(feedId: string): string {
+  return `custom-feed:${feedId}`;
+}
+
+/**
+ * Résout l'id/le libellé de rubrique effectifs d'un flux personnalisé,
+ * qu'il soit rattaché à une CustomCategory (customCategoryId) ou
+ * directement à une vraie catégorie FreshRSS existante
+ * (freshrssCategoryId/Label) — voir le commentaire sur CustomFeed dans
+ * schema.prisma. Utilisé aussi bien par l'ingestion (fetchCustomFeedItems)
+ * que par les routes admin (résolution d'affichage).
+ */
+export function resolveFeedCategory(feed: {
+  customCategoryId: string | null;
+  customCategory?: { id: string; label: string } | null;
+  freshrssCategoryId: string | null;
+  freshrssCategoryLabel: string | null;
+}): { categoryFreshrssId: string; categoryLabel: string; isFreshrssCategory: boolean } {
+  if (feed.customCategoryId) {
+    return {
+      categoryFreshrssId: customCategoryFreshrssId(feed.customCategoryId),
+      categoryLabel: feed.customCategory?.label ?? "Catégorie personnalisée",
+      isFreshrssCategory: false
+    };
+  }
+  return {
+    categoryFreshrssId: feed.freshrssCategoryId ?? "",
+    categoryLabel: feed.freshrssCategoryLabel ?? "Sans catégorie",
+    isFreshrssCategory: Boolean(feed.freshrssCategoryId)
+  };
+}
+
+/**
+ * Crée une nouvelle catégorie personnalisée et la rend visible immédiatement
+ * (upsert SelectedCategory, comme si l'utilisateur venait de la cocher) —
+ * factorisé ici car appelé à la fois par /api/admin/custom-categories
+ * (création autonome) et /api/admin/custom-feeds (création "à la volée"
+ * depuis le formulaire d'ajout de flux).
+ */
+export async function createCustomCategoryRecord(label: string) {
+  const maxOrder = await prisma.customCategory.aggregate({ _max: { order: true } });
+  const category = await prisma.customCategory.create({
+    data: { label, order: (maxOrder._max.order ?? -1) + 1 }
+  });
+
+  const freshrssId = customCategoryFreshrssId(category.id);
+  const maxSelectedOrder = await prisma.selectedCategory.aggregate({ _max: { order: true } });
+  await prisma.selectedCategory.upsert({
+    where: { freshrssId },
+    update: { label },
+    create: { freshrssId, label, order: (maxSelectedOrder._max.order ?? -1) + 1 }
+  });
+
+  return category;
+}
+
+/**
+ * Recalcule et applique immédiatement le flag `included` de TOUS les
+ * articles déjà en base pour les flux perso rattachés à cette catégorie
+ * FreshRSS précise — appelé après avoir basculé
+ * DisabledCustomFeedsCategory pour cette catégorie (voir
+ * /api/admin/categories, POST customFeedsEnabled). Recalcule proprement à
+ * partir des TROIS conditions réelles (catégorie sélectionnée, flux non
+ * exclu individuellement, bascule groupée) plutôt que d'écraser
+ * aveuglément à true/false — un flux individuellement exclu (ExcludedFeed)
+ * reste exclu même si on réactive la bascule groupée.
+ */
+export async function recomputeIncludedForFreshrssCategory(freshrssCategoryId: string): Promise<void> {
+  const [selected, excludedFeeds, disabled, feeds] = await Promise.all([
+    prisma.selectedCategory.findMany({ select: { freshrssId: true } }),
+    prisma.excludedFeed.findMany({ select: { freshrssId: true } }),
+    prisma.disabledCustomFeedsCategory.findUnique({ where: { freshrssCategoryId } }),
+    prisma.customFeed.findMany({ where: { freshrssCategoryId } })
+  ]);
+  const selectedIds = new Set(selected.map((s) => s.freshrssId));
+  const excludedIds = new Set(excludedFeeds.map((e) => e.freshrssId));
+  const categoryOk = selectedIds.has(freshrssCategoryId) && !disabled;
+
+  for (const feed of feeds) {
+    const feedFreshrssId = customFeedFreshrssId(feed.id);
+    const included = categoryOk && !excludedIds.has(feedFreshrssId);
+    await prisma.article.updateMany({ where: { feedId: feedFreshrssId }, data: { included } });
+  }
+}
+
+/**
+ * Passe d'auto-correction GLOBALE, appelée à chaque tick du worker (voir
+ * syncCustomFeeds ci-dessous) — recalcule `included` pour TOUS les articles
+ * déjà en base issus de flux personnalisés, à partir des trois conditions
+ * réelles actuelles (catégorie sélectionnée, flux non exclu, bascule
+ * groupée), pour les DEUX types de rattachement (CustomCategory ET vraie
+ * catégorie FreshRSS confondus, via resolveFeedCategory).
+ *
+ * Nécessaire en complément de recomputeIncludedForFreshrssCategory
+ * (déclenchée ponctuellement sur certaines actions admin précises) : si un
+ * article a été ingéré une fois avec included=false à cause d'un état
+ * transitoire (catégorie pas encore cochée, migration pas encore appliquée,
+ * bug corrigé depuis...), `ingestRawItems` ne le retouche plus jamais après
+ * coup (upsert en `update: {}` pour ne pas écraser le travail éditorial —
+ * voir generateEdition.ts) : sans cette passe, l'article restait caché pour
+ * toujours même une fois la config redevenue correcte. Coût négligeable :
+ * uniquement des requêtes DB indexées, aucun appel réseau, un seul passage
+ * par flux personnalisé existant (généralement une poignée).
+ */
+export async function recomputeAllCustomFeedIncluded(): Promise<void> {
+  const [selected, excludedFeeds, disabledCategories, feeds] = await Promise.all([
+    prisma.selectedCategory.findMany({ select: { freshrssId: true } }),
+    prisma.excludedFeed.findMany({ select: { freshrssId: true } }),
+    prisma.disabledCustomFeedsCategory.findMany({ select: { freshrssCategoryId: true } }),
+    prisma.customFeed.findMany({ include: { customCategory: true } })
+  ]);
+  if (feeds.length === 0) return;
+
+  const selectedIds = new Set(selected.map((s) => s.freshrssId));
+  const excludedIds = new Set(excludedFeeds.map((e) => e.freshrssId));
+  const disabledCategoryIds = new Set(disabledCategories.map((d) => d.freshrssCategoryId));
+
+  for (const feed of feeds) {
+    const feedFreshrssId = customFeedFreshrssId(feed.id);
+    const { categoryFreshrssId, categoryLabel } = resolveFeedCategory(feed);
+    const groupDisabled = Boolean(feed.freshrssCategoryId) && disabledCategoryIds.has(feed.freshrssCategoryId!);
+    const included = selectedIds.has(categoryFreshrssId) && !excludedIds.has(feedFreshrssId) && !groupDisabled;
+    // "included: { not: included }" : n'écrit rien si déjà cohérent, pour ne
+    // pas faire une passe UPDATE coûteuse à vide sur chaque tick.
+    await prisma.article.updateMany({
+      where: { feedId: feedFreshrssId, included: { not: included } },
+      data: { included }
+    });
+    // Synchronise aussi categoryLabel : quand un flux est DÉPLACÉ vers une
+    // autre catégorie (PATCH /api/admin/custom-feeds), ses articles déjà en
+    // base gardaient l'ANCIEN libellé pour toujours — "En direct" (qui groupe
+    // par categoryLabel, voir EditionView) continuait alors d'afficher une
+    // colonne fantôme au nom de l'ancienne catégorie, y compris une catégorie
+    // perso SUPPRIMÉE depuis (le bug "catégorie supprimée toujours visible").
+    // Même garde "n'écrit que si différent" que ci-dessus. Le OR couvre
+    // aussi categoryLabel NULL : en SQL, NOT(categoryLabel = x) est faux
+    // pour NULL, donc sans cette branche un article sans libellé ne serait
+    // jamais rattrapé.
+    await prisma.article.updateMany({
+      where: { feedId: feedFreshrssId, OR: [{ categoryLabel: null }, { NOT: { categoryLabel } }] },
+      data: { categoryLabel }
+    });
+  }
+}
+
+/**
+ * Complément indispensable à recomputeAllCustomFeedIncluded ci-dessus : celle-
+ * ci ne boucle QUE sur les CustomFeed encore existants, donc si un flux/une
+ * catégorie perso est supprimé alors qu'un de ses articles était resté
+ * included=true (quelle qu'en soit la raison, y compris un bug antérieur déjà
+ * corrigé), plus rien ne le revisite jamais — il reste affiché "en direct"
+ * pour toujours, orphelin de toute config. Repéré via le cas concret d'une
+ * catégorie perso "test" supprimée dont un article traînait encore dans "En
+ * direct". Ici on part de la DIRECTION INVERSE : tout article included=true
+ * dont le feedId ressemble à un flux perso ("custom-feed:...") mais qui ne
+ * correspond à AUCUN CustomFeed actuel est décoché.
+ */
+export async function recomputeOrphanedCustomFeedArticles(): Promise<void> {
+  const feeds = await prisma.customFeed.findMany({ select: { id: true } });
+  const currentFeedIds = new Set(feeds.map((f) => customFeedFreshrssId(f.id)));
+
+  const orphanCandidates = await prisma.article.findMany({
+    where: { included: true, feedId: { startsWith: "custom-feed:" } },
+    select: { id: true, feedId: true },
+    distinct: ["feedId"]
+  });
+  const orphanFeedIds = orphanCandidates
+    .map((a) => a.feedId)
+    .filter((id): id is string => Boolean(id) && !currentFeedIds.has(id!));
+  if (orphanFeedIds.length === 0) return;
+
+  await prisma.article.updateMany({
+    where: { feedId: { in: orphanFeedIds }, included: true },
+    data: { included: false }
+  });
+}
+
+const parser = new Parser({
+  // Certaines URL de flux perso pointent DIRECTEMENT vers une instance morss
+  // (voir /admin/categories, champ URL du flux) plutôt que vers la source
+  // d'origine — morss scrape/reformate le contenu à la volée avant de
+  // répondre, donc nettement plus lent qu'un flux RSS brut. 10s puis 20s se
+  // sont révélés trop courts en usage réel ("Libération" via morss :
+  // "Request timed out"). 45s laisse la marge nécessaire à morss sans
+  // bloquer indéfiniment un flux réellement injoignable, et reste sous le
+  // timeout par défaut d'un reverse proxy typique (60s).
+  timeout: 45000,
+  headers: {
+    "User-Agent": BROWSER_USER_AGENT,
+    // Vu en usage réel sur un flux passant par une instance morss : le
+    // serveur logue bien "200" avec tout le contenu envoyé quasi
+    // instantanément, mais le client restait bloqué jusqu'au timeout —
+    // symptôme classique d'une connexion keep-alive/chunked mal terminée
+    // côté serveur (le client attend une fin de flux qui ne vient jamais
+    // alors que les données utiles sont déjà toutes arrivées). Demander
+    // explicitement la fermeture de la connexion évite de rester bloqué sur
+    // ce genre de socket qui ne se referme pas proprement.
+    Connection: "close"
+  }
+});
+
+// Échappe les "&" isolés (pas déjà partie d'une entité valide) — cause vue
+// en usage réel de "Unexpected close tag" sur des flux servis par un miroir
+// Redlib (un titre/lien Reddit contenant un "&" brut, jamais échappé côté
+// Redlib). Correction volontairement ciblée sur ce seul cas précis, pas une
+// réparation générale de XML cassé.
+function sanitizeRssXml(xml: string): string {
+  return xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, "&amp;");
+}
+
+// Récupération d'un flux Reddit DIRECTEMENT via l'API JSON publique de
+// Reddit — tentée AVANT les miroirs Redlib : le serveur reçoit un 404 (pas
+// un 403 "bloqué") sur les URLs ".rss", ce qui indique que Reddit lui répond
+// normalement et que c'est le format RSS lui-même qui a été retiré. La même
+// URL en ".json" (API publique historique, ex. /r/X/top.json?t=week) sert
+// exactement le même listing — plus riche même (vraie image de preview,
+// texte du post, date précise), sans dépendre d'aucun miroir tiers.
+// raw_json=1 : sinon Reddit renvoie les URLs avec les & encodés en &amp;.
+function redditJsonUrl(originalUrl: string): string | null {
+  try {
+    const parsed = new URL(originalUrl);
+    if (!isRedditHostname(parsed.hostname)) return null;
+    const path = parsed.pathname.replace(/\/?\.rss$/i, "").replace(/\/+$/, "");
+    if (!path) return null;
+    const sep = parsed.search ? `${parsed.search}&` : "?";
+    return `https://www.reddit.com${path}.json${sep}raw_json=1&limit=25`;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchRedditJsonFeed(originalUrl: string): Promise<Awaited<ReturnType<typeof parser.parseURL>>> {
+  const jsonUrl = redditJsonUrl(originalUrl);
+  if (!jsonUrl) throw new Error("URL Reddit invalide");
+
+  const res = await fetch(jsonUrl, {
+    headers: {
+      "User-Agent": BROWSER_USER_AGENT,
+      Accept: "application/json"
+    },
+    signal: AbortSignal.timeout(45000)
+  });
+  if (!res.ok) throw new Error(`Status code ${res.status} (API JSON Reddit)`);
+  const data: any = await res.json();
+
+  const children = data?.data?.children;
+  if (!Array.isArray(children) || children.length === 0) {
+    throw new Error("Réponse JSON Reddit vide ou inattendue");
+  }
+
+  const items = children
+    .map((child: any) => child?.data)
+    .filter((d: any) => d && !d.stickied && typeof d.title === "string" && typeof d.permalink === "string")
+    .map((d: any) => {
+      const link = `https://www.reddit.com${d.permalink}`;
+      // Vraie image de preview quand elle existe ; thumbnail sinon (mais
+      // Reddit y met aussi des mots-clés "self"/"default"/"nsfw" au lieu
+      // d'une URL pour les posts sans image — d'où le test http).
+      const previewUrl: string | undefined = d.preview?.images?.[0]?.source?.url;
+      const thumbUrl: string | undefined =
+        typeof d.thumbnail === "string" && /^https?:\/\//.test(d.thumbnail) ? d.thumbnail : undefined;
+      const imageUrl = previewUrl || thumbUrl;
+      return {
+        title: d.title,
+        link,
+        guid: link,
+        isoDate: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : undefined,
+        contentSnippet: typeof d.selftext === "string" && d.selftext ? d.selftext.slice(0, 1000) : undefined,
+        enclosure: imageUrl ? { url: imageUrl, type: "image/jpeg" } : undefined
+      };
+    });
+
+  if (items.length === 0) throw new Error("Aucun post exploitable dans la réponse JSON Reddit");
+  return { items } as unknown as Awaited<ReturnType<typeof parser.parseURL>>;
+}
+
+// Récupération d'un flux Reddit via un miroir Redlib. Trois étages, dans
+// l'ordre du moins au plus coûteux, car le support varie par instance :
+//   1. le ".rss" du miroir, tel quel (rare : RSS est une option Redlib
+//      désactivée sur la quasi-totalité des instances publiques) ;
+//   2. le même XML assaini (les "&" isolés non échappés cassent le parseur) ;
+//   3. la page HTML du LISTING elle-même (toujours servie, elle), parsée en
+//      items par parseRedlibListingHtml — c'est le chemin qui marche
+//      réellement sur les instances actuelles, les deux premiers ne coûtent
+//      qu'un seul aller-retour raté avant d'y arriver.
+async function fetchRedditMirrorFeed(url: string): Promise<Awaited<ReturnType<typeof parser.parseURL>>> {
+  const headers = {
+    "User-Agent": BROWSER_USER_AGENT,
+    Accept: "text/html,application/rss+xml,application/atom+xml,application/xml;q=0.9,*/*;q=0.8"
+  };
+
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(45000) });
+  if (!res.ok) throw new Error(`Status code ${res.status}`);
+  const raw = await res.text();
+
+  try {
+    return await parser.parseString(raw);
+  } catch {
+    try {
+      return await parser.parseString(sanitizeRssXml(raw));
+    } catch {
+      // Pas du RSS : on bascule sur la page HTML du listing. L'URL ".rss"
+      // redonne parfois déjà ce HTML directement (instance sans RSS), sinon
+      // on refait la requête sans le suffixe.
+      const instanceBase = new URL(url).origin;
+      let html = raw;
+      if (!/\/comments\//.test(html)) {
+        const htmlUrl = url.replace(/\/?\.rss(\?|$)/i, (_m, q) => (q === "?" ? "?" : "")).replace(/\?$/, "");
+        const htmlRes = await fetch(htmlUrl, { headers, signal: AbortSignal.timeout(45000) });
+        if (!htmlRes.ok) throw new Error(`Status code ${htmlRes.status} (listing HTML)`);
+        html = await htmlRes.text();
+      }
+
+      const listingItems = parseRedlibListingHtml(html, instanceBase);
+      if (listingItems.length === 0) {
+        throw new Error("Ni RSS ni listing HTML exploitable sur ce miroir");
+      }
+      // Même forme que la sortie de rss-parser pour les champs que le
+      // pipeline aval consomme (guid/link/title/enclosure/isoDate).
+      return { items: listingItems } as unknown as Awaited<ReturnType<typeof parser.parseURL>>;
+    }
+  }
+}
+
+type ParsedFeed = Awaited<ReturnType<typeof parser.parseURL>>;
+
+/** Une tentative nommée de récupération d'un flux — remplace l'ancien
+ *  enchaînement de try/catch imbriqués (direct -> Reddit -> morss ->
+ *  Reddit+morss...), devenu illisible à force de correctifs successifs. Une
+ *  seule liste ordonnée, essayée dans l'ordre jusqu'à la première qui
+ *  fonctionne, avec un journal clair de ce qui a été tenté. */
+type FetchAttempt = { label: string; run: () => Promise<ParsedFeed> };
+
+function morssUrlFor(morssBaseUrl: string, url: string): string {
+  return `${morssBaseUrl}/${url.replace(/^https?:\/\//, "")}`;
+}
+
+/**
+ * Construit, dans l'ordre, la liste des tentatives à faire pour récupérer un
+ * flux personnalisé donné :
+ *
+ *   1. morss D'ABORD, de façon transparente, si configuré et que l'URL du
+ *      flux n'est pas déjà elle-même une URL morss (voir /admin/settings,
+ *      section VPN) — que le VPN interne de morss soit actif ou non ne
+ *      change rien à CE choix de routage, seul le comportement réseau
+ *      propre à morss en dépend.
+ *   2. Fetch direct du site source.
+ *   3. Si Reddit : API JSON publique, puis old.reddit.com en direct, puis
+ *      les miroirs Redlib (un par un, le premier qui répond gagne) — Reddit
+ *      bloque désormais quasi toutes les requêtes serveur-à-serveur (RSS
+ *      compris) par un 403 réseau/IP, indépendant du User-Agent (voir
+ *      reddit.ts).
+ *   4. Si Reddit ET morss configuré : nouvel essai via morss, avec
+ *      old.reddit.com (combinaison vérifiée manuellement comme fonctionnant
+ *      pour au moins un subreddit), puis l'URL d'origine (sauf si déjà
+ *      tentée en 1), puis la page HTML du listing sans .rss (repli qui
+ *      fonctionne pour d'autres subreddits, ex. SurvivalGaming).
+ *
+ * Chaque candidat n'est ajouté qu'une fois (pas de requête en double pour
+ * une même URL).
+ */
+function buildFetchAttempts(feedUrl: string, morssBaseUrl: string): FetchAttempt[] {
+  const attempts: FetchAttempt[] = [];
+  const morssFirst = Boolean(morssBaseUrl) && !isAlreadyMorssUrl(feedUrl, morssBaseUrl);
+
+  if (morssFirst) {
+    const url = morssUrlFor(morssBaseUrl, feedUrl);
+    attempts.push({ label: `morss : ${url}`, run: () => parser.parseURL(url) });
+  }
+
+  attempts.push({ label: `direct : ${feedUrl}`, run: () => parser.parseURL(feedUrl) });
+
+  let hostname = "";
+  try {
+    hostname = new URL(feedUrl).hostname;
+  } catch {
+    return attempts; // URL illisible : rien de plus à tenter
+  }
+  if (!isRedditHostname(hostname)) {
+    return attempts;
+  }
+
+  attempts.push({ label: "API JSON Reddit", run: () => fetchRedditJsonFeed(feedUrl) });
+
+  if (hostname !== "old.reddit.com") {
+    const oldRedditUrl = new URL(feedUrl);
+    oldRedditUrl.hostname = "old.reddit.com";
+    const oldRedditStr = oldRedditUrl.toString();
+    attempts.push({ label: `old.reddit.com direct : ${oldRedditStr}`, run: () => parser.parseURL(oldRedditStr) });
+  }
+
+  attempts.push({
+    label: "miroirs Redlib",
+    run: async () => {
+      let lastErr: unknown = new Error("aucune instance Redlib disponible");
+      for (const instance of await getRedlibInstances()) {
+        const mirrorUrl = rehostRedditUrl(feedUrl, instance);
+        if (!mirrorUrl) continue;
+        try {
+          return await fetchRedditMirrorFeed(mirrorUrl);
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr;
+    }
+  });
+
+  if (morssBaseUrl) {
+    const candidates = new Set<string>();
+    const oldUrl = new URL(feedUrl);
+    oldUrl.hostname = "old.reddit.com";
+    candidates.add(oldUrl.toString());
+    if (!morssFirst) candidates.add(feedUrl); // sinon déjà tenté en tête (étape 1)
+    const listingUrl = new URL(feedUrl);
+    listingUrl.pathname = listingUrl.pathname.replace(/\/?\.rss$/i, "/");
+    candidates.add(listingUrl.toString());
+
+    for (const candidate of candidates) {
+      const url = morssUrlFor(morssBaseUrl, candidate);
+      attempts.push({ label: `morss (Reddit) : ${url}`, run: () => parser.parseURL(url) });
+    }
+  }
+
+  return attempts;
+}
+
+/** Essaie chaque tentative dans l'ordre, s'arrête à la première qui
+ *  fonctionne. Lève une erreur récapitulant tout le journal si aucune n'a
+ *  abouti (repris tel quel dans lastFetchError/le log d'échec appelant). */
+async function fetchFeedResilient(
+  feedUrl: string,
+  morssBaseUrl: string
+): Promise<{ parsed: ParsedFeed; log: string[] }> {
+  const log: string[] = [];
+  for (const attempt of buildFetchAttempts(feedUrl, morssBaseUrl)) {
+    try {
+      const parsed = await attempt.run();
+      log.push(`${attempt.label} -> OK`);
+      return { parsed, log };
+    } catch (err) {
+      log.push(`${attempt.label} -> ${(err as Error)?.message || "échec"}`);
+    }
+  }
+  throw new Error(log.join("\n") || "Aucune méthode de récupération disponible.");
+}
+
+/** Meilleur contenu disponible dans un item rss-parser : content:encoded
+ *  (texte complet, souvent absent des flux minimalistes) sinon content
+ *  (mappé depuis <description> par rss-parser) sinon summary. */
+function bestRawContent(item: Parser.Item): string {
+  const withEncoded = item as unknown as { "content:encoded"?: string };
+  return withEncoded["content:encoded"] || item.content || item.summary || "";
+}
+
+/** Titre de secours pour un item sans <title> exploitable (dépêches AFP
+ *  redistribuées, vu en usage réel) : première phrase de l'extrait, coupée
+ *  à un mot entier si trop longue — pas de troncature en plein mot. Renvoie
+ *  "" si l'extrait lui-même est vide (rien à en tirer). */
+function deriveTitleFromExcerpt(excerpt: string): string {
+  if (!excerpt) return "";
+  const MAX_LEN = 100;
+  const sentenceEnd = excerpt.search(/[.!?](?:\s|$)/);
+  let candidate = sentenceEnd > 0 && sentenceEnd < MAX_LEN ? excerpt.slice(0, sentenceEnd + 1) : excerpt;
+  if (candidate.length > MAX_LEN) {
+    candidate = candidate.slice(0, MAX_LEN).replace(/\s+\S*$/, "") + "…";
+  }
+  return candidate.trim();
+}
+
+/** Certains flux (balisage Atom/RSS non standard, titre en CDATA imbriqué...)
+ *  font remonter un `item.title` qui n'est PAS une chaîne malgré le typage
+ *  de rss-parser (objet, tableau...) — appeler `.trim()` dessus plante alors
+ *  ("title?.trim is not a function", vu en usage réel sur un flux réel).
+ *  Convertit explicitement en chaîne avant de nettoyer, quel que soit le
+ *  type réellement reçu. */
+/** Convertit `item.isoDate`/`item.pubDate` en Date valide, ou null si le
+ *  flux fournit une date illisible (vu en usage réel : `new Date(...)`
+ *  produisait un "Invalid Date" passé tel quel à Prisma, qui rejette
+ *  l'upsert ENTIER avec "Provided Date object is invalid" — et donc, avant
+ *  le fix de résilience sur ingestRawItems, bloquait aussi tous les autres
+ *  articles du même lot). */
+function safePublishedAt(item: Parser.Item): Date | null {
+  const raw = item.isoDate || item.pubDate;
+  if (!raw) return null;
+  const date = new Date(raw);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+export function safeTitle(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value == null) return "";
+  if (typeof value === "object") {
+    // Forme typique produite par le parseur XML sous-jacent pour un élément
+    // à contenu mixte (ex. balise avec attributs ET texte) : { _: "texte",
+    // $: {...attributs} } — tenter cette clé avant toute conversion.
+    const obj = value as Record<string, unknown>;
+    const inner = obj["_"] ?? obj["#text"];
+    if (typeof inner === "string") return inner.trim();
+    // Repli défensif : un objet sans prototype exploitable (ex.
+    // Object.create(null), certains nœuds XML mal formés) fait planter
+    // String() avec "Cannot convert object to primitive value" — vu en
+    // usage réel sur un flux réel. On abandonne proprement plutôt que de
+    // faire échouer tout le flux pour un seul titre illisible.
+    try {
+      return String(value).trim();
+    } catch {
+      return "";
+    }
+  }
+  return String(value).trim();
+}
+
+function bestImageUrl(item: Parser.Item, rawContent: string, baseUrl?: string | null): string | null {
+  const enclosureUrl = item.enclosure?.url;
+  if (enclosureUrl && (!item.enclosure?.type || item.enclosure.type.startsWith("image/"))) {
+    return enclosureUrl;
+  }
+  return extractFirstImageSrc(rawContent, baseUrl);
+}
+
+/**
+ * Récupère TOUS les nouveaux items de TOUS les flux personnalisés, avec le
+ * même filtrage/formatage que côté FreshRSS (stripHtml, stripLeadingChrome,
+ * repli og:image puis favicon). Auto-gaté par l'intervalle global : ne fait
+ * réellement une requête réseau que si Settings.customFeedsLastFetchedAt +
+ * customFeedsIntervalMinutes est dépassé — sinon retourne [] immédiatement.
+ * Peut donc être appelé souvent (chaque tick du worker) sans surcharger les
+ * flux sources.
+ */
+export async function fetchCustomFeedItems(force = false): Promise<RawItem[]> {
+  const settings = await getSettings();
+  const settingsRow = await prisma.settings.findUnique({ where: { id: "singleton" } });
+  const lastFetchedAt = settingsRow?.customFeedsLastFetchedAt ?? null;
+  const intervalMs = settings.customFeedsIntervalMinutes * 60_000;
+
+  // "force" (voir /api/admin/custom-feeds/sync, bouton "Forcer maintenant"
+  // dans l'admin) contourne UNIQUEMENT ce gate d'intervalle global — sert à
+  // diagnostiquer/tester immédiatement sans attendre, plutôt que de deviner
+  // si le blocage vient de l'intervalle ou d'autre chose.
+  if (!force && lastFetchedAt && Date.now() - lastFetchedAt.getTime() < intervalMs) {
+    return []; // pas encore l'heure
+  }
+
+  const feeds = await prisma.customFeed.findMany({ include: { customCategory: true } });
+  if (feeds.length === 0) {
+    // Rien à faire — surtout NE PAS marquer le passage ici : le vérifier
+    // coûte une seule requête DB (pas de réseau), donc autant réessayer à
+    // chaque tick. Marquer customFeedsLastFetchedAt à "maintenant" alors
+    // qu'aucun flux n'existe encore piégeait le TOUT PREMIER flux jamais créé
+    // : l'horodatage restait "frais" (rafraîchi chaque minute par le worker
+    // tant qu'il n'y avait aucun flux), donc dès qu'un flux apparaissait,
+    // l'intervalle semblait déjà écoulé... alors qu'aucune récupération
+    // réelle n'avait jamais eu lieu — le premier flux ajouté attendait alors
+    // bêtement un intervalle complet avant sa toute première récupération.
+    return [];
+  }
+
+  const [selected, excludedFeeds, disabledCategories] = await Promise.all([
+    prisma.selectedCategory.findMany({ select: { freshrssId: true } }),
+    prisma.excludedFeed.findMany({ select: { freshrssId: true } }),
+    prisma.disabledCustomFeedsCategory.findMany({ select: { freshrssCategoryId: true } })
+  ]);
+  const selectedIds = new Set(selected.map((c) => c.freshrssId));
+  const excludedFeedIds = new Set(excludedFeeds.map((f) => f.freshrssId));
+  const disabledCategoryIds = new Set(disabledCategories.map((d) => d.freshrssCategoryId));
+
+  const items: RawItem[] = [];
+
+  for (const feed of feeds) {
+    const feedFreshrssId = customFeedFreshrssId(feed.id);
+    const { categoryFreshrssId, categoryLabel } = resolveFeedCategory(feed);
+    // Bascule groupée (DisabledCustomFeedsCategory) : masque tous les flux
+    // perso d'une catégorie FreshRSS d'un coup, sans toucher à ExcludedFeed
+    // — ne s'applique qu'aux flux rattachés à une VRAIE catégorie FreshRSS
+    // (freshrssCategoryId), une catégorie perso pure a déjà son propre
+    // interrupteur dédié ("inclure la catégorie" sur la CustomCategory).
+    const groupDisabled = Boolean(feed.freshrssCategoryId) && disabledCategoryIds.has(feed.freshrssCategoryId!);
+    const included = selectedIds.has(categoryFreshrssId) && !excludedFeedIds.has(feedFreshrssId) && !groupDisabled;
+
+    try {
+      const { parsed, log } = await fetchFeedResilient(feed.url, MORSS_BASE_URL);
+      if (log.length > 1) {
+        // Plus d'une tentative : le fetch transparent/direct n'a pas suffi
+        // du premier coup — utile de savoir quelle méthode a fini par
+        // fonctionner (ou si tout a échoué avant l'exception ci-dessous),
+        // voir /admin/logs.
+        await writeLog("warn", "custom-feeds", `"${feed.title}" — repli nécessaire`, log.join("\n"));
+      }
+
+      // Dédoublonnage en UNE requête pour tout le flux (au lieu d'un
+      // findUnique PAR item, soit potentiellement des dizaines de requêtes
+      // par flux à chaque balayage) : on calcule d'abord tous les ids
+      // candidats, puis un seul `IN (...)` remonte ceux déjà en base.
+      const candidateIds = parsed.items
+        .map((item) => item.guid || item.link || safeTitle(item.title))
+        .filter(Boolean)
+        .map((guid) => `${feedFreshrssId}:${guid}`);
+      const existing = candidateIds.length
+        ? await prisma.article.findMany({
+            where: { freshrssItemId: { in: candidateIds } },
+            select: { freshrssItemId: true }
+          })
+        : [];
+      const existingIds = new Set(existing.map((a) => a.freshrssItemId));
+
+      let newForThisFeed = 0;
+      for (const item of parsed.items) {
+        const guid = item.guid || item.link || safeTitle(item.title);
+        if (!guid) continue;
+        const freshrssItemId = `${feedFreshrssId}:${guid}`;
+
+        if (existingIds.has(freshrssItemId)) continue;
+
+        const rawContent = bestRawContent(item);
+        let excerpt = rawContent ? stripHtml(rawContent).trim() : (item.contentSnippet || "").trim();
+        if (excerpt) excerpt = stripLeadingChrome(excerpt);
+
+        // URL de l'article débarrassée des paramètres de suivi du flux (utm_*,
+        // fbclid…) : c'est la forme stockée, donc TOUT ce qui la consomme
+        // ensuite (lien "ouvrir l'article", envoi Wallabag, lecteur externe)
+        // reçoit l'URL canonique propre — pas la variante "?utm_medium=feed".
+        const canonicalUrl = cleanArticleUrl(item.link || "");
+        // Base pour résoudre une éventuelle image en chemin relatif (voir
+        // extractFirstImageSrc) : l'URL canonique de l'ARTICLE si le flux la
+        // fournit, jamais l'URL du flux lui-même (qui peut être une URL
+        // morss — résoudre contre ça donnerait un domaine morss.*, pas le
+        // vrai site source).
+        let imageUrl = bestImageUrl(item, rawContent, canonicalUrl || null);
+        const rawTitle = safeTitle(item.title);
+
+        // Un seul aller-retour réseau (fetchOgMeta) couvre TROIS besoins à la
+        // fois : l'image manquante, le titre manquant (voir plus bas) ET
+        // l'extrait manquant — évite de fetcher deux fois la même page.
+        // Demandé pour les flux comme les dépêches AFP redistribuées
+        // (fonction-publique.gouv.fr) qui n'ont AUCUN <title> par item : on
+        // veut alors EXACTEMENT le même titre que celui affiché en ouvrant
+        // l'article en grand (qui vient de ce même scraping de page), pas une
+        // phrase devinée dans l'extrait. Un flux "lien seul" (aucun
+        // content:encoded/summary/contentSnippet réel — ex. agrégateurs de
+        // liens type "Self-Hosted Alternatives...") tombait sinon
+        // systématiquement sur le texte générique "Aucun aperçu fourni par le
+        // flux" alors que la page source a presque toujours une vraie meta
+        // description exploitable.
+        let ogTitle: string | null = null;
+        if ((!imageUrl || !rawTitle || !excerpt) && canonicalUrl && included) {
+          const meta = await fetchOgMeta(canonicalUrl);
+          if (!imageUrl) imageUrl = meta.imageUrl;
+          ogTitle = meta.title;
+          if (!excerpt && meta.description) excerpt = meta.description;
+        }
+        if (!imageUrl && canonicalUrl) imageUrl = faviconFallback(canonicalUrl);
+
+        items.push({
+          freshrssItemId,
+          feedId: feedFreshrssId,
+          feedTitle: feed.title,
+          categoryLabel,
+          sourceUrl: canonicalUrl,
+          sourceTitle: rawTitle || ogTitle || deriveTitleFromExcerpt(excerpt) || "(sans titre)",
+          sourceExcerpt: excerpt || null,
+          imageUrl,
+          publishedAt: safePublishedAt(item),
+          included
+        });
+        newForThisFeed++;
+      }
+
+      // Loggué même à 0 nouvel article (pas seulement en cas de nouveauté) —
+      // sur demande explicite : voir la vérification tourner et réussir est
+      // aussi une information utile ("tout va bien"), pas seulement les
+      // échecs ou les nouveautés.
+      await writeLog(
+        "info",
+        "custom-feeds",
+        newForThisFeed > 0
+          ? `"${feed.title}" : ${newForThisFeed} nouvel(aux) article(s) récupéré(s).`
+          : `"${feed.title}" : vérifié, aucun nouvel article.`
+      );
+
+      await prisma.customFeed.update({
+        where: { id: feed.id },
+        data: { lastFetchedAt: new Date(), lastFetchError: null }
+      });
+    } catch (err) {
+      const message = (err as Error)?.message || "Échec inconnu";
+      // Remonté aussi dans /admin/categories (GET /api/admin/custom-feeds)
+      // via lastFetchError — sans ça, un flux qui échoue ici en boucle
+      // semblait juste "ne jamais apparaître en En direct", sans aucune
+      // explication visible pour l'utilisateur (le seul indice restait un
+      // log serveur Coolify). writeLog() couvre maintenant aussi /admin/logs.
+      await writeLog("error", "custom-feeds", `Échec pour "${feed.title}"`, `${feed.url} — ${message}`);
+      await prisma.customFeed
+        .update({ where: { id: feed.id }, data: { lastFetchError: message } })
+        .catch(() => {});
+    }
+  }
+
+  await prisma.settings.upsert({
+    where: { id: "singleton" },
+    update: { customFeedsLastFetchedAt: new Date() },
+    create: { id: "singleton", customFeedsLastFetchedAt: new Date() }
+  });
+
+  return items;
+}
+
+/**
+ * Point d'entrée appelé périodiquement par le worker (voir worker/index.ts)
+ * — récupère (si l'intervalle global est écoulé, sinon no-op immédiat) puis
+ * stocke directement les nouveaux items en traitement brut, SANS créer de
+ * ligne Edition (voir ingestRawItems) : ce balayage tourne sur son propre
+ * intervalle, potentiellement bien plus fréquent que le cycle normal
+ * d'impression (IA ou aspiration de secours), zéro coût IA dans tous les cas.
+ */
+export async function syncCustomFeeds(force = false): Promise<{ fetched: number }> {
+  const items = await fetchCustomFeedItems(force);
+  if (items.length > 0) await ingestRawItems(items, null);
+  // Passe d'auto-correction à CHAQUE appel (donc chaque tick du worker, ~1x/
+  // minute), indépendamment du gating réseau ci-dessus — coût DB seul, voir
+  // le commentaire de recomputeAllCustomFeedIncluded.
+  await recomputeAllCustomFeedIncluded().catch(async (err) => {
+    await writeLog("error", "custom-feeds", "recomputeAllCustomFeedIncluded a échoué", (err as Error)?.message);
+  });
+  await recomputeOrphanedCustomFeedArticles().catch(async (err) => {
+    await writeLog(
+      "error",
+      "custom-feeds",
+      "recomputeOrphanedCustomFeedArticles a échoué",
+      (err as Error)?.message
+    );
+  });
+  return { fetched: items.length };
+}
