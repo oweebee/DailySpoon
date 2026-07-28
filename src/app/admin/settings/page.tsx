@@ -142,12 +142,6 @@ export default function AdminSettingsPage() {
   } | null>(null);
   const [loadingVpnStatus, setLoadingVpnStatus] = useState(false);
 
-  // Test manuel de scraping morss (voir la section juste au-dessus du VPN) —
-  // juste une URL tapée à la volée, jamais enregistrée en base : sert
-  // uniquement à prévisualiser le rendu avant d'aller coller l'URL dans un
-  // flux perso (/admin/categories).
-  const [morssTestUrl, setMorssTestUrl] = useState("");
-
   const [generatingCode, setGeneratingCode] = useState(false);
 
   const [exporting, setExporting] = useState(false);
@@ -886,38 +880,6 @@ export default function AdminSettingsPage() {
               Passé ce délai, les articles sont supprimés automatiquement à chaque génération —
               sauf ceux marqués favoris, jamais purgés.
             </p>
-          </fieldset>
-
-          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
-            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">
-              Morss (tester le scraping)
-            </legend>
-            <p className="text-xs italic text-sepia">
-              Colle une URL (article ou flux RSS) pour voir exactement ce que morss en tire, avant
-              de l&apos;utiliser dans un flux perso (/admin/categories) — ouvre le résultat brut
-              dans un nouvel onglet, réussite ou échec compris, sans rien enregistrer ici.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <input
-                type="url"
-                value={morssTestUrl}
-                onChange={(e) => setMorssTestUrl(e.target.value)}
-                placeholder="https://exemple.com/feed/"
-                className="min-w-[260px] flex-1 border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const url = morssTestUrl.trim();
-                  if (!url) return;
-                  window.open(`/api/admin/morss-test?url=${encodeURIComponent(url)}`, "_blank");
-                }}
-                disabled={!morssTestUrl.trim()}
-                className="border border-ink/40 px-3 py-2 text-xs uppercase tracking-[0.15em] text-journal hover:bg-ink/5 disabled:opacity-50"
-              >
-                Tester dans un nouvel onglet
-              </button>
-            </div>
           </fieldset>
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">

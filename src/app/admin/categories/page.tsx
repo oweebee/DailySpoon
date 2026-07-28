@@ -171,6 +171,13 @@ export default function AdminCategoriesPage() {
   const [feedForm, setFeedForm] = useState(EMPTY_FEED_FORM);
   const [addingFeed, setAddingFeed] = useState(false);
 
+  // Test manuel de scraping morss (déplacé depuis /admin/settings, plus
+  // logique ici juste au-dessus du formulaire d'ajout de flux) — juste une
+  // URL tapée à la volée, jamais enregistrée en base : sert uniquement à
+  // prévisualiser le rendu avant de coller l'URL dans le champ "Ajouter un
+  // flux" juste en dessous.
+  const [morssTestUrl, setMorssTestUrl] = useState("");
+
   const [editingFeedId, setEditingFeedId] = useState<string | null>(null);
   const [editFeedForm, setEditFeedForm] = useState(EMPTY_FEED_FORM);
   const [savingFeedEdit, setSavingFeedEdit] = useState(false);
@@ -1011,6 +1018,35 @@ export default function AdminCategoriesPage() {
         >
           {creatingCategory ? "Création..." : "Créer la catégorie"}
         </button>
+      </div>
+
+      <div className="mb-6 space-y-3 border-b border-ink/30 pb-4">
+        <p className="text-xs italic text-sepia">
+          Tester le scraping morss : colle une URL (article ou flux RSS) pour voir exactement ce
+          que morss en tire, avant de l&apos;utiliser dans le flux perso ci-dessous — ouvre le
+          résultat brut dans un nouvel onglet, réussite ou échec compris, sans rien enregistrer.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="url"
+            value={morssTestUrl}
+            onChange={(e) => setMorssTestUrl(e.target.value)}
+            placeholder="https://exemple.com/feed/"
+            className="min-w-[220px] flex-1 border border-ink/40 bg-transparent px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const url = morssTestUrl.trim();
+              if (!url) return;
+              window.open(`/api/admin/morss-test?url=${encodeURIComponent(url)}`, "_blank");
+            }}
+            disabled={!morssTestUrl.trim()}
+            className="border border-ink/40 px-3 py-2 text-xs uppercase tracking-[0.15em] text-journal hover:bg-ink/5 disabled:opacity-50"
+          >
+            Tester dans un nouvel onglet
+          </button>
+        </div>
       </div>
 
       <div className="mb-6 space-y-2 border-b-2 border-ink pb-4">
