@@ -7,6 +7,21 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/). Num
 - **x.Y.z** (ex. 1.1.0, 1.2.0) — fonctionnalité ou amélioration moyenne
 - **X.y.z** (ex. 2.0.0, 3.0.0) — grosse feature ou refonte
 
+## [1.0.3] - 2026-07-28
+
+### Modifié
+- Outil de test de scraping morss déplacé de `/admin/settings` vers `/admin/categories`, juste au-dessus du formulaire d'ajout de flux perso (plus logique pour tester une URL avant de l'ajouter directement en dessous).
+
+## [1.0.2] - 2026-07-28
+
+### Ajouté
+- Barre de progression noire affichée en haut de la page de lecture d'un article pendant le rechargement déclenché par « Traduire en français » (la traduction peut prendre plusieurs secondes sans aucun autre signe de chargement visible).
+
+## [1.0.1] - 2026-07-28
+
+### Corrigé
+- Flux personnalisés « Reuters World » et « Reuters Europe » (morts depuis l'arrêt du RSS officiel de Reuters en 2020) remplacés par les flux officiels BBC News (`/world` et `/world/europe`).
+
 ## [1.0.0] - 2026-07-28
 
 Version de référence — repart d'un historique Git propre (squash), regroupant tout ce qui existait avant cette date.
