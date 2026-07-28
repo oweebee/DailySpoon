@@ -146,6 +146,13 @@ export default function AdminSettingsPage() {
 
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // Export/import séparé pour les ARCHIVES (éditions déjà générées, voir
+  // /archive) — /api/admin/backup-archives, distinct du backup de config
+  // ci-dessus qui exclut volontairement les articles/éditions.
+  const [exportingArchives, setExportingArchives] = useState(false);
+  const [importingArchives, setImportingArchives] = useState(false);
+  const [archivesMessage, setArchivesMessage] = useState<string | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -450,6 +457,70 @@ export default function AdminSettingsPage() {
       setBackupMessage("Fichier illisible (JSON invalide).");
     } finally {
       setImporting(false);
+    }
+  }
+
+  // Export : télécharge un fichier JSON avec toutes les éditions déjà
+  // générées et leur contenu IA figé (voir /api/admin/backup-archives) —
+  // rien à voir avec exportConfig ci-dessus, qui exclut ces données-là.
+  async function exportArchives() {
+    setExportingArchives(true);
+    setArchivesMessage(null);
+    try {
+      const res = await fetch("/api/admin/backup-archives");
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setArchivesMessage(body.error || "Échec de l'export.");
+        return;
+      }
+      const blob = new Blob([JSON.stringify(body, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dailyspoon-archives-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setArchivesMessage(`Export téléchargé (${body.editions?.length ?? 0} édition(s)).`);
+    } finally {
+      setExportingArchives(false);
+    }
+  }
+
+  // Import : n'ajoute que les éditions dont l'id n'existe pas déjà en base
+  // (jamais d'écrasement/suppression, voir /api/admin/backup-archives POST).
+  async function importArchives(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (
+      !window.confirm(
+        "Importer ce fichier va ajouter les éditions qu'il contient et qui n'existent pas déjà ici. Aucune édition existante ne sera modifiée ni supprimée. Continuer ?"
+      )
+    ) {
+      return;
+    }
+    setImportingArchives(true);
+    setArchivesMessage(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const res = await fetch("/api/admin/backup-archives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed)
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setArchivesMessage(body.error || "Échec de l'import.");
+        return;
+      }
+      setArchivesMessage(
+        `Import terminé — ${body.importedEditions} édition(s) ajoutée(s), ${body.skippedEditions} déjà présente(s).`
+      );
+    } catch {
+      setArchivesMessage("Fichier illisible (JSON invalide).");
+    } finally {
+      setImportingArchives(false);
     }
   }
 
@@ -1048,6 +1119,40 @@ export default function AdminSettingsPage() {
                 />
               </label>
               {backupMessage && <span className="text-sm italic text-sepia">{backupMessage}</span>}
+            </div>
+          </fieldset>
+
+          <fieldset className="space-y-3 border border-journal/30 p-4">
+            <legend className="px-1 font-display text-xs uppercase tracking-[0.15em] text-journal">
+              Archives (éditions IA)
+            </legend>
+            <p className="text-xs italic text-sepia">
+              Exporte toutes les éditions déjà générées (voir /archive) avec leur contenu IA figé —
+              titres, résumés, une du jour — dans un fichier JSON séparé, réimportable en cas de
+              besoin (nouvelle instance, restauration après perte de données...). N&apos;inclut PAS
+              les réglages/catégories/flux (voir « Sauvegarde » ci-dessus pour ça). L&apos;import
+              n&apos;ajoute que les éditions absentes ici, sans jamais écraser ni supprimer.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={exportArchives}
+                disabled={exportingArchives}
+                className="border border-journal/40 px-3 py-2 text-xs uppercase tracking-[0.1em] text-journal hover:bg-journal/5 disabled:opacity-50"
+              >
+                {exportingArchives ? "Export en cours..." : "Exporter les archives"}
+              </button>
+              <label className="cursor-pointer border border-journal/40 px-3 py-2 text-xs uppercase tracking-[0.1em] text-journal hover:bg-journal/5">
+                {importingArchives ? "Import en cours..." : "Importer des archives"}
+                <input
+                  type="file"
+                  accept="application/json"
+                  onChange={importArchives}
+                  disabled={importingArchives}
+                  className="hidden"
+                />
+              </label>
+              {archivesMessage && <span className="text-sm italic text-sepia">{archivesMessage}</span>}
             </div>
           </fieldset>
 

@@ -7,6 +7,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/). Num
 - **x.Y.z** (ex. 1.1.0, 1.2.0) — fonctionnalité ou amélioration moyenne
 - **X.y.z** (ex. 2.0.0, 3.0.0) — grosse feature ou refonte
 
+## [1.1.0] - 2026-07-28
+
+### Ajouté
+- Export/import des archives (éditions IA déjà générées) dans `/admin/settings`, section « Archives (éditions IA) » — séparé de l'export de configuration existant, qui exclut volontairement articles et éditions. L'import n'ajoute que les éditions absentes, sans jamais écraser ni supprimer.
+
 ## [1.0.3] - 2026-07-28
 
 ### Modifié
