@@ -448,14 +448,44 @@ function renderPage(opts: {
     background: #fff;
   }
   .embed-note { text-align: center; font-size: 0.75rem; font-style: italic; color: #5c5c5c; margin: 0.8em 0 1.6em; }
+  /* Barre de progression noire en haut de page, affichée le temps du
+     rechargement complet déclenché par le lien "Traduire en français" — la
+     traduction (jusqu'à 60 blocs, appels séquentiels à l'API Google
+     Translate côté serveur, voir translateContentHtml) peut prendre
+     plusieurs secondes, pendant lesquelles cette page ne montre autrement
+     aucun signe de chargement (navigation classique d'un lien <a>, pas une
+     requête fetch qu'on pourrait suivre) — surtout visible ici puisque la
+     page est servie dans une iframe de lecture, où le chrome du navigateur
+     hôte ne montre rien non plus. Défilement indéterminé (on ne connaît pas
+     la progression réelle) plutôt qu'une vraie barre de pourcentage. */
+  .translate-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 40%;
+    background: #1a1a1a;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .translate-progress.is-active {
+    opacity: 1;
+    animation: translate-progress-slide 1.1s ease-in-out infinite;
+  }
+  @keyframes translate-progress-slide {
+    0% { margin-left: -40%; }
+    100% { margin-left: 100%; }
+  }
 </style>
 </head>
 <body>
+  <div class="translate-progress" id="translate-progress"></div>
   <div class="page">
     <p class="meta-top">
       <span class="meta-left"></span>
       <span class="meta-center">
-        ${showTranslateLink ? `<a href="${escapeHtml(translateHref)}">${translateLabel}</a>` : ""}
+        ${showTranslateLink ? `<a href="${escapeHtml(translateHref)}" id="translate-link">${translateLabel}</a>` : ""}
       </span>
       <span class="meta-right">${kicker}</span>
     </p>
@@ -497,6 +527,29 @@ function renderPage(opts: {
   overlay.addEventListener("click", close);
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") close();
+  });
+})();
+</script>
+  <script>
+(function () {
+  // Affiche la barre de progression noire dès le clic sur "Traduire en
+  // français ⇄" / "Texte original ↺" — le navigateur continue de peindre
+  // cette page (et donc la barre) pendant qu'il prépare la navigation vers
+  // la version traduite/originale, avant de la remplacer une fois arrivée.
+  // Pas de preventDefault : la navigation classique du lien <a> suit son
+  // cours normalement, on ajoute juste ce signal visuel avant qu'elle parte.
+  var link = document.getElementById("translate-link");
+  var bar = document.getElementById("translate-progress");
+  if (link && bar) {
+    link.addEventListener("click", function () {
+      bar.classList.add("is-active");
+    });
+  }
+  // Si l'utilisateur revient en arrière (bfcache) sur cette page pendant
+  // qu'elle était affichée "en cours de traduction", la barre resterait
+  // sinon figée active indéfiniment.
+  window.addEventListener("pageshow", function () {
+    if (bar) bar.classList.remove("is-active");
   });
 })();
 </script>
