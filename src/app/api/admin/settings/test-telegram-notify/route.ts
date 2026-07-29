@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       link: latest.sourceUrl,
       source: latest.feedTitle
     });
-    const sendResult = await postTelegramPhoto(telegramBotToken, telegramChatId, caption);
+    const sendResult = await postTelegramPhoto(telegramBotToken, telegramChatId, caption, latest.imageUrl);
     results.push({ label: feed.label, ok: sendResult.ok, message: sendResult.message });
   }
 

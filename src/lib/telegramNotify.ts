@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { getSettings } from "./settings";
 import { writeLog } from "./logger";
+import { isPlaceholderImage, isLikelyLogoImage, isRelativeImageUrl } from "./text";
 
 // Image fixe envoyée avec CHAQUE notification (voir public/telegram-notify.png,
 // fournie par l'utilisateur) — reproduit le layout du workflow n8n de
@@ -15,6 +16,22 @@ const TELEGRAM_PHOTO_PATH = path.join(process.cwd(), "public", "telegram-notify.
 // court que les 4096 d'un message texte classique) — on garde une marge de
 // sécurité pour le titre/lien qui encadrent l'extrait.
 const MAX_CAPTION_CHARS = 900;
+
+// Mêmes heuristiques que le rattrapage d'illustration de generateEdition.ts
+// (favicon Google posé en dernier recours, bouche-trou de lazy-load, logo de
+// marque/pub, chemin relatif cassé) : sans ce filtre, Telegram aurait fini
+// par recevoir un favicon générique ou un logo publicitaire comme si
+// c'était la vraie photo de l'article.
+function isUsableArticleImage(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const u = url.trim();
+  if (!u) return false;
+  if (u.includes("google.com/s2/favicons")) return false;
+  if (isRelativeImageUrl(u)) return false;
+  if (isPlaceholderImage(u)) return false;
+  if (isLikelyLogoImage(u)) return false;
+  return true;
+}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -36,6 +53,11 @@ export type TelegramNotifyItem = {
   /** Nom du flux source (ex. "Korben") — affiché comme texte cliquable vers
    *  l'article, à la place de l'URL brute en fin de légende. */
   source: string;
+  /** Image de l'article (og:image, illustration extraite du contenu, ou
+   *  favicon en dernier recours côté generateEdition.ts) — si absente ou
+   *  jugée inexploitable (favicon/placeholder/logo, voir isUsableArticleImage
+   *  ci-dessus), on retombe sur la bannière fixe telegram-notify.png. */
+  imageUrl?: string | null;
 };
 
 /**
@@ -65,24 +87,64 @@ export function buildTelegramCaption(item: TelegramNotifyItem): string {
 export type TelegramSendResult = { ok: boolean; message: string };
 
 /**
- * Poste réellement la photo fixe + la légende sur Telegram. Prend le jeton/
- * l'id de chat en paramètres explicites (plutôt que de relire les réglages
- * enregistrés) pour pouvoir aussi bien servir l'envoi automatique (valeurs de
- * la base) que le bouton de test manuel dans /admin/settings (valeurs tapées
- * dans le formulaire, pas forcément encore enregistrées).
+ * Poste la photo + la légende sur Telegram. Prend le jeton/l'id de chat en
+ * paramètres explicites (plutôt que de relire les réglages enregistrés) pour
+ * pouvoir aussi bien servir l'envoi automatique (valeurs de la base) que le
+ * bouton de test manuel dans /admin/settings (valeurs tapées dans le
+ * formulaire, pas forcément encore enregistrées).
+ *
+ * Si `imageUrl` est fournie ET jugée exploitable (voir isUsableArticleImage),
+ * elle est envoyée telle quelle en URL publique (Telegram la télécharge
+ * lui-même côté serveur — pas de proxy/téléchargement ici). Sinon, repli sur
+ * la bannière fixe telegram-notify.png envoyée en pièce jointe, comme avant
+ * cette fonctionnalité — un article sans image utilisable (cas fréquent :
+ * favicon générique, logo pub) ne doit jamais afficher une vignette cassée.
  */
 export async function postTelegramPhoto(
   botToken: string,
   chatId: string,
-  caption: string
+  caption: string,
+  imageUrl?: string | null
 ): Promise<TelegramSendResult> {
+  const sendWithFixedBanner = async (): Promise<TelegramSendResult> => {
+    try {
+      const form = new FormData();
+      form.append("chat_id", chatId);
+      form.append("caption", caption);
+      form.append("parse_mode", "HTML");
+      const photo = fs.readFileSync(TELEGRAM_PHOTO_PATH);
+      form.append("photo", new Blob([photo]), "telegram-notify.png");
+
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+        method: "POST",
+        body: form
+      });
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        return { ok: false, message: data?.description || `Échec (${res.status})` };
+      }
+      return { ok: true, message: "Envoyé." };
+    } catch (err) {
+      return { ok: false, message: (err as Error)?.message || "Erreur réseau." };
+    }
+  };
+
+  if (!isUsableArticleImage(imageUrl)) {
+    return sendWithFixedBanner();
+  }
+
+  // Image de l'article envoyée en URL publique (Telegram la télécharge
+  // lui-même). Si Telegram échoue à la récupérer (site source qui bloque son
+  // user-agent, image entre-temps supprimée, etc.), on retente aussitôt avec
+  // la bannière fixe plutôt que de laisser la notification échouer
+  // silencieusement — l'utilisateur préfère une bannière générique à aucune
+  // notification.
   try {
-    const photo = fs.readFileSync(TELEGRAM_PHOTO_PATH);
     const form = new FormData();
     form.append("chat_id", chatId);
     form.append("caption", caption);
     form.append("parse_mode", "HTML");
-    form.append("photo", new Blob([photo]), "telegram-notify.png");
+    form.append("photo", imageUrl as string);
 
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
       method: "POST",
@@ -90,11 +152,11 @@ export async function postTelegramPhoto(
     });
     const data: any = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
-      return { ok: false, message: data?.description || `Échec (${res.status})` };
+      return sendWithFixedBanner();
     }
     return { ok: true, message: "Envoyé." };
-  } catch (err) {
-    return { ok: false, message: (err as Error)?.message || "Erreur réseau." };
+  } catch {
+    return sendWithFixedBanner();
   }
 }
 
@@ -110,7 +172,7 @@ export async function sendTelegramNotification(item: TelegramNotifyItem): Promis
   if (!settings.telegramBotToken || !settings.telegramChatId) return;
 
   const caption = buildTelegramCaption(item);
-  const result = await postTelegramPhoto(settings.telegramBotToken, settings.telegramChatId, caption);
+  const result = await postTelegramPhoto(settings.telegramBotToken, settings.telegramChatId, caption, item.imageUrl);
   if (!result.ok) {
     await writeLog("warn", "telegram", `Échec envoi notification Telegram : ${result.message}`, item.link);
   }

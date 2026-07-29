@@ -7,6 +7,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/). Num
 - **x.Y.z** (ex. 1.1.0, 1.2.0) — fonctionnalité ou amélioration moyenne
 - **X.y.z** (ex. 2.0.0, 3.0.0) — grosse feature ou refonte
 
+## [1.2.0] - 2026-07-29
+
+### Modifié
+- Notifications Telegram : envoi de l'image réelle de l'article (og:image / illustration extraite) au lieu de la bannière fixe systématique, avec filtrage des images inexploitables (favicon générique, placeholder de lazy-load, logo de marque) et repli automatique sur la bannière fixe si l'article n'a pas d'image utilisable ou si Telegram échoue à la récupérer.
+
 ## [1.1.0] - 2026-07-28
 
 ### Ajouté

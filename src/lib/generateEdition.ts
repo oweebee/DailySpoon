@@ -241,7 +241,8 @@ export async function ingestRawItems(rawItems: RawItem[], editionId: string | nu
         title: item.sourceTitle,
         excerpt: item.sourceExcerpt,
         link: item.sourceUrl,
-        source: item.feedTitle
+        source: item.feedTitle,
+        imageUrl: item.imageUrl
       });
     }
   }
