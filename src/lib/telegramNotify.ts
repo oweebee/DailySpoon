@@ -33,6 +33,32 @@ function isUsableArticleImage(url: string | null | undefined): boolean {
   return true;
 }
 
+// stripHtml() (voir text.ts) aplatit volontairement tout le HTML source en
+// un seul bloc de texte plat (tous les retours à la ligne d'origine sont
+// perdus dès l'ingestion) — sourceExcerpt/frontPageSummary sont donc déjà
+// stockés sans aucun saut de ligne. Sans ce ré-aérage, la légende Telegram
+// affichait un unique pavé de texte illisible (voir capture utilisateur :
+// tout le résumé collé en un bloc). Regroupe par lots de ~2 phrases pour
+// reconstituer des paragraphes lisibles, sans dépendre d'une info perdue.
+function paragraphize(text: string): string {
+  if (!text) return text;
+  const sentences = text.match(/[^.!?]+[.!?]+(?:\s+|$)/g) || [text];
+  const paragraphs: string[] = [];
+  let current = "";
+  let count = 0;
+  for (const s of sentences) {
+    current += s;
+    count++;
+    if (count >= 2 || current.length > 220) {
+      paragraphs.push(current.trim());
+      current = "";
+      count = 0;
+    }
+  }
+  if (current.trim()) paragraphs.push(current.trim());
+  return paragraphs.join("\n\n");
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -81,7 +107,8 @@ export function buildTelegramCaption(item: TelegramNotifyItem): string {
   if (excerpt.length > Math.max(0, budget)) {
     excerpt = excerpt.slice(0, Math.max(0, budget)).trim() + "…";
   }
-  return `<blockquote>⚠ ${title}</blockquote>\n${excerpt}\n\n<a href="${href}">${source}</a>`;
+  excerpt = paragraphize(excerpt);
+  return `<blockquote>⚠ ${title}</blockquote>\n\n${excerpt}\n\n<a href="${href}">${source}</a>`;
 }
 
 export type TelegramSendResult = { ok: boolean; message: string };
