@@ -68,10 +68,18 @@ function animateScrollTo(target: number, cancelRef: { current: number | null }) 
  * Problème résolu par ce composant : dans un conteneur flex en ligne
  * (défilement horizontal), toutes les pages seraient sinon étirées à la
  * hauteur de la plus grande d'entre elles (comportement par défaut du
- * cross-axis flex), laissant un grand vide sous les rubriques plus courtes.
- * On contourne ça en fixant nous-mêmes la hauteur du conteneur à celle de la
- * SEULE page actuellement visible (mesurée via ResizeObserver, donc mise à
- * jour automatiquement si son contenu grandit — chargement infini compris).
+ * cross-axis flex, "items-stretch") — d'où le "items-start" sur le
+ * conteneur juste en dessous, INDISPENSABLE : sans lui, la mesure
+ * scrollHeight de la page active (juste plus bas) renvoie la hauteur de sa
+ * propre boîte déjà étirée à l'ancienne hauteur du conteneur, jamais sa
+ * hauteur naturelle — le conteneur ne rétrécit alors plus jamais en
+ * swipant vers une rubrique plus courte (bug vu en usage réel : swipe
+ * depuis une colonne longue, scrollée bas, vers une colonne courte —
+ * celle-ci restait étirée avec un grand vide sous son contenu, et le
+ * rattrapage de défilement plus bas ne remontait jamais correctement en
+ * haut). On fixe nous-mêmes la hauteur du conteneur à celle de la SEULE
+ * page actuellement visible (mesurée via ResizeObserver, donc mise à jour
+ * automatiquement si son contenu grandit — chargement infini compris).
  */
 export function MobilePagedSection({
   date,
@@ -175,7 +183,7 @@ export function MobilePagedSection({
   return (
     <div
       ref={containerRef}
-      className={`-mx-6 flex snap-x snap-mandatory overflow-x-auto ${className}`}
+      className={`-mx-6 flex items-start snap-x snap-mandatory overflow-x-auto ${className}`}
     >
       {pages.map((page, i) => (
         <div

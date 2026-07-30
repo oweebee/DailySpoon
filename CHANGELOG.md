@@ -7,6 +7,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/). Num
 - **x.Y.z** (ex. 1.1.0, 1.2.0) — fonctionnalité ou amélioration moyenne
 - **X.y.z** (ex. 2.0.0, 3.0.0) — grosse feature ou refonte
 
+## [1.2.2] - 2026-07-29
+
+### Corrigé
+- PWA mobile : en swipant d'une colonne longue (scrollée bas) vers une colonne plus courte, celle-ci restait étirée avec un grand vide sous son contenu et le défilement ne remontait pas en haut (mesure de hauteur faussée par l'étirement flex par défaut, `items-start` ajouté).
+
 ## [1.2.1] - 2026-07-29
 
 ### Corrigé
