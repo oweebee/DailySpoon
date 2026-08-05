@@ -23,11 +23,14 @@ function easeInOutCubic(t: number): number {
  * "cancelRef" permet d'interrompre proprement une animation en cours si une
  * nouvelle est déclenchée avant la fin (swipes rapides successifs).
  */
-function animateScrollTo(target: number, cancelRef: { current: number | null }) {
+function animateScrollTo(target: number, cancelRef: { current: number | null }, onDone?: () => void) {
   if (cancelRef.current !== null) cancelAnimationFrame(cancelRef.current);
   const start = window.scrollY;
   const distance = target - start;
-  if (Math.abs(distance) < 1) return;
+  if (Math.abs(distance) < 1) {
+    onDone?.();
+    return;
+  }
   const startTime = performance.now();
 
   // Le "scroll anchoring" natif du navigateur (activé par défaut) essaie de
@@ -50,6 +53,7 @@ function animateScrollTo(target: number, cancelRef: { current: number | null }) 
     } else {
       cancelRef.current = null;
       html.style.overflowAnchor = previousAnchor;
+      onDone?.();
     }
   }
   cancelRef.current = requestAnimationFrame(step);
@@ -101,6 +105,12 @@ export function MobilePagedSection({
   // on atterrit en haut ; une entrée existante restaure exactement l'endroit
   // où on était avant de swiper ailleurs.
   const scrollOffsets = useRef<Record<number, number>>({});
+  // Vrai entre le moment où un swipe est détecté et celui où le défilement
+  // vertical de rattrapage est réellement arrivé à destination — voir
+  // l'enregistrement de position plus bas pour la raison précise. Ref (pas
+  // un state) : lu de façon synchrone dans des handlers d'événements DOM,
+  // pas besoin de re-render.
+  const isTransitioningRef = useRef(false);
 
   // Synchro AVANT peinture (voir plus bas pourquoi) : sans ça, l'effet qui
   // enregistre la position de défilement pourrait encore lire l'ancien index
@@ -116,7 +126,14 @@ export function MobilePagedSection({
     function onScroll() {
       const width = container!.clientWidth || 1;
       const index = Math.round(container!.scrollLeft / width);
-      setActiveIndex((prev) => (prev === index ? prev : index));
+      setActiveIndex((prev) => {
+        if (prev === index) return prev;
+        // Marqué synchronement ICI, avant même que React ne traite le
+        // changement d'état — voir onWindowScroll plus bas pour pourquoi
+        // c'est le tout premier moment possible qui compte.
+        isTransitioningRef.current = true;
+        return index;
+      });
     }
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
@@ -125,11 +142,24 @@ export function MobilePagedSection({
   // Enregistre en continu la position de défilement de la page ACTUELLEMENT
   // active (indépendant du swipe horizontal, qui ne touche pas au défilement
   // vertical de la fenêtre) — sert à la restaurer si on revient sur cette
-  // page plus tard. Se déclenche aussi pendant notre propre animation de
-  // rattrapage ci-dessous, ce qui est voulu : la valeur enregistrée converge
-  // naturellement vers la position cible au fil de l'animation.
+  // page plus tard.
+  //
+  // Ignoré tant qu'une transition est en cours (isTransitioningRef) : entre
+  // le swipe et l'atterrissage définitif, "window.scrollY" bouge pour des
+  // raisons qui n'ont RIEN à voir avec une lecture réelle de l'utilisateur —
+  // notamment le clamp automatique du navigateur quand le conteneur rétrécit
+  // (voir l'effet de hauteur juste en dessous, colonne plus courte que
+  // l'ancienne : le navigateur recale scrollY tout seul dès que le document
+  // devient plus court que la position actuelle) et notre propre défilement
+  // de rattrapage. Sans cette garde, l'un de ces mouvements "fantômes" —
+  // jamais voulus par l'utilisateur — pouvait s'enregistrer comme position
+  // de lecture d'une colonne pourtant jamais vraiment visitée, et le swipe
+  // suivant vers cette même colonne restaurait alors ce décalage bidon au
+  // lieu de remonter en haut (bug vu en usage réel : marchait au début,
+  // cassait de façon aléatoire après quelques colonnes visitées).
   useEffect(() => {
     function onWindowScroll() {
+      if (isTransitioningRef.current) return;
       const container = containerRef.current;
       if (!container) return;
       scrollOffsets.current[activeIndexRef.current] = Math.max(0, window.scrollY - container.offsetTop);
@@ -163,6 +193,12 @@ export function MobilePagedSection({
   // nouvelle colonne — son sommet si jamais défilée, ou sa position exacte
   // mémorisée sinon. On ignore le tout premier rendu (arrivée sur la page),
   // pour ne pas animer quoi que ce soit au chargement.
+  //
+  // isTransitioningRef repasse à false seulement une fois VRAIMENT arrivé
+  // (onDone du rattrapage), pas avant — un nouveau swipe déclenché avant la
+  // fin relance simplement une nouvelle animation sans jamais repasser par
+  // false entre les deux, donc l'enregistrement de position reste bien
+  // suspendu pendant toute la chaîne de swipes rapides successifs.
   useLayoutEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
@@ -171,7 +207,9 @@ export function MobilePagedSection({
     const container = containerRef.current;
     if (!container) return;
     const offset = scrollOffsets.current[activeIndex] ?? 0;
-    animateScrollTo(container.offsetTop + offset, scrollAnimRef);
+    animateScrollTo(container.offsetTop + offset, scrollAnimRef, () => {
+      isTransitioningRef.current = false;
+    });
   }, [activeIndex]);
 
   useEffect(() => {

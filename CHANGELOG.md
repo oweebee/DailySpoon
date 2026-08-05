@@ -7,6 +7,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/). Num
 - **x.Y.z** (ex. 1.1.0, 1.2.0) — fonctionnalité ou amélioration moyenne
 - **X.y.z** (ex. 2.0.0, 3.0.0) — grosse feature ou refonte
 
+## [1.2.3] - 2026-07-29
+
+### Corrigé
+- PWA mobile : le retour en haut de colonne au swipe restait aléatoire (marchait au début, cassait après quelques colonnes). Cause : pendant la transition, des mouvements de scroll "fantômes" (clamp automatique du navigateur quand la colonne rétrécit, notre propre défilement de rattrapage) s'enregistraient comme si c'était la position de lecture réelle de l'utilisateur, corrompant la mémoire de position des colonnes suivantes. L'enregistrement est maintenant suspendu tant que la transition n'est pas totalement arrivée à destination.
+
 ## [1.2.2] - 2026-07-29
 
 ### Corrigé
