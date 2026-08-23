@@ -66,7 +66,7 @@ export default async function HomePage() {
   const editionDate = latestEdition?.date ?? new Date();
 
   return (
-    <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
+    <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
       {/* Masqué en mobile : chaque page du carrousel de FrontPageView y
           affiche sa propre copie du menu (voir MobilePagedSection), donc ce
           Masthead unique ne reste utile qu'en desktop/tablette. */}
@@ -83,7 +83,7 @@ export default async function HomePage() {
           parenthèses quand il diffère du compte final retenu sur la une.
           Voir aussi /archive/[id] pour l'équivalent sur une édition passée. */}
       {latestEdition && articles.length > 0 && (
-        <p className="mb-6 -mt-6 text-center text-xs uppercase tracking-[0.3em] text-sepia">
+        <p className="mb-3 -mt-3 text-center text-xs uppercase tracking-[0.3em] text-sepia sm:mb-6 sm:-mt-6">
           {articles.length} article{articles.length > 1 ? "s" : ""}
           {latestEdition.sourcePoolCount != null && latestEdition.sourcePoolCount !== articles.length && (
             <> (sur {latestEdition.sourcePoolCount} récupéré{latestEdition.sourcePoolCount > 1 ? "s" : ""})</>

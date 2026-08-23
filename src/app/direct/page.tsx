@@ -74,7 +74,7 @@ export default async function DirectPage() {
   const editionDate = latestEdition?.date ?? new Date();
 
   return (
-    <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-6 py-10 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 md:px-10 md:py-14">
+    <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
       {/* Masqué en mobile : chaque page du carrousel de colonnes (voir
           MobilePagedSection, via EditionView/CategoryGrid) y affiche sa
           propre copie du menu, donc ce Masthead unique ne reste utile qu'en

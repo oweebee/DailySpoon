@@ -53,7 +53,11 @@ export function PrintStampButton({ provider }: { provider?: string }) {
   }
 
   return (
-    <div className="mb-10 flex flex-col items-center gap-3 border-b-2 border-ink/20 pb-8">
+    // Marges/padding resserrés sous sm (mobile) : ce bloc s'affiche
+    // au-dessus du masthead (lui-même dupliqué par colonne, voir
+    // MobilePagedSection) et repoussait le début des articles à plus de la
+    // moitié de l'écran sur téléphone. Inchangé à partir de sm (desktop).
+    <div className="mb-4 flex flex-col items-center gap-2 border-b-2 border-ink/20 pb-4 sm:mb-10 sm:gap-3 sm:pb-8">
       <button
         onClick={print}
         disabled={printing}
@@ -61,7 +65,7 @@ export function PrintStampButton({ provider }: { provider?: string }) {
       >
         {printing ? "Impression en cours..." : "Lancer l'impression du journal"}
       </button>
-      <p className="max-w-xs text-center text-[0.7rem] italic text-sepia">
+      <p className="max-w-xs text-center text-[0.65rem] italic text-sepia sm:text-[0.7rem]">
         ⚠ Consomme des tokens de l’API {providerLabel} à chaque impression.
       </p>
       {message && <p className="text-sm italic text-sepia">{message}</p>}

@@ -19,7 +19,18 @@ function SpoonO() {
   );
 }
 
-export function Masthead({ date }: { date: Date }) {
+export function Masthead({
+  date,
+  compact = false
+}: {
+  date: Date;
+  /** Version resserrée verticalement, utilisée uniquement pour la copie
+   *  dupliquée en haut de chaque page du carrousel mobile (voir
+   *  MobilePagedSection) — répétée à chaque swipe, elle repoussait le début
+   *  des articles à plus de la moitié de l'écran sur téléphone. Le Masthead
+   *  "normal" (desktop, une seule copie fixe) n'est pas concerné. */
+  compact?: boolean;
+}) {
   const formatted = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
     day: "numeric",
@@ -28,14 +39,18 @@ export function Masthead({ date }: { date: Date }) {
   }).format(date);
 
   return (
-    <header className="mb-10">
+    <header className={compact ? "mb-3" : "mb-10"}>
       {/* Zone repère pour le timbre "EN DIRECT" en desktop : englobe le
           bandeau du haut, le titre ET le double filet, pour que le timbre
           puisse être centré verticalement sur toute cette hauteur (entre le
           bandeau et le menu du dessous), pas juste sur la ligne du titre. */}
       <div className="relative">
         {/* Bandeau supérieur */}
-        <div className="flex items-center justify-between border-b border-ink py-1 text-[0.65rem] uppercase tracking-[0.25em] text-sepia">
+        <div
+          className={`flex items-center justify-between border-b border-ink uppercase tracking-[0.25em] text-sepia ${
+            compact ? "py-0.5 text-[0.55rem]" : "py-1 text-[0.65rem]"
+          }`}
+        >
           <span>Édition quotidienne personnelle</span>
           <span>Prix : ≈ 10 ¢</span>
         </div>
@@ -45,8 +60,11 @@ export function Masthead({ date }: { date: Date }) {
             il exploite exactement la hauteur de cette cellule titre, ni
             plus ni moins, largeur recalculée automatiquement à partir du
             ratio réel de l'image via aspect-ratio). */}
-        <div className="relative py-6 text-center">
-          <Link href="/" className="font-masthead text-5xl font-black uppercase tracking-tight md:text-7xl">
+        <div className={`relative text-center ${compact ? "py-2" : "py-6"}`}>
+          <Link
+            href="/"
+            className={`font-masthead font-black uppercase tracking-tight ${compact ? "text-2xl" : "text-5xl md:text-7xl"}`}
+          >
             DailySp
             <SpoonO />
             <SpoonO />n
@@ -57,7 +75,9 @@ export function Masthead({ date }: { date: Date }) {
               place à droite du titre en mobile). */}
           <Link
             href="/direct"
-            className="stamp-live stamp-bg-sm relative mx-auto mt-4 flex h-20 items-center justify-center px-4 font-display text-xs uppercase tracking-[0.25em] text-white md:hidden"
+            className={`stamp-live stamp-bg-sm relative mx-auto flex items-center justify-center font-display uppercase text-white md:hidden ${
+              compact ? "mt-1.5 h-9 px-3 text-[0.6rem] tracking-[0.2em]" : "mt-4 h-20 px-4 text-xs tracking-[0.25em]"
+            }`}
           >
             <span className="stamp-live-text">En direct</span>
           </Link>
@@ -72,7 +92,9 @@ export function Masthead({ date }: { date: Date }) {
               recalculée automatiquement par le navigateur à partir du ratio
               réel de l'image (aspect-ratio sur .stamp-bg-sm), jamais
               déformée. Le fond (.stamp-live) reste droit ; seul le texte,
-              enveloppé dans .stamp-live-text, garde l'inclinaison. */}
+              enveloppé dans .stamp-live-text, garde l'inclinaison. Jamais en
+              mode compact : ce timbre est caché en dessous de md (md:flex),
+              et le mode compact n'existe justement que sous ce seuil. */}
           <Link
             href="/direct"
             className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 hidden items-center justify-center px-5 font-display text-sm uppercase tracking-[0.25em] text-white md:flex"
@@ -90,10 +112,19 @@ export function Masthead({ date }: { date: Date }) {
           donc, centrés, en dessous du seuil sm ; le menu passe à la ligne
           proprement (flex-wrap) au lieu de déborder. Au-delà de sm, on retrouve
           exactement l'ancienne disposition sur une seule ligne (date à gauche,
-          menu à droite). */}
-      <div className="flex flex-col items-center gap-1.5 py-1.5 text-xs uppercase tracking-[0.2em] sm:flex-row sm:justify-between sm:gap-0">
+          menu à droite). En compact, tout est resserré (gap/texte plus
+          petits) mais la structure empilée reste identique. */}
+      <div
+        className={`flex flex-col items-center uppercase sm:flex-row sm:justify-between sm:gap-0 ${
+          compact ? "gap-0.5 py-0.5 text-[0.6rem] tracking-[0.15em]" : "gap-1.5 py-1.5 text-xs tracking-[0.2em]"
+        }`}
+      >
         <span className="capitalize">{formatted}</span>
-        <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1 sm:flex-nowrap sm:gap-y-0 sm:space-x-6">
+        <nav
+          className={`flex flex-wrap justify-center sm:flex-nowrap sm:gap-y-0 ${
+            compact ? "gap-x-3 gap-y-0.5 sm:space-x-4" : "gap-x-5 gap-y-1 sm:space-x-6"
+          }`}
+        >
           <Link href="/direct" className="text-journal hover:underline">
             En direct
           </Link>

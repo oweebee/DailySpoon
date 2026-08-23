@@ -77,8 +77,12 @@ export function DirectView({
 
   return (
     <div>
-      <div className="mb-8 border-b-2 border-ink pb-4">
-        <div className="flex flex-col items-center gap-2 pb-4 text-center">
+      {/* Marges resserrées sous sm (mobile) : ce bloc s'affiche au-dessus du
+          masthead (dupliqué par colonne, voir MobilePagedSection) et
+          repoussait le début des articles à plus de la moitié de l'écran sur
+          téléphone. Inchangé à partir de sm (desktop). */}
+      <div className="mb-4 border-b-2 border-ink pb-2 sm:mb-8 sm:pb-4">
+        <div className="flex flex-col items-center gap-1.5 pb-2 text-center sm:gap-2 sm:pb-4">
           <p className="text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
           <button
             onClick={pull}
@@ -88,8 +92,10 @@ export function DirectView({
             // globals.css) — sans largeur plancher, un texte replié sur 2
             // lignes réduit la largeur "naturelle" (ligne la plus longue au
             // lieu du texte entier), donc écraserait aussi la hauteur, trop
-            // juste pour 2 lignes.
-            className="stamp-button stamp-bg-lg inline-flex min-w-[17rem] flex-col items-center justify-center gap-0.5 px-8 font-display text-sm uppercase leading-tight tracking-[0.25em] text-paper disabled:opacity-50"
+            // juste pour 2 lignes. Plus étroit sous sm (mobile) : la version
+            // pleine largeur (17rem) ajoutait de la hauteur superflue sur
+            // petit écran, le timbre grandissant avec sa largeur.
+            className="stamp-button stamp-bg-lg inline-flex min-w-[13rem] flex-col items-center justify-center gap-0.5 px-6 font-display text-xs uppercase leading-tight tracking-[0.2em] text-paper disabled:opacity-50 sm:min-w-[17rem] sm:px-8 sm:text-sm sm:tracking-[0.25em]"
           >
             {pulling ? (
               <>

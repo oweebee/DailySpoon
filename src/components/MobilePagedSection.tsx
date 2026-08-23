@@ -25,6 +25,27 @@ function easeInOutCubic(t: number): number {
  */
 function animateScrollTo(target: number, cancelRef: { current: number | null }, onDone?: () => void) {
   if (cancelRef.current !== null) cancelAnimationFrame(cancelRef.current);
+
+  const html = document.documentElement;
+
+  // Sur iOS Safari — y compris en PWA "standalone" sur l'écran d'accueil,
+  // là où le bug a été signalé — un swipe rapide après un défilement
+  // vertical profond laisse une animation d'inertie ("momentum scroll")
+  // native en cours. Si on lance notre propre window.scrollTo() par-dessus
+  // sans rien faire, les deux animations se battent pour la position de
+  // défilement, et l'atterrissage ne remonte jamais vraiment tout en haut
+  // (bug documenté : https://github.com/bvaughn/react-window/issues/122).
+  // Un bref passage à "overflow: hidden" sur l'élément qui défile force
+  // WebKit à annuler immédiatement l'inertie en cours ; on le restaure
+  // aussitôt après (technique standard, voir
+  // https://css-tricks.com/snippets/css/momentum-scrolling-on-ios-overflow-elements/).
+  // Sans ce forçage, plus on avait défilé vite/loin avant de swiper, plus
+  // l'inertie encore active avait de chances de gagner ce bras de fer.
+  const previousOverflow = html.style.overflow;
+  html.style.overflow = "hidden";
+  void html.offsetHeight; // force le reflow qui coupe l'inertie en cours
+  html.style.overflow = previousOverflow;
+
   const start = window.scrollY;
   const distance = target - start;
   if (Math.abs(distance) < 1) {
@@ -41,7 +62,6 @@ function animateScrollTo(target: number, cancelRef: { current: number | null }, 
   // l'impression d'un ralentissement juste avant l'arrivée alors que la
   // courbe d'accélération elle-même n'en produit aucun. On le désactive le
   // temps de l'animation, puis on le restaure.
-  const html = document.documentElement;
   const previousAnchor = html.style.overflowAnchor;
   html.style.overflowAnchor = "none";
 
@@ -231,7 +251,7 @@ export function MobilePagedSection({
           }}
           className="w-full shrink-0 snap-center px-6"
         >
-          <Masthead date={date} />
+          <Masthead date={date} compact />
           {page.content}
         </div>
       ))}
