@@ -594,10 +594,11 @@ function htmlResponse(html: string): NextResponse {
 // src/lib/translate.ts, partagée avec le backfill automatique "En direct"
 // (syncTranslateFlags, voir generateEdition.ts).
 
-// Limite le nombre de blocs traduits par article : l'endpoint est gratuit
-// mais non officiel, et chaque bloc = une requête réseau séquentielle — on
-// évite qu'un article démesurément long ne prenne des dizaines de secondes
-// à s'ouvrir ou ne se fasse limiter par Google.
+// Limite le nombre de blocs traduits par article : le service est gratuit et
+// plafonné à la journée (voir src/lib/translate.ts), et chaque bloc coûte au
+// moins une requête réseau séquentielle — on évite qu'un article démesurément
+// long ne prenne des dizaines de secondes à s'ouvrir, ni n'épuise à lui seul
+// le quota quotidien partagé avec la traduction des vignettes "En direct".
 const MAX_BLOCKS_TO_TRANSLATE = 60;
 
 async function translateContentHtml(html: string): Promise<string> {
@@ -609,9 +610,21 @@ async function translateContentHtml(html: string): Promise<string> {
     MAX_BLOCKS_TO_TRANSLATE
   );
   for (const el of blocks) {
-    const original = el.innerHTML.trim();
+    // On traduit le TEXTE (textContent), pas le balisage interne
+    // (innerHTML) — et uniquement pour les blocs qui n'ont aucun élément
+    // enfant. Deux raisons :
+    //   1. le moteur de traduction découpe désormais les textes longs en
+    //      morceaux (limite de 500 octets par requête, voir
+    //      chunkForTranslation) : sur du HTML, une coupure peut tomber au
+    //      milieu d'une balise et produire un balisage corrompu ;
+    //   2. un bloc contenant une image ou un lien verrait ces éléments
+    //      purement et simplement supprimés en réécrivant son texte.
+    // Les blocs à balisage interne gardent donc leur langue d'origine plutôt
+    // que de risquer d'être cassés — compromis assumé.
+    if (el.children.length > 0) continue;
+    const original = (el.textContent || "").trim();
     if (!original) continue;
-    el.innerHTML = await translateViaGoogle(original);
+    el.textContent = await translateViaGoogle(original);
   }
   return root.innerHTML;
 }

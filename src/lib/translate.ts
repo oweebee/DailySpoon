@@ -1,46 +1,145 @@
 import { BROWSER_USER_AGENT } from "./text";
 
 /**
- * Traduction gratuite et sans clé API, via les points d'accès publics non
- * officiels que translate.google.com utilise lui-même en coulisses. Partagée
- * entre deux usages :
- *   - la traduction À LA DEMANDE de l'article ouvert (lien "Traduire en
- *     français" dans le lecteur, voir article-proxy/route.ts) ;
- *   - le backfill AUTOMATIQUE du titre/extrait affiché en "En direct" pour
- *     les flux cochés "traduction" (voir syncTranslateFlags dans
- *     generateEdition.ts et TranslateFeed dans schema.prisma).
+ * Traduction automatique, sans clé API, utilisée pour afficher en français
+ * les vignettes "En direct" des flux cochés "traduction" dans
+ * /admin/categories (voir TranslateFeed / syncTranslateFlags).
  *
- * PLUSIEURS hôtes essayés en cascade (voir ENDPOINTS) plutôt qu'un seul :
- * ces points d'accès filtrent selon l'IP appelante et refusent couramment
- * celles des hébergeurs/datacenters (429/403), alors qu'ils répondent sans
- * problème depuis une connexion résidentielle. Constaté en usage réel sur ce
- * projet : les flux RSS se récupéraient normalement (donc réseau sortant OK)
- * mais 100 % des traductions échouaient — le VPN du projet ne couvre que le
- * conteneur morss, pas web/worker d'où partent ces appels-ci. Deux hôtes
- * Google distincts servent la même API avec des règles de filtrage
- * différentes : quand l'un rejette l'IP, l'autre passe souvent.
+ * POURQUOI MYMEMORY ET PLUS GOOGLE — Ce module appelait à l'origine le point
+ * d'accès non officiel de translate.google.com (translate_a/single, celui que
+ * le site utilise en coulisses). Il a cessé de répondre depuis les IP
+ * d'hébergeur : vérifié en usage réel sur ce serveur — 100 % d'échecs sur la
+ * traduction alors que les flux RSS se récupéraient normalement (donc réseau
+ * sortant parfaitement fonctionnel), et reproduit depuis une autre machine
+ * d'hébergeur, où le même appel renvoie une réponse vide. Essayer un second
+ * hôte Google (clients5.google.com) n'y change rien : c'est un filtrage par
+ * IP, pas un problème d'hôte. MyMemory, lui, répond normalement depuis ces
+ * mêmes IP — d'où la bascule. Google reste tenté en DERNIER recours, au cas
+ * où l'accès rouvrirait ou que le code tourne un jour depuis une IP
+ * résidentielle : ça ne coûte rien tant que MyMemory répond, puisqu'on ne
+ * l'atteint jamais.
  */
-
-// Même chemin/paramètres/format de réponse pour les deux : seul l'hôte
-// change, donc un seul analyseur suffit (voir parseGoogleResponse).
-const ENDPOINTS = ["https://translate.googleapis.com", "https://clients5.google.com"];
 
 const TIMEOUT_MS = 8000;
 
-export type TranslateResult =
-  | { ok: true; text: string }
-  | { ok: false; reason: string };
+// MyMemory refuse les requêtes dont le paramètre "q" dépasse 500 OCTETS (pas
+// caractères : un accent en UTF-8 en compte 2). On découpe donc les textes
+// longs — un extrait d'article dépasse couramment cette taille — avec une
+// marge de sécurité confortable sous la limite.
+const MYMEMORY_MAX_BYTES = 450;
 
-function parseGoogleResponse(data: any): string | null {
-  // Forme attendue : [[["traduit","original",...],[...]], ...] — on
-  // reconcatène tous les segments, l'API découpe les textes longs.
-  const segments = data?.[0];
-  if (!Array.isArray(segments)) return null;
-  const translated = segments.map((seg: any) => seg?.[0] ?? "").join("");
-  return translated.trim() ? translated : null;
+const GOOGLE_ENDPOINTS = ["https://translate.googleapis.com", "https://clients5.google.com"];
+
+export type TranslateResult = { ok: true; text: string } | { ok: false; reason: string };
+
+export type TranslateOptions = {
+  targetLang?: string;
+  /** Adresse transmise à MyMemory (paramètre "de="), qui fait passer le quota
+   *  gratuit de 5 000 à 50 000 caractères par jour. Vide/absente = aucune
+   *  adresse envoyée. Vient de Settings.translateEmail (/admin/settings). */
+  email?: string;
+};
+
+/**
+ * Découpe un texte en morceaux d'au plus `maxBytes` octets, en coupant de
+ * préférence à une fin de phrase, sinon entre deux mots — jamais au milieu
+ * d'un mot tant qu'un espace est disponible. Mesure en OCTETS et non en
+ * caractères : c'est ce que compte la limite de MyMemory.
+ */
+export function chunkForTranslation(text: string, maxBytes = MYMEMORY_MAX_BYTES): string[] {
+  const chunks: string[] = [];
+  let rest = text.trim();
+
+  while (Buffer.byteLength(rest, "utf8") > maxBytes) {
+    // Plus grand préfixe tenant dans maxBytes octets. On part d'une borne en
+    // caractères (au pire 1 octet = 1 caractère) puis on réduit tant que ça
+    // dépasse — quelques itérations tout au plus.
+    let cut = Math.min(rest.length, maxBytes);
+    while (cut > 0 && Buffer.byteLength(rest.slice(0, cut), "utf8") > maxBytes) cut -= 1;
+
+    const window = rest.slice(0, cut);
+    // Fin de phrase la plus tardive dans la fenêtre ; on ne l'accepte que si
+    // elle n'est pas ridiculement tôt (sinon on gaspillerait la requête sur
+    // trois mots), auquel cas on se rabat sur la dernière espace.
+    let split = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+    if (split > cut * 0.4) {
+      split += 1; // garde la ponctuation avec la phrase qu'elle termine
+    } else {
+      split = window.lastIndexOf(" ");
+    }
+    if (split <= 0) split = cut; // un seul "mot" démesuré : coupe franche
+
+    const piece = rest.slice(0, split).trim();
+    if (piece) chunks.push(piece);
+    rest = rest.slice(split).trim();
+  }
+
+  if (rest) chunks.push(rest);
+  return chunks;
 }
 
-async function attempt(baseUrl: string, text: string, targetLang: string): Promise<TranslateResult> {
+/**
+ * MyMemory signale certaines erreurs (quota épuisé, requête trop longue) avec
+ * un HTTP 200 et un message d'avertissement EN GUISE DE TRADUCTION. Sans ce
+ * garde-fou, on enregistrerait ce message comme titre d'article.
+ */
+function looksLikeMyMemoryWarning(text: string): boolean {
+  return /MYMEMORY WARNING|QUERY LENGTH LIMIT|ALL AVAILABLE FREE TRANSLATIONS/i.test(text);
+}
+
+async function myMemoryChunk(text: string, targetLang: string, email?: string): Promise<TranslateResult> {
+  const params = new URLSearchParams({ q: text, langpair: `Autodetect|${targetLang}` });
+  if (email) params.set("de", email);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://api.mymemory.translated.net/get?${params.toString()}`, {
+      signal: controller.signal,
+      headers: { "User-Agent": BROWSER_USER_AGENT }
+    });
+    if (!res.ok) return { ok: false, reason: `mymemory HTTP ${res.status}` };
+
+    const data: any = await res.json().catch(() => null);
+    const status = String(data?.responseStatus ?? "");
+    if (status && status !== "200") {
+      return { ok: false, reason: `mymemory statut ${status}${data?.responseDetails ? ` (${data.responseDetails})` : ""}` };
+    }
+    if (data?.quotaFinished === true) return { ok: false, reason: "mymemory quota du jour épuisé" };
+
+    const translated = typeof data?.responseData?.translatedText === "string" ? data.responseData.translatedText : "";
+    if (!translated.trim()) return { ok: false, reason: "mymemory réponse vide" };
+    if (looksLikeMyMemoryWarning(translated)) return { ok: false, reason: `mymemory: ${translated.slice(0, 120)}` };
+
+    return { ok: true, text: translated };
+  } catch (err: any) {
+    const reason = err?.name === "AbortError" ? "mymemory timeout" : `mymemory ${err?.message || "échec réseau"}`;
+    return { ok: false, reason };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function viaMyMemory(text: string, targetLang: string, email?: string): Promise<TranslateResult> {
+  const chunks = chunkForTranslation(text);
+  const out: string[] = [];
+  // En série (et non en parallèle) : les morceaux appartiennent au MÊME texte,
+  // et enchaîner d'un coup plusieurs requêtes vers un service gratuit est le
+  // meilleur moyen de se faire limiter. Le parallélisme utile est géré un
+  // cran au-dessus, entre articles (voir TRANSLATE_CONCURRENCY dans
+  // generateEdition.ts).
+  for (const chunk of chunks) {
+    const result = await myMemoryChunk(chunk, targetLang, email);
+    // Un seul morceau en échec invalide tout le texte : mieux vaut renvoyer
+    // un échec net (l'article sera simplement retenté au prochain passage)
+    // qu'un texte à moitié traduit, à moitié en anglais.
+    if (!result.ok) return result;
+    out.push(result.text);
+  }
+  return { ok: true, text: out.join(" ") };
+}
+
+async function viaGoogle(baseUrl: string, text: string, targetLang: string): Promise<TranslateResult> {
   const params = new URLSearchParams({ client: "gtx", sl: "auto", tl: targetLang, dt: "t", q: text });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -52,13 +151,12 @@ async function attempt(baseUrl: string, text: string, targetLang: string): Promi
     });
     if (!res.ok) return { ok: false, reason: `${host} HTTP ${res.status}` };
     const data: any = await res.json().catch(() => null);
-    const translated = data === null ? null : parseGoogleResponse(data);
-    if (!translated) return { ok: false, reason: `${host} réponse illisible` };
+    const segments = data?.[0];
+    if (!Array.isArray(segments)) return { ok: false, reason: `${host} réponse illisible` };
+    const translated = segments.map((seg: any) => seg?.[0] ?? "").join("");
+    if (!translated.trim()) return { ok: false, reason: `${host} réponse vide` };
     return { ok: true, text: translated };
   } catch (err: any) {
-    // Distingue un vrai timeout (AbortError) d'une erreur réseau/DNS —
-    // information décisive côté diagnostic : un timeout suggère un blocage
-    // silencieux, une erreur DNS/connexion un souci de sortie réseau.
     const reason = err?.name === "AbortError" ? `${host} timeout` : `${host} ${err?.message || "échec réseau"}`;
     return { ok: false, reason };
   } finally {
@@ -67,20 +165,33 @@ async function attempt(baseUrl: string, text: string, targetLang: string): Promi
 }
 
 /**
- * Essaie chaque hôte à tour de rôle et renvoie soit la traduction, soit la
- * raison précise du dernier échec — utilisée pour le log de diagnostic dans
- * /admin/logs (voir syncTranslateFlags). Sans cette remontée d'erreur, un
- * échec total est indiscernable d'un backfill simplement pas encore terminé.
+ * Essaie les fournisseurs dans l'ordre et renvoie soit la traduction, soit la
+ * raison précise de chaque échec — remontée telle quelle dans /admin/logs
+ * (voir syncTranslateFlags), seul moyen de distinguer un service injoignable
+ * d'un quota épuisé ou d'un simple backfill pas encore terminé.
  */
-export async function translateDetailed(text: string, targetLang = "fr"): Promise<TranslateResult> {
+export async function translateDetailed(text: string, options: TranslateOptions = {}): Promise<TranslateResult> {
   if (!text || !text.trim()) return { ok: false, reason: "texte vide" };
+  const targetLang = options.targetLang || "fr";
 
   const reasons: string[] = [];
-  for (const baseUrl of ENDPOINTS) {
-    const result = await attempt(baseUrl, text, targetLang);
-    if (result.ok) return result;
-    reasons.push(result.reason);
+
+  const primary = await viaMyMemory(text, targetLang, options.email);
+  if (primary.ok) return primary;
+  reasons.push(primary.reason);
+
+  // Repli Google — voir le commentaire de tête : bloqué depuis les IP
+  // d'hébergeur au moment où ces lignes sont écrites, gardé au cas où.
+  // Ignoré pour les textes longs : sans découpage, un texte de plusieurs
+  // milliers de caractères dans l'URL se ferait de toute façon rejeter.
+  if (Buffer.byteLength(text, "utf8") <= 1500) {
+    for (const baseUrl of GOOGLE_ENDPOINTS) {
+      const result = await viaGoogle(baseUrl, text, targetLang);
+      if (result.ok) return result;
+      reasons.push(result.reason);
+    }
   }
+
   return { ok: false, reason: reasons.join(" / ") };
 }
 
@@ -91,8 +202,8 @@ export async function translateDetailed(text: string, targetLang = "fr"): Promis
  * stockerait l'anglais comme "traduction", et l'article, n'ayant alors plus
  * un champ vide, ne serait plus jamais retenté (bug constaté en usage réel).
  */
-export async function translateOrNull(text: string, targetLang = "fr"): Promise<string | null> {
-  const result = await translateDetailed(text, targetLang);
+export async function translateOrNull(text: string, options: TranslateOptions = {}): Promise<string | null> {
+  const result = await translateDetailed(text, options);
   return result.ok ? result.text : null;
 }
 
@@ -101,6 +212,6 @@ export async function translateOrNull(text: string, targetLang = "fr"): Promise<
  * casser l'affichage — réservée à la traduction à la demande de l'article
  * ouvert (article-proxy), où mieux vaut afficher l'anglais qu'une page vide.
  */
-export async function translateViaGoogle(text: string, targetLang = "fr"): Promise<string> {
-  return (await translateOrNull(text, targetLang)) ?? text;
+export async function translateViaGoogle(text: string, options: TranslateOptions = {}): Promise<string> {
+  return (await translateOrNull(text, options)) ?? text;
 }

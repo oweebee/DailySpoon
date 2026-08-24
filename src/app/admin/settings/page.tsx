@@ -22,6 +22,7 @@ type SettingsForm = {
   customFeedsIntervalMinutes: string;
   telegramBotToken: string;
   telegramChatId: string;
+  translateEmail: string;
   wallabagBaseUrl: string;
   wallabagClientId: string;
   wallabagClientSecret: string;
@@ -51,6 +52,7 @@ const EMPTY: SettingsForm = {
   customFeedsIntervalMinutes: "60",
   telegramBotToken: "",
   telegramChatId: "",
+  translateEmail: "",
   wallabagBaseUrl: "",
   wallabagClientId: "",
   wallabagClientSecret: "",
@@ -182,6 +184,7 @@ export default function AdminSettingsPage() {
               : "60",
           telegramBotToken: s.telegramBotToken || "",
           telegramChatId: s.telegramChatId || "",
+          translateEmail: s.translateEmail || "",
           wallabagBaseUrl: s.wallabagBaseUrl || "",
           wallabagClientId: s.wallabagClientId || "",
           wallabagClientSecret: s.wallabagClientSecret || "",
@@ -289,6 +292,7 @@ export default function AdminSettingsPage() {
         form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes),
       telegramBotToken: form.telegramBotToken,
       telegramChatId: form.telegramChatId,
+      translateEmail: form.translateEmail,
       wallabagBaseUrl: form.wallabagBaseUrl,
       wallabagClientId: form.wallabagClientId,
       wallabagClientSecret: form.wallabagClientSecret,
@@ -654,6 +658,24 @@ export default function AdminSettingsPage() {
                 ))}
               </ul>
             )}
+          </fieldset>
+
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Traduction</legend>
+            <p className="text-xs italic text-sepia">
+              Les flux cochés « traduction » dans /admin/categories s’affichent en français dans
+              « En direct » (titre et extrait). Le service utilisé, MyMemory, est gratuit et sans
+              inscription, mais limité à 5 000 caractères par jour — environ 9 articles. Renseigner
+              une adresse e-mail ci-dessous fait passer cette limite à 50 000 caractères par jour.
+              L’adresse ne sert QU’À ça et n’est envoyée nulle part ailleurs ; laissée vide, aucune
+              adresse n’est transmise.
+            </p>
+            <Field
+              label="E-mail (facultatif, augmente le quota)"
+              value={form.translateEmail}
+              onChange={(v) => set("translateEmail", v)}
+              placeholder="prenom.nom@exemple.fr"
+            />
           </fieldset>
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">

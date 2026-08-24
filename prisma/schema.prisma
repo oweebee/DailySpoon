@@ -433,6 +433,15 @@ model Settings {
   // tester la connexion depuis /admin/settings.
   telegramBotToken    String?
   telegramChatId      String?
+
+  // Adresse e-mail transmise au service de traduction MyMemory (paramètre
+  // "de=", voir src/lib/translate.ts) — OPTIONNEL et vide par défaut. Sans
+  // elle, le quota gratuit est de 5 000 caractères/jour ; avec, il passe à
+  // 50 000. Rien d'autre n'est envoyé, et l'adresse n'est utilisée QUE pour
+  // ça. Champ de réglage (et non une constante dans le code) précisément
+  // pour que ce soit un choix explicite : aucune adresse n'est transmise à
+  // un service tiers tant que ce champ reste vide.
+  translateEmail      String?
   // Intégration Wallabag (read-it-later auto-hébergé) : mettre un article en
   // favori (étoile shérif) envoie son lien source à Wallabag pour qu'il
   // l'archive. L'API Wallabag n'a pas de simple clé — elle exige un flux

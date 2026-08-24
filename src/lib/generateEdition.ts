@@ -442,7 +442,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   await ingestRawItems(rawItems, edition.id);
 
   await syncMedalFlags();
-  await syncTranslateFlags();
+  await syncTranslateFlags(genSettings.translateEmail);
 
   // Sélection IA : TOUT le vivier "included" du jour PAS ENCORE réécrit par
   // l'IA (aiRewritten: false) — pas seulement les items tout juste récupérés
@@ -805,7 +805,7 @@ async function syncMedalFlags(): Promise<void> {
  * mêmes : purement un cache d'affichage à côté, lu par directTitle/directText
  * (EditionView.tsx) — l'article ouvert reste toujours en langue d'origine.
  */
-async function syncTranslateFlags(): Promise<void> {
+async function syncTranslateFlags(translateEmail?: string): Promise<void> {
   const translateFeeds = await prisma.translateFeed.findMany({ select: { freshrssId: true, label: true } });
   const translateFeedIds = translateFeeds.map((f) => f.freshrssId);
   const translateTitles = translateFeeds.map((f) => f.label);
@@ -882,9 +882,10 @@ async function syncTranslateFlags(): Promise<void> {
     const chunk = toTranslate.slice(i, i + TRANSLATE_CONCURRENCY);
     await Promise.all(
       chunk.map(async (a) => {
+        const opts = { email: translateEmail || undefined };
         const [titleResult, excerpt] = await Promise.all([
-          translateDetailed(a.sourceTitle),
-          a.sourceExcerpt ? translateOrNull(a.sourceExcerpt) : Promise.resolve(null)
+          translateDetailed(a.sourceTitle, opts),
+          a.sourceExcerpt ? translateOrNull(a.sourceExcerpt, opts) : Promise.resolve(null)
         ]);
 
         // Échec de la traduction du TITRE : on n'écrit rien du tout et on
