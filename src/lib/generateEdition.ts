@@ -876,20 +876,44 @@ async function syncTranslateFlags(libretranslateUrl?: string, libretranslateApiK
 
   // Dédoublonnage par id : un même article peut remonter pour deux flux
   // cochés portant le même libellé (rattrapage par feedTitle ci-dessus).
-  const pendingById = new Map<string, (typeof perFeedCandidates)[number][number]>();
-  for (const rows of perFeedCandidates) {
-    for (const a of rows) {
-      if (!a.translatedTitle) pendingById.set(a.id, a);
-    }
-  }
-  const pending = [...pendingById.values()].sort(
-    (a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0)
+  // Fait PAR FLUX (et non sur un pool global fusionné) : c'est ce qui
+  // préserve la garantie décrite plus haut jusqu'au bout.
+  const seenIds = new Set<string>();
+  const pendingByFeed: (typeof perFeedCandidates)[number][number][][] = perFeedCandidates.map((rows) =>
+    rows.filter((a) => {
+      if (a.translatedTitle || seenIds.has(a.id)) return false;
+      seenIds.add(a.id);
+      return true;
+    })
   );
-  if (pending.length === 0) return;
+  // Chaque sous-liste garde son tri par date décroissante (hérité de la
+  // requête Prisma), on ne les mélange pas.
+  if (pendingByFeed.every((rows) => rows.length === 0)) return;
 
-  // Les plus récents d'abord, y compris quand le garde-fou global tronque :
-  // ce qui saute est toujours le plus ancien, repris au passage suivant.
-  const toTranslate = pending.slice(0, MAX_TRANSLATE_BACKFILL_PER_RUN);
+  // Sélection par TOUR DE RÔLE entre flux (un article par flux et par tour),
+  // et non un simple tri global par date suivi d'un slice(0, N) : ce dernier
+  // faisait strictement l'inverse de ce que dit le commentaire au-dessus
+  // ("chaque flux a GARANTI ses N plus récents, indépendamment de la cadence
+  // de ses voisins") — un flux qui publie vite (BBC, AFP...) razziait alors
+  // TOUTES les places du passage, et un flux plus lent (un flux tout juste
+  // coché "traduction", un flux à faible cadence) pouvait attendre des dizaines
+  // de passages sans jamais voir un seul de ses articles traduit. Ici, tant
+  // qu'il reste des flux avec du travail en attente ET de la place dans le
+  // quota du passage, CHAQUE flux progresse un peu à chaque génération.
+  const toTranslate: (typeof perFeedCandidates)[number][number][] = [];
+  const cursors = new Array(pendingByFeed.length).fill(0);
+  outer: while (toTranslate.length < MAX_TRANSLATE_BACKFILL_PER_RUN) {
+    let pickedAny = false;
+    for (let f = 0; f < pendingByFeed.length; f++) {
+      if (toTranslate.length >= MAX_TRANSLATE_BACKFILL_PER_RUN) break outer;
+      const rows = pendingByFeed[f];
+      if (cursors[f] >= rows.length) continue;
+      toTranslate.push(rows[cursors[f]]);
+      cursors[f] += 1;
+      pickedAny = true;
+    }
+    if (!pickedAny) break;
+  }
 
   let translated = 0;
   let failed = 0;
@@ -953,7 +977,8 @@ async function syncTranslateFlags(libretranslateUrl?: string, libretranslateApiK
     );
   }
 
-  const remaining = pending.length - translated;
+  const totalPending = pendingByFeed.reduce((sum, rows) => sum + rows.length, 0);
+  const remaining = totalPending - translated;
   if (failed > 0 && translated === 0) {
     // Rien n'est passé du tout : ce n'est pas un souci de débit mais bien un
     // accès à translate.googleapis.com bloqué/injoignable depuis ce serveur
