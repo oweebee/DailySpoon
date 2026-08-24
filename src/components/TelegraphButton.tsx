@@ -50,7 +50,15 @@ export function TelegraphButton({ className = "" }: { className?: string }) {
         // dans le bandeau, l'un sur l'accueil, l'autre sur /direct — ils
         // doivent donc être rigoureusement de la même taille, et de la même
         // hauteur que le timbre "En direct" quand les deux cohabitent.
-        className="stamp-button stamp-bg-lg flex h-[2rem] w-[8.8rem] flex-col items-center justify-center px-3 font-display text-[0.42rem] uppercase leading-none tracking-[0.08em] text-paper disabled:opacity-50 sm:h-[2.75rem] sm:w-[12.1rem] sm:px-4 sm:text-[0.55rem] sm:tracking-[0.1em] md:h-[3.25rem] md:w-[14.25rem] md:px-5 md:text-[0.65rem] md:tracking-[0.1em]"
+        //
+        // Taille de base (mobile, sans préfixe) agrandie de 25% le
+        // 2026-08-24 — h-[2rem]->2.5rem, w-[8.8rem]->11rem, px-3->0.9375rem,
+        // text-[0.42rem]->0.525rem — même occasion que le titre du Masthead
+        // compact (voir son commentaire) : les trois cuillères ne partagent
+        // plus cette ligne (déménagées sur celle de "En direct" dans
+        // DirectView), la place gagnée profite à ce niveau. Paliers sm:/md:
+        // (Masthead non-compact desktop) inchangés.
+        className="stamp-button stamp-bg-lg flex h-[2.5rem] w-[11rem] flex-col items-center justify-center px-[0.9375rem] font-display text-[0.525rem] uppercase leading-none tracking-[0.08em] text-paper disabled:opacity-50 sm:h-[2.75rem] sm:w-[12.1rem] sm:px-4 sm:text-[0.55rem] sm:tracking-[0.1em] md:h-[3.25rem] md:w-[14.25rem] md:px-5 md:text-[0.65rem] md:tracking-[0.1em]"
       >
         {pulling ? (
           <>

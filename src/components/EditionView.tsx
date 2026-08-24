@@ -220,9 +220,12 @@ export function EditionView({
 
   return (
     <div>
-      {/* ——— Mobile : cuillères placées au-dessus des colonnes plutôt qu'en
-          bas de page, pour marquer la transition avec l'en-tête. */}
-      <SpoonDivider className="mb-6 text-center text-sepia md:hidden" />
+      {/* ——— Mobile : les cuillères qui marquaient la transition avec
+          l'en-tête ont déménagé sur la ligne "En direct" de DirectView (même
+          ligne que le titre "✦ En direct ✦", en haut à gauche) — ça évitait
+          une ligne à elles seules, qui creusait un vide entre cette ligne et
+          le Masthead compact du carrousel juste en dessous. Rien à afficher
+          ici sur mobile désormais. */}
 
       {/* ——— Desktop/tablette : grand encart "à la une" fixe au-dessus des
           rubriques (comme avant) — sur mobile, "À la une" redevient une

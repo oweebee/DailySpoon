@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EditionView, SourceLine, formatStamp, directTitle, directText, directHref, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
+import { SpoonDivider } from "./SpoonDivider";
 
 export function DirectView({
   initialArticles,
@@ -68,13 +69,22 @@ export function DirectView({
           perdue avant le premier article).
 
           Grille à 3 colonnes (et non un simple flex justify-between) : la
-          colonne vide de gauche et celle de la recherche à droite se
+          colonne de gauche et celle de la recherche à droite se
           partagent l'espace restant à parts égales (1fr), ce qui laisse
           "✦ En direct ✦" VRAIMENT centré sur la ligne — un
           justify-between l'aurait collé à gauche, et un centrage flex l'aurait
-          décalé de la moitié de la largeur du champ de recherche. */}
+          décalé de la moitié de la largeur du champ de recherche.
+
+          Colonne de gauche : les trois cuillères (mobile uniquement, voir
+          SpoonDivider) — auparavant sur leur propre ligne, juste au-dessus du
+          Masthead compact du carrousel (EditionView), ce qui creusait un
+          espace vide entre cette ligne et le titre. Remontées ici, sur la
+          même ligne que "En direct", pas de vide en plus, pas de ligne en
+          moins. Vide sur desktop (span vide, comme avant) : ce bandeau y est
+          juste au-dessus du Masthead desktop qui a déjà ses propres
+          cuillères en fin de page (cul-de-lampe). */}
       <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:mb-6 sm:gap-3">
-        <span />
+        <SpoonDivider className="text-left text-sepia md:hidden" />
         <p className="text-center text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
 
         <div className="flex justify-end">

@@ -82,12 +82,13 @@ export function Masthead({
         <div className={`flex items-center justify-between gap-3 ${compact ? "py-2" : "py-5"}`}>
           <Link
             href="/"
-            // Titre légèrement réduit en compact : il partage la ligne avec
-            // DEUX timbres désormais plus grands, et sur un écran de
-            // téléphone étroit c'est lui qui, sinon, se replie sur deux
-            // lignes (les timbres, eux, sont en shrink-0).
+            // Titre en compact : agrandi de 25% (text-xl -> 1.5625rem) le
+            // 2026-08-24, une fois les trois cuillères remontées sur la ligne
+            // "En direct" de DirectView (elles ne partagent plus cette ligne
+            // avec le titre, donc la place laissée par ce resserrement
+            // profite au titre et au bouton d'action).
             className={`font-masthead font-black uppercase leading-none tracking-tight ${
-              compact ? "text-xl" : "text-4xl md:text-6xl"
+              compact ? "text-[1.5625rem]" : "text-4xl md:text-6xl"
             }`}
           >
             DailySp
