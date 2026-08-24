@@ -22,7 +22,7 @@ import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
 import { writeLog } from "./logger";
 import { sendTelegramNotification } from "./telegramNotify";
-import { translateOrNull } from "./translate";
+import { translateOrNull, translateDetailed } from "./translate";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
 // og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
@@ -867,6 +867,11 @@ async function syncTranslateFlags(): Promise<void> {
 
   let translated = 0;
   let failed = 0;
+  // Raison du PREMIER échec rencontré (hôte + code HTTP / timeout / erreur
+  // réseau) — remontée telle quelle dans /admin/logs : sans elle, "toutes les
+  // traductions ont échoué" ne dit pas s'il s'agit d'un rejet d'IP (429/403),
+  // d'un blocage silencieux (timeout) ou d'une sortie réseau cassée.
+  let firstFailureReason: string | null = null;
 
   // Par tranches de TRANSLATE_CONCURRENCY (voir sa définition en haut de
   // fichier) : ni en série (trop lent — on dépasserait le timeout du proxy
@@ -877,8 +882,8 @@ async function syncTranslateFlags(): Promise<void> {
     const chunk = toTranslate.slice(i, i + TRANSLATE_CONCURRENCY);
     await Promise.all(
       chunk.map(async (a) => {
-        const [title, excerpt] = await Promise.all([
-          translateOrNull(a.sourceTitle),
+        const [titleResult, excerpt] = await Promise.all([
+          translateDetailed(a.sourceTitle),
           a.sourceExcerpt ? translateOrNull(a.sourceExcerpt) : Promise.resolve(null)
         ]);
 
@@ -888,15 +893,19 @@ async function syncTranslateFlags(): Promise<void> {
         // d'origine "par sécurité" (première version de ce code) le figeait
         // au contraire définitivement en anglais, puisque le champ n'était
         // alors plus vide et sortait donc du filtre des candidats.
-        if (!title) {
+        if (!titleResult.ok) {
           failed += 1;
+          if (!firstFailureReason) firstFailureReason = titleResult.reason;
           return;
         }
 
         // excerpt peut légitimement rester null (article sans extrait dans le
         // flux) — seul le titre conditionne la mise en cache.
         await prisma.article
-          .update({ where: { id: a.id }, data: { translatedTitle: title, translatedExcerpt: excerpt } })
+          .update({
+            where: { id: a.id },
+            data: { translatedTitle: titleResult.text, translatedExcerpt: excerpt }
+          })
           .catch(() => {});
         translated += 1;
       })
@@ -913,7 +922,8 @@ async function syncTranslateFlags(): Promise<void> {
     await writeLog(
       "error",
       "edition",
-      `Traduction "En direct" : les ${failed} tentative(s) de ce passage ont toutes échoué — translate.googleapis.com semble injoignable depuis ce serveur.`
+      `Traduction "En direct" : les ${failed} tentative(s) de ce passage ont toutes échoué — les points d'accès de traduction refusent ou ignorent les requêtes de ce serveur.`,
+      firstFailureReason ?? undefined
     );
   } else {
     await writeLog(
