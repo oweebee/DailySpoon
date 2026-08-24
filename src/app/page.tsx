@@ -88,11 +88,11 @@ export default async function HomePage() {
           s'afficher si la requête traîne au-delà du timeout du proxy) — avec
           le vivier de départ (avant plafond IA par catégorie) entre
           parenthèses quand il diffère du compte final retenu sur la une.
-          Voir aussi /archive/[id] pour l'équivalent sur une édition passée. */}
+          Voir aussi /archive/[id] pour l'équivalent sur une édition passée.
+          Pas de marge négative en mobile : le Masthead au-dessus y est masqué
+          (il vit dans le carrousel), donc il n'y a rien à remonter — ça ne
+          ferait que coller cette ligne au bord du panneau. */}
       {latestEdition && articles.length > 0 && (
-        {/* Pas de marge négative en mobile : le Masthead au-dessus y est
-            masqué (il vit dans le carrousel), donc il n'y a rien à remonter
-            — ça ne ferait que coller cette ligne au bord du panneau. */}
         <p className="mb-3 text-center text-xs uppercase tracking-[0.3em] text-sepia sm:mb-6 sm:-mt-6">
           {articles.length} article{articles.length > 1 ? "s" : ""}
           {latestEdition.sourcePoolCount != null && latestEdition.sourcePoolCount !== articles.length && (
