@@ -55,12 +55,14 @@ const RECENT_ARTICLES_PER_FEED_TO_TRANSLATE = 20;
 const MAX_TRANSLATE_BACKFILL_PER_RUN = 120;
 
 // Nombre d'articles traduits SIMULTANÉMENT (chacun = 1 ou 2 requêtes : titre
-// + extrait). L'endpoint Google utilisé est public et non officiel : au-delà
-// d'une poignée de requêtes en parallèle, il répond 429/403 et
-// translateOrNull renvoie null pour tout le lot. On avance donc par tranches,
-// ce qui reste très largement assez rapide (MAX_TRANSLATE_BACKFILL_PER_RUN
-// articles en ~quelques secondes) sans jamais saturer.
-const TRANSLATE_CONCURRENCY = 6;
+// + extrait, donc 6 requêtes en vol au maximum ici). L'endpoint Google
+// utilisé est public et non officiel : au-delà d'une poignée de requêtes en
+// parallèle, il répond 429/403 et translateOrNull renvoie null pour tout le
+// lot. Volontairement bas — le débit reste largement suffisant vu que seuls
+// les RECENT_ARTICLES_PER_FEED_TO_TRANSLATE articles les plus récents de
+// chaque flux sont concernés, et qu'un article traduit ne l'est jamais deux
+// fois.
+const TRANSLATE_CONCURRENCY = 3;
 
 // Coût IA : au plus ce nombre d'articles inclus PAR CATÉGORIE FreshRSS (celles
 // choisies dans /admin/categories) passent par l'IA à chaque génération.
