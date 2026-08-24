@@ -22,7 +22,7 @@ import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
 import { writeLog } from "./logger";
 import { sendTelegramNotification } from "./telegramNotify";
-import { translateViaGoogle } from "./translate";
+import { translateOrNull } from "./translate";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
 // og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
@@ -31,15 +31,36 @@ import { translateViaGoogle } from "./translate";
 // alors progressivement, sur plusieurs générations successives.
 const MAX_OG_BACKFILL_PER_RUN = 25;
 
-// Même esprit que MAX_OG_BACKFILL_PER_RUN, pour la traduction automatique
-// "En direct" (voir syncTranslateFlags plus bas) : traduire tout l'historique
-// d'un flux qu'on vient de cocher "traduction" d'un coup ferait des dizaines/
-// centaines d'appels séquentiels vers l'API Google Translate publique — on
-// avance donc par petits lots à chaque génération, priorisés sur les articles
-// les plus récents (les seuls réellement visibles en "En direct"). Plus bas
-// que MAX_OG_BACKFILL_PER_RUN : chaque article coûte ICI deux appels réseau
-// (titre + extrait) au lieu d'un.
-const MAX_TRANSLATE_BACKFILL_PER_RUN = 12;
+// Traduction automatique "En direct" (voir syncTranslateFlags plus bas) :
+// SEULS les N articles les plus récents de CHAQUE flux coché "traduction"
+// sont traduits, pas tout son historique. Un flux d'actualité type BBC a
+// facilement plusieurs CENTAINES d'articles déjà en base au moment où on
+// coche la case : les traduire tous coûterait autant d'appels réseau pour un
+// contenu que personne ne descend jamais lire, alors que ce qu'on veut, c'est
+// que le HAUT de la colonne soit en français.
+//
+// Fenêtre glissante, et le cache déjà calculé n'est jamais jeté : à mesure
+// que de nouveaux articles arrivent, ils entrent dans les N plus récents et
+// se font traduire à leur tour, pendant que les précédents gardent leur
+// traduction (déjà payée) même en sortant de la fenêtre. Le français gagne
+// donc progressivement du terrain vers le bas de la colonne, sans jamais
+// retraduire quoi que ce soit.
+const RECENT_ARTICLES_PER_FEED_TO_TRANSLATE = 20;
+
+// Garde-fou global, indépendant du précédent : si beaucoup de flux sont
+// cochés d'un coup (N flux x RECENT_ARTICLES_PER_FEED_TO_TRANSLATE), on
+// n'enchaîne quand même pas des centaines d'appels dans une seule aspiration
+// — le reliquat est repris au passage suivant, en commençant toujours par les
+// articles les plus récents.
+const MAX_TRANSLATE_BACKFILL_PER_RUN = 120;
+
+// Nombre d'articles traduits SIMULTANÉMENT (chacun = 1 ou 2 requêtes : titre
+// + extrait). L'endpoint Google utilisé est public et non officiel : au-delà
+// d'une poignée de requêtes en parallèle, il répond 429/403 et
+// translateOrNull renvoie null pour tout le lot. On avance donc par tranches,
+// ce qui reste très largement assez rapide (MAX_TRANSLATE_BACKFILL_PER_RUN
+// articles en ~quelques secondes) sans jamais saturer.
+const TRANSLATE_CONCURRENCY = 6;
 
 // Coût IA : au plus ce nombre d'articles inclus PAR CATÉGORIE FreshRSS (celles
 // choisies dans /admin/categories) passent par l'IA à chaque génération.
@@ -800,38 +821,105 @@ async function syncTranslateFlags(): Promise<void> {
   });
 
   // Rien de coché : pas la peine d'aller chercher des candidats à traduire.
-  if (translateFeedIds.length === 0 && translateTitles.length === 0) return;
+  if (translateFeeds.length === 0) return;
 
-  const toTranslate = await prisma.article.findMany({
-    where: { AND: [matchCondition, { translatedTitle: null }] },
-    orderBy: { publishedAt: "desc" },
-    take: MAX_TRANSLATE_BACKFILL_PER_RUN,
-    select: { id: true, sourceTitle: true, sourceExcerpt: true }
-  });
-  if (toTranslate.length === 0) return;
-
-  // En parallèle (pas en série) : même raison que les lookups og:image plus
-  // bas dans ce fichier — en série, MAX_TRANSLATE_BACKFILL_PER_RUN articles à
-  // 2 appels de 8s de timeout chacun pourraient approcher la minute, au-delà
-  // du timeout du proxy sur un déclenchement manuel ("Télégraphier les news").
-  await Promise.all(
-    toTranslate.map(async (a) => {
-      const [translatedTitle, translatedExcerpt] = await Promise.all([
-        translateViaGoogle(a.sourceTitle),
-        a.sourceExcerpt ? translateViaGoogle(a.sourceExcerpt) : Promise.resolve(null)
-      ]);
-      await prisma.article
-        .update({
-          where: { id: a.id },
-          // "|| a.sourceTitle" : best-effort, translateViaGoogle retombe déjà
-          // sur le texte d'origine en cas d'échec — filet supplémentaire pour
-          // ne jamais enregistrer une chaîne vide qui afficherait un titre
-          // blanc en "En direct".
-          data: { translatedTitle: translatedTitle || a.sourceTitle, translatedExcerpt }
-        })
-        .catch(() => {});
-    })
+  // Candidats calculés FLUX PAR FLUX (une requête par flux coché, il y en a
+  // une poignée) plutôt qu'en une seule requête globale : avec un classement
+  // global par date, le flux qui publie le plus vite monopoliserait toute la
+  // fenêtre et l'autre resterait entièrement en anglais. Ici chaque flux a
+  // GARANTI ses RECENT_ARTICLES_PER_FEED_TO_TRANSLATE articles les plus
+  // récents, indépendamment de la cadence de ses voisins.
+  //
+  // On prend les N plus récents SANS filtrer sur translatedTitle, puis on
+  // écarte ceux déjà traduits : filtrer avant reviendrait à faire glisser la
+  // fenêtre plus bas dans l'historique au fur et à mesure que le haut se
+  // traduit, et donc à traduire tout l'historique petit à petit — exactement
+  // ce qu'on veut éviter.
+  const perFeedCandidates = await Promise.all(
+    translateFeeds.map((f) =>
+      prisma.article.findMany({
+        where: { OR: [{ feedId: f.freshrssId }, { feedId: null, feedTitle: f.label }] },
+        orderBy: { publishedAt: "desc" },
+        take: RECENT_ARTICLES_PER_FEED_TO_TRANSLATE,
+        select: { id: true, sourceTitle: true, sourceExcerpt: true, publishedAt: true, translatedTitle: true }
+      })
+    )
   );
+
+  // Dédoublonnage par id : un même article peut remonter pour deux flux
+  // cochés portant le même libellé (rattrapage par feedTitle ci-dessus).
+  const pendingById = new Map<string, (typeof perFeedCandidates)[number][number]>();
+  for (const rows of perFeedCandidates) {
+    for (const a of rows) {
+      if (!a.translatedTitle) pendingById.set(a.id, a);
+    }
+  }
+  const pending = [...pendingById.values()].sort(
+    (a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0)
+  );
+  if (pending.length === 0) return;
+
+  // Les plus récents d'abord, y compris quand le garde-fou global tronque :
+  // ce qui saute est toujours le plus ancien, repris au passage suivant.
+  const toTranslate = pending.slice(0, MAX_TRANSLATE_BACKFILL_PER_RUN);
+
+  let translated = 0;
+  let failed = 0;
+
+  // Par tranches de TRANSLATE_CONCURRENCY (voir sa définition en haut de
+  // fichier) : ni en série (trop lent — on dépasserait le timeout du proxy
+  // sur un déclenchement manuel "Télégraphier les news"), ni tout en
+  // parallèle (l'endpoint Google public coupe au-delà de quelques requêtes
+  // simultanées, et TOUT le lot échouerait d'un coup).
+  for (let i = 0; i < toTranslate.length; i += TRANSLATE_CONCURRENCY) {
+    const chunk = toTranslate.slice(i, i + TRANSLATE_CONCURRENCY);
+    await Promise.all(
+      chunk.map(async (a) => {
+        const [title, excerpt] = await Promise.all([
+          translateOrNull(a.sourceTitle),
+          a.sourceExcerpt ? translateOrNull(a.sourceExcerpt) : Promise.resolve(null)
+        ]);
+
+        // Échec de la traduction du TITRE : on n'écrit rien du tout et on
+        // laisse translatedTitle à null, pour que l'article soit simplement
+        // repris dans le lot de la prochaine génération. Écrire le texte
+        // d'origine "par sécurité" (première version de ce code) le figeait
+        // au contraire définitivement en anglais, puisque le champ n'était
+        // alors plus vide et sortait donc du filtre des candidats.
+        if (!title) {
+          failed += 1;
+          return;
+        }
+
+        // excerpt peut légitimement rester null (article sans extrait dans le
+        // flux) — seul le titre conditionne la mise en cache.
+        await prisma.article
+          .update({ where: { id: a.id }, data: { translatedTitle: title, translatedExcerpt: excerpt } })
+          .catch(() => {});
+        translated += 1;
+      })
+    );
+  }
+
+  const remaining = pending.length - translated;
+  if (failed > 0 && translated === 0) {
+    // Rien n'est passé du tout : ce n'est pas un souci de débit mais bien un
+    // accès à translate.googleapis.com bloqué/injoignable depuis ce serveur
+    // (pare-feu, VPN, rate-limit). Sans ce log, le symptôme visible côté
+    // utilisateur ("les articles restent en anglais") est impossible à
+    // distinguer d'un simple backfill pas encore terminé.
+    await writeLog(
+      "error",
+      "edition",
+      `Traduction "En direct" : les ${failed} tentative(s) de ce passage ont toutes échoué — translate.googleapis.com semble injoignable depuis ce serveur.`
+    );
+  } else {
+    await writeLog(
+      "info",
+      "edition",
+      `Traduction "En direct" : ${translated} article(s) traduit(s)${failed > 0 ? `, ${failed} échec(s)` : ""} — ${remaining} restant(s) à traiter aux prochains passages.`
+    );
+  }
 }
 
 /**
