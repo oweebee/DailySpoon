@@ -141,9 +141,10 @@ export async function PATCH(req: NextRequest) {
 
 // Supprime une catégorie personnalisée : cascade sur ses flux (FK
 // ON DELETE CASCADE), nettoie les réglages qui référencent son id
-// synthétique (SelectedCategory/AiPrintCategory + ExcludedFeed/MedalFeed de
-// chacun de ses flux), et masque (sans les supprimer, cohérent avec le
-// reste de l'app — voir /api/admin/categories) les articles déjà récupérés.
+// synthétique (SelectedCategory/AiPrintCategory + ExcludedFeed/MedalFeed/
+// NotifyFeed/TranslateFeed de chacun de ses flux), et masque (sans les
+// supprimer, cohérent avec le reste de l'app — voir /api/admin/categories)
+// les articles déjà récupérés.
 export async function DELETE(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -164,6 +165,7 @@ export async function DELETE(req: NextRequest) {
       prisma.excludedFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
       prisma.medalFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
       prisma.notifyFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
+      prisma.translateFeed.deleteMany({ where: { freshrssId: { in: feedFreshrssIds } } }),
       prisma.article.updateMany({ where: { feedId: { in: feedFreshrssIds } }, data: { included: false } }),
       // Filet complémentaire : masque AUSSI les articles de flux perso qui
       // portent encore le LIBELLÉ de cette catégorie mais dont le flux n'est

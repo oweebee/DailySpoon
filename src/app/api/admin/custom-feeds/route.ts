@@ -111,15 +111,17 @@ export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
-    const [rows, excluded, medaled, notified] = await Promise.all([
+    const [rows, excluded, medaled, notified, translated] = await Promise.all([
       prisma.customFeed.findMany({ include: { customCategory: true }, orderBy: { createdAt: "asc" } }),
       prisma.excludedFeed.findMany(),
       prisma.medalFeed.findMany(),
-      prisma.notifyFeed.findMany()
+      prisma.notifyFeed.findMany(),
+      prisma.translateFeed.findMany()
     ]);
     const excludedIds = new Set(excluded.map((e) => e.freshrssId));
     const medaledIds = new Set(medaled.map((m) => m.freshrssId));
     const notifiedIds = new Set(notified.map((n) => n.freshrssId));
+    const translatedIds = new Set(translated.map((t) => t.freshrssId));
 
     // Compte réel des articles déjà en base pour chaque flux perso (total +
     // combien sont "included") — sans ça, aucun moyen de distinguer depuis
@@ -155,6 +157,7 @@ export async function GET(req: NextRequest) {
         included: !excludedIds.has(feedFreshrssId),
         medal: medaledIds.has(feedFreshrssId),
         notify: notifiedIds.has(feedFreshrssId),
+        translate: translatedIds.has(feedFreshrssId),
         lastFetchedAt: feed.lastFetchedAt,
         lastFetchError: feed.lastFetchError,
         customCategoryId: feed.customCategoryId,
@@ -306,6 +309,7 @@ export async function DELETE(req: NextRequest) {
       prisma.excludedFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
       prisma.medalFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
       prisma.notifyFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
+      prisma.translateFeed.deleteMany({ where: { freshrssId: feedFreshrssId } }),
       prisma.article.updateMany({ where: { feedId: feedFreshrssId }, data: { included: false } }),
       prisma.customFeed.delete({ where: { id } })
     ]);

@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
       excludedFeeds,
       medalFeeds,
       notifyFeeds,
+      translateFeeds,
       customCategories,
       customFeeds
     ] = await Promise.all([
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
       prisma.excludedFeed.findMany(),
       prisma.medalFeed.findMany(),
       prisma.notifyFeed.findMany(),
+      prisma.translateFeed.findMany(),
       prisma.customCategory.findMany(),
       // lastFetchedAt/lastFetchError volontairement omis : état d'exécution,
       // pas de la config — un import ne doit pas faire croire qu'un flux
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest) {
       excludedFeeds,
       medalFeeds,
       notifyFeeds,
+      translateFeeds,
       customCategories,
       customFeeds
     };
@@ -106,6 +109,7 @@ export async function POST(req: NextRequest) {
       excludedFeeds = [],
       medalFeeds = [],
       notifyFeeds = [],
+      translateFeeds = [],
       customCategories = [],
       customFeeds = []
     } = body as Record<string, any>;
@@ -198,6 +202,14 @@ export async function POST(req: NextRequest) {
         create: { freshrssId: row.freshrssId, label: row.label }
       });
     }
+    for (const row of translateFeeds) {
+      if (!row?.freshrssId || !row?.label) continue;
+      await prisma.translateFeed.upsert({
+        where: { freshrssId: row.freshrssId },
+        update: { label: row.label },
+        create: { freshrssId: row.freshrssId, label: row.label }
+      });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -209,7 +221,8 @@ export async function POST(req: NextRequest) {
         disabledCustomFeedsCategories: disabledCustomFeedsCategories.length,
         excludedFeeds: excludedFeeds.length,
         medalFeeds: medalFeeds.length,
-        notifyFeeds: notifyFeeds.length
+        notifyFeeds: notifyFeeds.length,
+        translateFeeds: translateFeeds.length
       }
     });
   } catch (err: any) {

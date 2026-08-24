@@ -22,6 +22,7 @@ import { getSettings } from "./settings";
 import { estimateCostUsd } from "./aiPricing";
 import { writeLog } from "./logger";
 import { sendTelegramNotification } from "./telegramNotify";
+import { translateViaGoogle } from "./translate";
 
 // Nombre max d'articles déjà en base pour lesquels on va chercher une
 // og:image manquante à CHAQUE génération. Ça évite qu'une base avec des
@@ -29,6 +30,16 @@ import { sendTelegramNotification } from "./telegramNotify";
 // réseau vers autant de sites différents d'un coup — le rattrapage se fait
 // alors progressivement, sur plusieurs générations successives.
 const MAX_OG_BACKFILL_PER_RUN = 25;
+
+// Même esprit que MAX_OG_BACKFILL_PER_RUN, pour la traduction automatique
+// "En direct" (voir syncTranslateFlags plus bas) : traduire tout l'historique
+// d'un flux qu'on vient de cocher "traduction" d'un coup ferait des dizaines/
+// centaines d'appels séquentiels vers l'API Google Translate publique — on
+// avance donc par petits lots à chaque génération, priorisés sur les articles
+// les plus récents (les seuls réellement visibles en "En direct"). Plus bas
+// que MAX_OG_BACKFILL_PER_RUN : chaque article coûte ICI deux appels réseau
+// (titre + extrait) au lieu d'un.
+const MAX_TRANSLATE_BACKFILL_PER_RUN = 12;
 
 // Coût IA : au plus ce nombre d'articles inclus PAR CATÉGORIE FreshRSS (celles
 // choisies dans /admin/categories) passent par l'IA à chaque génération.
@@ -408,6 +419,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   await ingestRawItems(rawItems, edition.id);
 
   await syncMedalFlags();
+  await syncTranslateFlags();
 
   // Sélection IA : TOUT le vivier "included" du jour PAS ENCORE réécrit par
   // l'IA (aiRewritten: false) — pas seulement les items tout juste récupérés
@@ -751,6 +763,75 @@ async function syncMedalFlags(): Promise<void> {
     where: { medal: true, NOT: matchCondition },
     data: { medal: false }
   });
+}
+
+/**
+ * Réconcilie le cache de traduction "En direct" (Article.translatedTitle/
+ * translatedExcerpt) avec la liste des flux cochés "traduction" dans
+ * /admin/categories (TranslateFeed) — même principe que syncMedalFlags
+ * ci-dessus, mais en DEUX temps puisqu'il ne s'agit pas d'un simple booléen :
+ *   1. efface le cache des articles dont le flux n'est plus coché (filet de
+ *      sécurité — le décochage admin le fait déjà immédiatement, voir
+ *      /api/admin/feeds) ;
+ *   2. traduit par lots bornés (MAX_TRANSLATE_BACKFILL_PER_RUN) les articles
+ *      d'un flux coché qui n'ont pas encore de traduction en cache — que ce
+ *      soit un flux tout juste coché (rattrapage rétroactif progressif,
+ *      plusieurs générations pour couvrir tout l'historique) ou un article
+ *      tout juste inséré par ingestRawItems juste avant dans cette même run.
+ * N'affecte jamais Article.headline/summary/sourceTitle/sourceExcerpt eux-
+ * mêmes : purement un cache d'affichage à côté, lu par directTitle/directText
+ * (EditionView.tsx) — l'article ouvert reste toujours en langue d'origine.
+ */
+async function syncTranslateFlags(): Promise<void> {
+  const translateFeeds = await prisma.translateFeed.findMany({ select: { freshrssId: true, label: true } });
+  const translateFeedIds = translateFeeds.map((f) => f.freshrssId);
+  const translateTitles = translateFeeds.map((f) => f.label);
+
+  const matchCondition = {
+    OR: [{ feedId: { in: translateFeedIds } }, { feedId: null, feedTitle: { in: translateTitles } }]
+  };
+
+  await prisma.article.updateMany({
+    where: {
+      NOT: matchCondition,
+      OR: [{ translatedTitle: { not: null } }, { translatedExcerpt: { not: null } }]
+    },
+    data: { translatedTitle: null, translatedExcerpt: null }
+  });
+
+  // Rien de coché : pas la peine d'aller chercher des candidats à traduire.
+  if (translateFeedIds.length === 0 && translateTitles.length === 0) return;
+
+  const toTranslate = await prisma.article.findMany({
+    where: { AND: [matchCondition, { translatedTitle: null }] },
+    orderBy: { publishedAt: "desc" },
+    take: MAX_TRANSLATE_BACKFILL_PER_RUN,
+    select: { id: true, sourceTitle: true, sourceExcerpt: true }
+  });
+  if (toTranslate.length === 0) return;
+
+  // En parallèle (pas en série) : même raison que les lookups og:image plus
+  // bas dans ce fichier — en série, MAX_TRANSLATE_BACKFILL_PER_RUN articles à
+  // 2 appels de 8s de timeout chacun pourraient approcher la minute, au-delà
+  // du timeout du proxy sur un déclenchement manuel ("Télégraphier les news").
+  await Promise.all(
+    toTranslate.map(async (a) => {
+      const [translatedTitle, translatedExcerpt] = await Promise.all([
+        translateViaGoogle(a.sourceTitle),
+        a.sourceExcerpt ? translateViaGoogle(a.sourceExcerpt) : Promise.resolve(null)
+      ]);
+      await prisma.article
+        .update({
+          where: { id: a.id },
+          // "|| a.sourceTitle" : best-effort, translateViaGoogle retombe déjà
+          // sur le texte d'origine en cas d'échec — filet supplémentaire pour
+          // ne jamais enregistrer une chaîne vide qui afficherait un titre
+          // blanc en "En direct".
+          data: { translatedTitle: translatedTitle || a.sourceTitle, translatedExcerpt }
+        })
+        .catch(() => {});
+    })
+  );
 }
 
 /**

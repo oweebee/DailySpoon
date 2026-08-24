@@ -70,6 +70,25 @@ model NotifyFeed {
   createdAt  DateTime @default(now())
 }
 
+// Flux coché "traduction" dans /admin/categories (même id synthétique que
+// MedalFeed/NotifyFeed, valable pour un vrai flux FreshRSS OU un flux perso).
+// Les articles de ces flux s'affichent DÉJÀ traduits en français en "En
+// direct" (titre + extrait, voir Article.translatedTitle/translatedExcerpt et
+// directTitle/directText dans EditionView.tsx) — reconcilié/backfillé à
+// chaque génération par syncTranslateFlags (generateEdition.ts), sur le même
+// principe que syncMedalFlags mais avec un vrai texte à calculer (appel
+// externe) plutôt qu'un simple booléen, donc traité par lots bornés au fil
+// des générations plutôt que d'un coup. Volontairement indépendant de la
+// traduction à la demande (bouton "Traduire" dans le lecteur d'article, voir
+// article-proxy/route.ts) : ouvrir l'article garde TOUJOURS le texte
+// original, cette case ne change que l'affichage de la vignette "En direct".
+model TranslateFeed {
+  id         String   @id @default(cuid())
+  freshrssId String   @unique
+  label      String
+  createdAt  DateTime @default(now())
+}
+
 // Catégorie personnalisée créée directement depuis /admin/categories (par
 // opposition aux catégories FreshRSS, gérées côté FreshRSS) — un seul niveau
 // (catégorie -> flux), pas de sous-catégories imbriquées, pour rester
@@ -196,6 +215,16 @@ model Article {
   greaderId      Int       @unique @default(autoincrement())
   readState      Boolean   @default(false)
   medal          Boolean   @default(false) // flux "médaillé" (voir MedalFeed) : badge sur la photo + éligible à la une
+
+  // Titre/extrait déjà traduits en français, pour affichage direct en "En
+  // direct" (voir TranslateFeed ci-dessus et directTitle/directText dans
+  // EditionView.tsx) — null tant que le flux n'est pas coché "traduction" ou
+  // que le backfill (syncTranslateFlags) n'est pas encore passé dessus.
+  // N'affecte JAMAIS la lecture de l'article lui-même (article-proxy sert
+  // toujours sourceTitle/sourceExcerpt en clair, traduits seulement à la
+  // demande via son propre bouton "Traduire").
+  translatedTitle   String? @db.Text
+  translatedExcerpt String? @db.Text
 
   // false si le flux est exclu ou la catégorie décochée dans /admin au
   // moment de la récupération (ou recalculé immédiatement si l'admin change

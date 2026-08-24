@@ -14,15 +14,17 @@ export async function GET(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
-    const [freshrssFeeds, excluded, medaled, notified] = await Promise.all([
+    const [freshrssFeeds, excluded, medaled, notified, translated] = await Promise.all([
       listAllFeeds(),
       prisma.excludedFeed.findMany(),
       prisma.medalFeed.findMany(),
-      prisma.notifyFeed.findMany()
+      prisma.notifyFeed.findMany(),
+      prisma.translateFeed.findMany()
     ]);
     const excludedIds = new Set(excluded.map((e) => e.freshrssId));
     const medaledIds = new Set(medaled.map((m) => m.freshrssId));
     const notifiedIds = new Set(notified.map((n) => n.freshrssId));
+    const translatedIds = new Set(translated.map((t) => t.freshrssId));
 
     // Même compte réel (total / visibles en direct) que pour les flux
     // personnalisés — affiché à côté de chaque flux FreshRSS pour une lecture
@@ -54,6 +56,7 @@ export async function GET(req: NextRequest) {
         included: !excludedIds.has(f.freshrssId),
         medal: medaledIds.has(f.freshrssId),
         notify: notifiedIds.has(f.freshrssId),
+        translate: translatedIds.has(f.freshrssId),
         articleCount: counts.total,
         visibleArticleCount: counts.included
       };
@@ -77,19 +80,26 @@ export async function POST(req: NextRequest) {
   if (!(await assertAuthed(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { freshrssId, title, included, medal, notify } = body as {
+  const { freshrssId, title, included, medal, notify, translate } = body as {
     freshrssId?: string;
     title?: string;
     included?: boolean;
     medal?: boolean;
     notify?: boolean;
+    translate?: boolean;
   };
 
   if (
     !freshrssId ||
-    (typeof included !== "boolean" && typeof medal !== "boolean" && typeof notify !== "boolean")
+    (typeof included !== "boolean" &&
+      typeof medal !== "boolean" &&
+      typeof notify !== "boolean" &&
+      typeof translate !== "boolean")
   ) {
-    return NextResponse.json({ error: "freshrssId et (included, medal ou notify) sont requis" }, { status: 400 });
+    return NextResponse.json(
+      { error: "freshrssId et (included, medal, notify ou translate) sont requis" },
+      { status: 400 }
+    );
   }
 
   if (typeof included === "boolean") {
@@ -153,6 +163,31 @@ export async function POST(req: NextRequest) {
       });
     } else {
       await prisma.notifyFeed.deleteMany({ where: { freshrssId } });
+    }
+  }
+
+  // "traduction" : affiche le titre/extrait déjà traduits en français en "En
+  // direct" pour ce flux (voir TranslateFeed dans schema.prisma). Au
+  // décochage, on efface IMMÉDIATEMENT le cache déjà présent sur les
+  // articles de ce flux (retour à l'original sans attendre la prochaine
+  // génération) — au cochage, PAS de traduction synchrone ici (potentiellement
+  // des centaines d'appels réseau vers Google Translate, bien trop lent pour
+  // une requête admin) : le remplissage se fait par lots à chaque génération
+  // suivante (syncTranslateFlags dans generateEdition.ts), déclenchable tout
+  // de suite via "Télégraphier les news"/"Régénérer maintenant".
+  if (typeof translate === "boolean") {
+    if (translate) {
+      await prisma.translateFeed.upsert({
+        where: { freshrssId },
+        update: { label: title || freshrssId },
+        create: { freshrssId, label: title || freshrssId }
+      });
+    } else {
+      await prisma.translateFeed.deleteMany({ where: { freshrssId } });
+      await prisma.article.updateMany({
+        where: { OR: [{ feedId: freshrssId }, ...(title ? [{ feedId: null, feedTitle: title }] : [])] },
+        data: { translatedTitle: null, translatedExcerpt: null }
+      });
     }
   }
 

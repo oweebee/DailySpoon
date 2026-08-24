@@ -7,6 +7,7 @@ import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVi
 import { isAlreadyMorssUrl, splitIntoReadableParagraphs, BROWSER_USER_AGENT } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 import { hoistNestedArticleIfClearlyBetter, deepTrimJunk } from "@/lib/articleClean";
+import { translateViaGoogle } from "@/lib/translate";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -589,35 +590,9 @@ function htmlResponse(html: string): NextResponse {
 }
 
 // Traduction à la demande uniquement (lien "Traduire en français" dans la
-// page, jamais automatique) via le point d'accès public non officiel que
-// translate.google.com utilise lui-même en coulisses — gratuit, sans clé
-// API, mais non documenté/non garanti par Google (peut cesser de
-// fonctionner sans préavis). Best-effort : en cas d'échec, on garde le
-// texte d'origine plutôt que de casser la page.
-async function translateViaGoogle(text: string, targetLang = "fr"): Promise<string> {
-  if (!text || !text.trim()) return text;
-  const params = new URLSearchParams({ client: "gtx", sl: "auto", tl: targetLang, dt: "t", q: text });
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${params.toString()}`, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": BROWSER_USER_AGENT
-      }
-    });
-    if (!res.ok) return text;
-    const data: any = await res.json();
-    const segments = data?.[0];
-    if (!Array.isArray(segments)) return text;
-    const translated = segments.map((seg: any) => seg?.[0] ?? "").join("");
-    return translated || text;
-  } catch {
-    return text;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+// page, jamais automatique) — translateViaGoogle vit désormais dans
+// src/lib/translate.ts, partagée avec le backfill automatique "En direct"
+// (syncTranslateFlags, voir generateEdition.ts).
 
 // Limite le nombre de blocs traduits par article : l'endpoint est gratuit
 // mais non officiel, et chaque bloc = une requête réseau séquentielle — on

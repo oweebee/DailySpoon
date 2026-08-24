@@ -16,6 +16,14 @@ export type ArticleLike = {
   // c'est EXCLUSIVEMENT ceux-ci qu'affiche "En direct", tenu à zéro IA (voir
   // directTitle/directText plus bas).
   sourceExcerpt?: string | null;
+  // Titre/extrait déjà traduits en français, en cache — présents seulement
+  // si le flux source est coché "traduction" dans /admin/categories (voir
+  // TranslateFeed/syncTranslateFlags) ET que le backfill est déjà passé
+  // dessus. Utilisés par directTitle/directText ci-dessous, EN PLUS de
+  // sourceTitle/sourceExcerpt (pas à la place) : ouvrir l'article lui-même
+  // reste toujours en langue d'origine, seule la vignette "En direct" change.
+  translatedTitle?: string | null;
+  translatedExcerpt?: string | null;
   // Résumé concis dédié à la une IA (voir FrontPageView) — absent/inutilisé
   // partout ailleurs (En direct, favoris, archive gardent `summary`).
   frontPageSummary?: string | null;
@@ -46,11 +54,27 @@ export type CategoryOrderEntry = { freshrssId: string; label: string };
 // flux : sourceTitle (titre d'origine) et sourceExcerpt (texte d'origine),
 // que rien ne réécrit jamais. C'est ce qui garantit que le texte affiché en
 // "En direct" reste toujours celui de la source, pas un résumé IA.
+//
+// Exception volontaire, INDÉPENDANTE de l'IA : translatedTitle/
+// translatedExcerpt (voir ArticleLike ci-dessus) — cache de traduction
+// automatique en français, rempli seulement pour les flux cochés
+// "traduction" dans /admin/categories. Prioritaire sur le texte original
+// quand présent, mais reste le même texte "brut" (juste traduit), jamais un
+// résumé réécrit — ça ne viole donc pas la règle "zéro IA" ci-dessus.
+// L'article ouvert (article-proxy) n'y touche jamais : il sert toujours
+// sourceTitle/sourceExcerpt en langue d'origine, traduits uniquement à la
+// demande via son propre bouton "Traduire".
 export function directTitle(a: ArticleLike): string {
-  return (a.sourceTitle && a.sourceTitle.trim()) || a.headline || "(sans titre)";
+  return (
+    (a.translatedTitle && a.translatedTitle.trim()) ||
+    (a.sourceTitle && a.sourceTitle.trim()) ||
+    a.headline ||
+    "(sans titre)"
+  );
 }
 export function directText(a: ArticleLike): string {
   return (
+    (a.translatedExcerpt && a.translatedExcerpt.trim()) ||
     (a.sourceExcerpt && a.sourceExcerpt.trim()) ||
     "Aucun aperçu fourni par le flux — consulte la source pour lire l'article complet."
   );

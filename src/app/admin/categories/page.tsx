@@ -41,6 +41,7 @@ type Feed = {
   included: boolean;
   medal: boolean;
   notify: boolean;
+  translate: boolean;
   articleCount: number;
   visibleArticleCount: number;
 };
@@ -52,6 +53,7 @@ type CustomFeedItem = {
   included: boolean;
   medal: boolean;
   notify: boolean;
+  translate: boolean;
   lastFetchedAt: string | null;
   lastFetchError: string | null;
   articleCount: number;
@@ -436,6 +438,15 @@ export default function AdminCategoriesPage() {
     });
   }
 
+  async function toggleCustomFeedTranslate(feed: CustomFeedItem) {
+    setCustomFeeds((prev) => prev.map((f) => (f.id === feed.id ? { ...f, translate: !f.translate } : f)));
+    await fetch("/api/admin/feeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: `custom-feed:${feed.id}`, title: feed.title, translate: !feed.translate })
+    });
+  }
+
   async function loadCategories() {
     setLoading(true);
     setError(null);
@@ -642,6 +653,17 @@ export default function AdminCategoriesPage() {
     });
   }
 
+  async function toggleTranslate(feed: Feed) {
+    setFeeds((prev) =>
+      prev.map((f) => (f.freshrssId === feed.freshrssId ? { ...f, translate: !f.translate } : f))
+    );
+    await fetch("/api/admin/feeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ freshrssId: feed.freshrssId, title: feed.title, translate: !feed.translate })
+    });
+  }
+
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.href = "/admin/login";
@@ -771,6 +793,15 @@ export default function AdminCategoriesPage() {
               className="accent-journal"
             />
             notification
+          </label>
+          <label className="flex items-center gap-2 text-xs italic text-sepia">
+            <input
+              type="checkbox"
+              checked={feed.translate}
+              onChange={() => toggleCustomFeedTranslate(feed)}
+              className="accent-journal"
+            />
+            traduction
           </label>
           <label className="flex items-center gap-2 text-xs italic text-sepia">
             <input
@@ -1470,6 +1501,15 @@ export default function AdminCategoriesPage() {
                               <label className="flex items-center gap-2 text-xs italic text-sepia">
                                 <input
                                   type="checkbox"
+                                  checked={feed.translate}
+                                  onChange={() => toggleTranslate(feed)}
+                                  className="accent-journal"
+                                />
+                                traduction
+                              </label>
+                              <label className="flex items-center gap-2 text-xs italic text-sepia">
+                                <input
+                                  type="checkbox"
                                   checked={feed.included}
                                   onChange={() => toggleFeed(feed)}
                                   className="accent-ink"
@@ -1536,6 +1576,15 @@ export default function AdminCategoriesPage() {
                               className="accent-journal"
                             />
                             notification
+                          </label>
+                          <label className="flex items-center gap-2 text-xs italic text-sepia">
+                            <input
+                              type="checkbox"
+                              checked={feed.translate}
+                              onChange={() => toggleTranslate(feed)}
+                              className="accent-journal"
+                            />
+                            traduction
                           </label>
                           <label className="flex items-center gap-2 text-xs italic text-sepia">
                             <input
