@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EditionView, SourceLine, formatStamp, directTitle, directText, directHref, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
@@ -8,17 +8,19 @@ import { ArticleLink } from "./ArticleLink";
 export function DirectView({
   initialArticles,
   categoryOrder = [],
-  date
+  date,
+  mastheadAction
 }: {
   initialArticles: ArticleLike[];
   categoryOrder?: CategoryOrderEntry[];
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  EditionView/CategoryGrid/MobilePagedSection. */
   date: Date;
+  /** Timbre "Télégraphier les nouvelles", relayé jusqu'au Masthead du
+   *  carrousel mobile. Le timbre "En direct" y est toujours masqué : on est
+   *  déjà sur cette page. */
+  mastheadAction?: ReactNode;
 }) {
-  const [pulling, setPulling] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
   // Recherche live : interroge /api/articles/search (tout l'historique en
   // base, pas seulement les ~1000 articles chargés dans initialArticles),
   // avec un léger debounce pour ne pas déclencher une requête à chaque
@@ -53,64 +55,19 @@ export function DirectView({
     };
   }, [query]);
 
-  async function pull() {
-    setPulling(true);
-    setMessage(null);
-    // Règle du projet : /direct est un aperçu rapide, jamais d'IA, même si une
-    // clé Anthropic est configurée pour l'édition quotidienne (économie de tokens).
-    const res = await fetch("/api/cron/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ noAi: true })
-    });
-    const body = await res.json().catch(() => ({}));
-    setPulling(false);
-    if (res.ok) {
-      setMessage(`${body.articleCount} article${body.articleCount > 1 ? "s" : ""} — édition mise à jour.`);
-      setTimeout(() => window.location.reload(), 900);
-    } else {
-      setMessage(body.error || "Échec de la récupération.");
-    }
-  }
-
   const isSearching = query.trim().length > 0;
 
   return (
     <div>
-      {/* Marges resserrées sous sm (mobile) : ce bloc s'affiche au-dessus du
-          masthead (dupliqué par colonne, voir MobilePagedSection) et
-          repoussait le début des articles à plus de la moitié de l'écran sur
-          téléphone. Inchangé à partir de sm (desktop). */}
+      {/* Le timbre "Télégraphier les nouvelles" ne vit plus ici : il est
+          désormais calé à droite du titre dans le bandeau du haut (voir
+          TelegraphButton, passé en "action" au Masthead depuis
+          app/direct/page.tsx). Ne restent donc que l'intitulé de la page et
+          le champ de recherche. */}
       <div className="mb-4 border-b-2 border-ink pb-2 sm:mb-8 sm:pb-4">
-        <div className="flex flex-col items-center gap-1.5 pb-2 text-center sm:gap-2 sm:pb-4">
-          <p className="text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
-          <button
-            onClick={pull}
-            disabled={pulling}
-            // min-w fixe : le fond du timbre (stamp-bg-lg) impose sa hauteur
-            // à partir de la largeur du bouton (aspect-ratio, voir
-            // globals.css) — sans largeur plancher, un texte replié sur 2
-            // lignes réduit la largeur "naturelle" (ligne la plus longue au
-            // lieu du texte entier), donc écraserait aussi la hauteur, trop
-            // juste pour 2 lignes. Plus étroit sous sm (mobile) : la version
-            // pleine largeur (17rem) ajoutait de la hauteur superflue sur
-            // petit écran, le timbre grandissant avec sa largeur.
-            className="stamp-button stamp-bg-lg inline-flex min-w-[13rem] flex-col items-center justify-center gap-0.5 px-6 font-display text-xs uppercase leading-tight tracking-[0.2em] text-paper disabled:opacity-50 sm:min-w-[17rem] sm:px-8 sm:text-sm sm:tracking-[0.25em]"
-          >
-            {pulling ? (
-              <>
-                <span>Télégraphie</span>
-                <span>en cours...</span>
-              </>
-            ) : (
-              <>
-                <span>Télégraphier</span>
-                <span>les nouvelles</span>
-              </>
-            )}
-          </button>
-          {message && <p className="text-sm italic text-sepia">{message}</p>}
-        </div>
+        <p className="pb-2 text-center text-xs uppercase tracking-[0.35em] text-journal sm:pb-4">
+          ✦ En direct ✦
+        </p>
 
         <div className="flex justify-end">
           <label className="flex items-center gap-2 border-b border-ink/40 pb-1 focus-within:border-journal">
@@ -134,7 +91,14 @@ export function DirectView({
           derniers articles.
         </p>
       ) : (
-        <EditionView articles={initialArticles} categoryOrder={categoryOrder} clampSummary date={date} />
+        <EditionView
+          articles={initialArticles}
+          categoryOrder={categoryOrder}
+          clampSummary
+          date={date}
+          mastheadAction={mastheadAction}
+          hideLiveStamp
+        />
       )}
     </div>
   );

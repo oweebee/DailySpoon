@@ -108,11 +108,20 @@ function animateScrollTo(target: number, cancelRef: { current: number | null }, 
 export function MobilePagedSection({
   date,
   pages,
-  className = ""
+  className = "",
+  mastheadAction,
+  hideLiveStamp = false
 }: {
   date: Date;
   pages: { key: string; content: ReactNode }[];
   className?: string;
+  /** Timbre d'action affiché à droite du titre dans le Masthead (voir
+   *  Masthead). Rendu une fois PAR PAGE du carrousel, comme le reste du
+   *  bandeau — chaque copie est indépendante, ce qui est sans conséquence
+   *  puisque l'action recharge la page. */
+  mastheadAction?: ReactNode;
+  /** Masque le timbre "En direct" du bandeau (déjà sur /direct). */
+  hideLiveStamp?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -251,7 +260,7 @@ export function MobilePagedSection({
           }}
           className="w-full shrink-0 snap-center px-6"
         >
-          <Masthead date={date} compact />
+          <Masthead date={date} compact action={mastheadAction} hideLiveStamp={hideLiveStamp} />
           {page.content}
         </div>
       ))}

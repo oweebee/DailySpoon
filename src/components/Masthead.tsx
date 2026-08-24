@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 /** Remplace les "o" de "Sp[o][o]n" dans le masthead par la même silhouette
  *  de cuillère (bol + manche) que le cul-de-lampe SpoonDivider en bas de
@@ -21,7 +22,9 @@ function SpoonO() {
 
 export function Masthead({
   date,
-  compact = false
+  compact = false,
+  action,
+  hideLiveStamp = false
 }: {
   date: Date;
   /** Version resserrée verticalement, utilisée uniquement pour la copie
@@ -30,6 +33,16 @@ export function Masthead({
    *  des articles à plus de la moitié de l'écran sur téléphone. Le Masthead
    *  "normal" (desktop, une seule copie fixe) n'est pas concerné. */
   compact?: boolean;
+  /** Timbre d'action propre à la page, calé à DROITE sur la ligne du titre :
+   *  "Lancer l'impression du journal" sur l'accueil, "Télégraphier les
+   *  nouvelles" sur /direct. Auparavant en gros bloc centré au-dessus du
+   *  bandeau, ce qui repoussait le début des articles très bas — surtout en
+   *  mobile, où ce bandeau est en plus dupliqué à chaque colonne. */
+  action?: ReactNode;
+  /** Masque le timbre "En direct". Utilisé sur /direct même : y proposer un
+   *  raccourci vers la page où l'on se trouve déjà n'a aucun intérêt, et ça
+   *  libère la place pour le timbre d'action. */
+  hideLiveStamp?: boolean;
 }) {
   const formatted = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
@@ -40,11 +53,10 @@ export function Masthead({
 
   return (
     <header className={compact ? "mb-3" : "mb-10"}>
-      {/* Zone repère pour le timbre "EN DIRECT" en desktop : englobe le
-          bandeau du haut, le titre ET le double filet, pour que le timbre
-          puisse être centré verticalement sur toute cette hauteur (entre le
-          bandeau et le menu du dessous), pas juste sur la ligne du titre. */}
-      <div className="relative">
+      {/* Bloc "tête de journal" : bandeau du haut, ligne du titre, double
+          filet. Plus aucun positionnement absolu ici depuis que les timbres
+          vivent dans la ligne du titre elle-même (voir plus bas). */}
+      <div>
         {/* Bandeau supérieur */}
         <div
           className={`flex items-center justify-between border-b border-ink uppercase tracking-[0.25em] text-sepia ${
@@ -55,52 +67,53 @@ export function Masthead({
           <span>Prix : ≈ 10 ¢</span>
         </div>
 
-        {/* Masthead gothique centré — "relative" sert de repère de hauteur
-            au timbre desktop ci-dessous (inset-y-0 SANS hauteur explicite =
-            il exploite exactement la hauteur de cette cellule titre, ni
-            plus ni moins, largeur recalculée automatiquement à partir du
-            ratio réel de l'image via aspect-ratio). */}
-        <div className={`relative text-center ${compact ? "py-2" : "py-6"}`}>
+        {/* Ligne du titre : nom du journal calé à GAUCHE, timbres calés à
+            DROITE (le "En direct" puis, s'il y en a un, le timbre d'action de
+            la page). Une seule et même disposition en mobile comme en
+            desktop — d'où la disparition des deux variantes de timbre "En
+            direct" qui coexistaient ici (une centrée sous le titre en
+            mobile, une en position absolue à droite en desktop) : dans une
+            ligne flex, le timbre se place naturellement à droite aux deux
+            tailles, seule sa hauteur change.
+
+            Les timbres tirent leur LARGEUR de leur hauteur via aspect-ratio
+            (voir .stamp-bg-* dans globals.css) : on ne fixe donc jamais que
+            la hauteur, et l'image n'est jamais déformée. "shrink-0" sur le
+            groupe de droite pour que ce soit le titre qui cède de la place
+            si l'écran est vraiment étroit, jamais les timbres. */}
+        <div className={`flex items-center justify-between gap-3 ${compact ? "py-2" : "py-5"}`}>
           <Link
             href="/"
-            className={`font-masthead font-black uppercase tracking-tight ${compact ? "text-2xl" : "text-5xl md:text-7xl"}`}
+            className={`font-masthead font-black uppercase leading-none tracking-tight ${
+              compact ? "text-2xl" : "text-4xl md:text-6xl"
+            }`}
           >
             DailySp
             <SpoonO />
             <SpoonO />n
           </Link>
 
-          {/* Timbre "EN DIRECT" version mobile : bloc centré sous le titre,
-              en flux normal (une position absolue le tronquait, pas assez de
-              place à droite du titre en mobile). */}
-          <Link
-            href="/direct"
-            className={`stamp-live stamp-bg-sm relative mx-auto flex items-center justify-center font-display uppercase text-white md:hidden ${
-              compact ? "mt-1.5 h-9 px-3 text-[0.6rem] tracking-[0.2em]" : "mt-4 h-20 px-4 text-xs tracking-[0.25em]"
-            }`}
-          >
-            <span className="stamp-live-text">En direct</span>
-          </Link>
-
-          {/* Timbre "EN DIRECT" version desktop — classe ".stamp-live"
-              autonome (voir globals.css), qui NE se combine PAS avec
-              ".stamp-button" : les deux se disputaient la propriété
-              "transform" (rotation vs centrage vertical), ce qui empêchait
-              la rotation de s'afficher. "inset-y-0" SANS hauteur explicite
-              (ni h-fit ni h-*) étire le timbre sur TOUTE la hauteur de cette
-              cellule titre (le "relative py-6" ci-dessus) — largeur
-              recalculée automatiquement par le navigateur à partir du ratio
-              réel de l'image (aspect-ratio sur .stamp-bg-sm), jamais
-              déformée. Le fond (.stamp-live) reste droit ; seul le texte,
-              enveloppé dans .stamp-live-text, garde l'inclinaison. Jamais en
-              mode compact : ce timbre est caché en dessous de md (md:flex),
-              et le mode compact n'existe justement que sous ce seuil. */}
-          <Link
-            href="/direct"
-            className="stamp-live stamp-bg-sm absolute inset-y-0 -right-2.5 hidden items-center justify-center px-5 font-display text-sm uppercase tracking-[0.25em] text-white md:flex"
-          >
-            <span className="stamp-live-text">En direct</span>
-          </Link>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
+                globals.css), qui NE se combine PAS avec ".stamp-button" :
+                les deux se disputaient la propriété "transform" (rotation vs
+                centrage), et la rotation ne s'affichait alors jamais. Le
+                fond reste droit ; seul le texte, enveloppé dans
+                .stamp-live-text, garde l'inclinaison. */}
+            {!hideLiveStamp && (
+              <Link
+                href="/direct"
+                className={`stamp-live stamp-bg-sm flex items-center justify-center font-display uppercase text-white ${
+                  compact
+                    ? "h-9 px-2 text-[0.5rem] tracking-[0.15em]"
+                    : "h-11 px-3 text-[0.6rem] tracking-[0.2em] md:h-14 md:px-4 md:text-xs md:tracking-[0.25em]"
+                }`}
+              >
+                <span className="stamp-live-text">En direct</span>
+              </Link>
+            )}
+            {action}
+          </div>
         </div>
 
         <div className="double-rule" />

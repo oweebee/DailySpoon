@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArticleImage } from "./ArticleImage";
 import { type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { SpoonDivider } from "./SpoonDivider";
@@ -29,10 +30,15 @@ import { MobilePagedSection } from "./MobilePagedSection";
 export function FrontPageView({
   articles,
   categoryOrder = [],
-  date
+  date,
+  mastheadAction
 }: {
   articles: ArticleLike[];
   categoryOrder?: CategoryOrderEntry[];
+  /** Timbre d'action ("Lancer l'impression du journal") affiché à droite du
+   *  titre dans le bandeau — relayé au carrousel mobile, qui rend sa propre
+   *  copie du bandeau pour chaque rubrique. Voir Masthead. */
+  mastheadAction?: ReactNode;
   /** Date de l'édition (Masthead) — dupliquée en haut de CHAQUE page du
    *  carrousel mobile (voir MobilePagedSection), puisque chaque rubrique y
    *  emporte sa propre copie du menu du haut plutôt que de partager celui
@@ -160,7 +166,12 @@ export function FrontPageView({
           page classique) pour tout explorer, y compris le chargement infini
           des rubriques. Voir MobilePagedSection. */}
       {(heroMain || categories.length > 0) && (
-        <MobilePagedSection date={date} pages={mobilePages} className="mb-10 sm:hidden" />
+        <MobilePagedSection
+          date={date}
+          pages={mobilePages}
+          className="mb-10 sm:hidden"
+          mastheadAction={mastheadAction}
+        />
       )}
 
       {/* ——— Tablette/desktop : rubriques en colonnes CSS (le contenu

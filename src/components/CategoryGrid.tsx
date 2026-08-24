@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CategoryColumn } from "./CategoryColumn";
 import { MobilePagedSection } from "./MobilePagedSection";
 import type { ArticleLike } from "./EditionView";
@@ -51,7 +51,9 @@ export function CategoryGrid({
   showMedal = true,
   showDateStamp = true,
   showFavorite = true,
-  date
+  date,
+  mastheadAction,
+  hideLiveStamp = false
 }: {
   initialCategories: CategoryEntry[];
   /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
@@ -63,6 +65,9 @@ export function CategoryGrid({
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  MobilePagedSection. */
   date: Date;
+  /** Simplement relayés au Masthead du carrousel mobile — voir Masthead. */
+  mastheadAction?: ReactNode;
+  hideLiveStamp?: boolean;
 }) {
   const [categories, setCategories] = useState(initialCategories);
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null);
@@ -105,6 +110,8 @@ export function CategoryGrid({
       <MobilePagedSection
         date={date}
         className="md:hidden"
+        mastheadAction={mastheadAction}
+        hideLiveStamp={hideLiveStamp}
         pages={categories.map((cat, i) => ({
           key: cat.label,
           content: (

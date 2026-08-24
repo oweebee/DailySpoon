@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Masthead } from "@/components/Masthead";
 import { DirectView } from "@/components/DirectView";
+import { TelegraphButton } from "@/components/TelegraphButton";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -78,11 +79,19 @@ export default async function DirectPage() {
       {/* Masqué en mobile : chaque page du carrousel de colonnes (voir
           MobilePagedSection, via EditionView/CategoryGrid) y affiche sa
           propre copie du menu, donc ce Masthead unique ne reste utile qu'en
-          desktop/tablette. */}
+          desktop/tablette.
+          "hideLiveStamp" : inutile de proposer un raccourci "En direct"
+          depuis la page En direct elle-même — la place sert au timbre
+          d'action, calé à droite sur la ligne du titre. */}
       <div className="hidden md:block">
-        <Masthead date={editionDate} />
+        <Masthead date={editionDate} action={<TelegraphButton />} hideLiveStamp />
       </div>
-      <DirectView initialArticles={articles} categoryOrder={categoryOrder} date={editionDate} />
+      <DirectView
+        initialArticles={articles}
+        categoryOrder={categoryOrder}
+        date={editionDate}
+        mastheadAction={<TelegraphButton />}
+      />
     </main>
   );
 }

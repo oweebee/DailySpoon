@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { CategoryGrid } from "./CategoryGrid";
 import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
 import { ArticleLink } from "./ArticleLink";
@@ -90,9 +91,15 @@ export function EditionView({
   articles,
   categoryOrder = [],
   clampSummary = false,
-  date
+  date,
+  mastheadAction,
+  hideLiveStamp = false
 }: {
   articles: ArticleLike[];
+  /** Simplement relayés jusqu'au Masthead du carrousel mobile — voir
+   *  CategoryGrid/MobilePagedSection/Masthead. */
+  mastheadAction?: ReactNode;
+  hideLiveStamp?: boolean;
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  CategoryGrid/MobilePagedSection. */
   date: Date;
@@ -257,7 +264,13 @@ export function EditionView({
           grand vide sous les colonnes plus courtes. Les filets/paddings
           entre colonnes sont posés sur chaque pile (colIndex), pas sur
           CategoryColumn. */}
-      <CategoryGrid initialCategories={columns} clampSummary={clampSummary} date={date} />
+      <CategoryGrid
+        initialCategories={columns}
+        clampSummary={clampSummary}
+        date={date}
+        mastheadAction={mastheadAction}
+        hideLiveStamp={hideLiveStamp}
+      />
 
       {/* Cul-de-lampe de fin d'édition — desktop seulement (mobile l'a déjà
           au-dessus des colonnes, voir plus haut). */}

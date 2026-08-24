@@ -69,13 +69,20 @@ export default async function HomePage() {
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
       {/* Masqué en mobile : chaque page du carrousel de FrontPageView y
           affiche sa propre copie du menu (voir MobilePagedSection), donc ce
-          Masthead unique ne reste utile qu'en desktop/tablette. */}
+          Masthead unique ne reste utile qu'en desktop/tablette.
+          Le timbre d'impression est passé en "action" : il s'affiche calé à
+          droite sur la ligne du titre, au lieu de l'ancien gros bloc centré
+          au-dessus du bandeau. Planning désactivé dans /admin/settings : pas
+          de génération auto, donc on propose ce déclenchement manuel — sinon
+          aucun timbre d'action, le worker s'en charge tout seul. */}
       <div className="hidden sm:block">
-        <Masthead date={editionDate} />
+        <Masthead
+          date={editionDate}
+          action={
+            settings.editionScheduleEnabled ? undefined : <PrintStampButton provider={settings.aiProvider} />
+          }
+        />
       </div>
-      {/* Planning désactivé dans /admin/settings : pas de génération auto,
-          donc on donne un bouton pour lancer l'impression à la main. */}
-      {!settings.editionScheduleEnabled && <PrintStampButton provider={settings.aiProvider} />}
       {/* Compte d'articles affiché en permanence (pas seulement dans le
           message transitoire du bouton d'impression, qui peut ne jamais
           s'afficher si la requête traîne au-delà du timeout du proxy) — avec
@@ -83,7 +90,10 @@ export default async function HomePage() {
           parenthèses quand il diffère du compte final retenu sur la une.
           Voir aussi /archive/[id] pour l'équivalent sur une édition passée. */}
       {latestEdition && articles.length > 0 && (
-        <p className="mb-3 -mt-3 text-center text-xs uppercase tracking-[0.3em] text-sepia sm:mb-6 sm:-mt-6">
+        {/* Pas de marge négative en mobile : le Masthead au-dessus y est
+            masqué (il vit dans le carrousel), donc il n'y a rien à remonter
+            — ça ne ferait que coller cette ligne au bord du panneau. */}
+        <p className="mb-3 text-center text-xs uppercase tracking-[0.3em] text-sepia sm:mb-6 sm:-mt-6">
           {articles.length} article{articles.length > 1 ? "s" : ""}
           {latestEdition.sourcePoolCount != null && latestEdition.sourcePoolCount !== articles.length && (
             <> (sur {latestEdition.sourcePoolCount} récupéré{latestEdition.sourcePoolCount > 1 ? "s" : ""})</>
@@ -91,7 +101,14 @@ export default async function HomePage() {
         </p>
       )}
       {articles.length > 0 ? (
-        <FrontPageView articles={articles} categoryOrder={categoryOrder} date={editionDate} />
+        <FrontPageView
+          articles={articles}
+          categoryOrder={categoryOrder}
+          date={editionDate}
+          mastheadAction={
+            settings.editionScheduleEnabled ? undefined : <PrintStampButton provider={settings.aiProvider} />
+          }
+        />
       ) : (
         <p className="py-24 text-center italic text-sepia">
           Aucune édition générée pour l’instant. Sélectionne des catégories FreshRSS dans l’admin
