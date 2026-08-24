@@ -434,14 +434,24 @@ model Settings {
   telegramBotToken    String?
   telegramChatId      String?
 
-  // Adresse e-mail transmise au service de traduction MyMemory (paramètre
-  // "de=", voir src/lib/translate.ts) — OPTIONNEL et vide par défaut. Sans
-  // elle, le quota gratuit est de 5 000 caractères/jour ; avec, il passe à
-  // 50 000. Rien d'autre n'est envoyé, et l'adresse n'est utilisée QUE pour
-  // ça. Champ de réglage (et non une constante dans le code) précisément
-  // pour que ce soit un choix explicite : aucune adresse n'est transmise à
-  // un service tiers tant que ce champ reste vide.
-  translateEmail      String?
+  // URL de l'instance LibreTranslate auto-hébergée (conteneur déployé
+  // SÉPARÉMENT de DailySpoon — voir libretranslate/docker-compose.yml à la
+  // racine du projet). SEUL moteur de traduction des vignettes "En direct"
+  // (voir TranslateFeed et src/lib/translate.ts) : aucun quota, aucune limite
+  // de longueur, aucune donnée qui sort du serveur. Vide = aucune traduction,
+  // les articles restent dans leur langue d'origine.
+  // Ex. "http://libretranslate:5000" (réseau interne) ou une URL https si le
+  // service a reçu un domaine.
+  libretranslateUrl   String?
+
+  // Clé d'accès à cette instance LibreTranslate, si elle est protégée
+  // (LT_REQUIRE_API_KEY + LT_API_KEYS côté conteneur). INDISPENSABLE dès que
+  // l'instance porte un domaine public : sans protection, n'importe qui sur
+  // Internet peut consommer le processeur et la mémoire du serveur — ces
+  // instances ouvertes sont activement recherchées. Vide = aucune clé
+  // envoyée (instance ouverte, ou jointe uniquement par le réseau Docker
+  // interne, auquel cas elle n'est de toute façon pas exposée).
+  libretranslateApiKey String?
   // Intégration Wallabag (read-it-later auto-hébergé) : mettre un article en
   // favori (étoile shérif) envoie son lien source à Wallabag pour qu'il
   // l'archive. L'API Wallabag n'a pas de simple clé — elle exige un flux

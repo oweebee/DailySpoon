@@ -7,3 +7,8 @@ out
 .DS_Store
 *.tmp
 /public/Temp/
+
+# Journal de session tenu par l'IA entre sessions/outils — volontairement
+# hors dépôt (contient parfois des secrets générés en cours de travail, ex.
+# clés API fraîchement créées avant d'être rangées dans /admin/settings).
+AI-LOG.md

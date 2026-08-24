@@ -1,0 +1,12 @@
+-- Retrait de "translateEmail", devenu inutile.
+--
+-- Cette colonne servait à relever le quota gratuit du service de traduction
+-- MyMemory (5 000 → 50 000 caractères par jour). La traduction passe désormais
+-- par une instance LibreTranslate auto-hébergée (voir
+-- Settings.libretranslateUrl), sans aucun quota : plus rien à relever, et donc
+-- plus aucune raison de conserver une adresse e-mail en base.
+--
+-- Contrairement à la migration 20260824030000 (annulée avant tout
+-- déploiement), celle-ci a bien été appliquée en production : il faut donc
+-- une vraie instruction de suppression, pas un simple retrait du schéma.
+ALTER TABLE "Settings" DROP COLUMN IF EXISTS "translateEmail";

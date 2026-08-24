@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
-import { MORSS_BASE_URL } from "@/lib/settings";
+import { MORSS_BASE_URL, getSettings } from "@/lib/settings";
 import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
 import { isAlreadyMorssUrl, splitIntoReadableParagraphs, BROWSER_USER_AGENT } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 import { hoistNestedArticleIfClearlyBetter, deepTrimJunk } from "@/lib/articleClean";
-import { translateViaGoogle } from "@/lib/translate";
+import { translateBestEffort, type TranslateOptions } from "@/lib/translate";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -224,8 +224,9 @@ function renderPage(opts: {
   // Traduction à la demande seulement (pas par défaut) : un lien dans le
   // bandeau du haut bascule vers /api/article-proxy?...&translate=1 (ou
   // l'enlève pour revenir à la langue d'origine), qui refait un rendu
-  // serveur complet avec le contenu traduit via l'endpoint public Google
-  // Translate (best-effort, non officiel — cf. translateViaGoogle plus bas).
+  // serveur complet avec le contenu traduit via l'instance LibreTranslate
+  // auto-hébergée (best-effort — cf. translateArticle plus bas : si elle est
+  // injoignable, le texte d'origine est réaffiché tel quel).
   const translateHref = `/api/article-proxy?url=${encodeURIComponent(originalUrl)}${translated ? "" : "&translate=1"}`;
   const translateLabel = translated ? "Texte original ↺" : "Traduire en français ⇄";
   return `<!DOCTYPE html>
@@ -590,18 +591,19 @@ function htmlResponse(html: string): NextResponse {
 }
 
 // Traduction à la demande uniquement (lien "Traduire en français" dans la
-// page, jamais automatique) — translateViaGoogle vit désormais dans
-// src/lib/translate.ts, partagée avec le backfill automatique "En direct"
+// page, jamais automatique) — le moteur vit dans src/lib/translate.ts,
+// partagé avec le backfill automatique des vignettes "En direct"
 // (syncTranslateFlags, voir generateEdition.ts).
 
-// Limite le nombre de blocs traduits par article : le service est gratuit et
-// plafonné à la journée (voir src/lib/translate.ts), et chaque bloc coûte au
-// moins une requête réseau séquentielle — on évite qu'un article démesurément
-// long ne prenne des dizaines de secondes à s'ouvrir, ni n'épuise à lui seul
-// le quota quotidien partagé avec la traduction des vignettes "En direct".
+// Limite le nombre de blocs traduits par article. Plus une question de quota
+// (l'instance LibreTranslate est auto-hébergée et illimitée — voir
+// src/lib/translate.ts) mais de TEMPS : chaque bloc est une requête
+// séquentielle vers un moteur qui tourne sur le processeur du serveur, sans
+// carte graphique. Sans plafond, un article très long resterait des minutes à
+// s'ouvrir.
 const MAX_BLOCKS_TO_TRANSLATE = 60;
 
-async function translateContentHtml(html: string): Promise<string> {
+async function translateContentHtml(html: string, opts: TranslateOptions): Promise<string> {
   const dom = new JSDOM(`<div id="root">${html}</div>`);
   const root = dom.window.document.getElementById("root");
   if (!root) return html;
@@ -613,10 +615,9 @@ async function translateContentHtml(html: string): Promise<string> {
     // On traduit le TEXTE (textContent), pas le balisage interne
     // (innerHTML) — et uniquement pour les blocs qui n'ont aucun élément
     // enfant. Deux raisons :
-    //   1. le moteur de traduction découpe désormais les textes longs en
-    //      morceaux (limite de 500 octets par requête, voir
-    //      chunkForTranslation) : sur du HTML, une coupure peut tomber au
-    //      milieu d'une balise et produire un balisage corrompu ;
+    //   1. envoyer du HTML à traduire revient à laisser le moteur réécrire
+    //      des balises : il en supprime, en déplace, et le balisage revient
+    //      abîmé ;
     //   2. un bloc contenant une image ou un lien verrait ces éléments
     //      purement et simplement supprimés en réécrivant son texte.
     // Les blocs à balisage interne gardent donc leur langue d'origine plutôt
@@ -624,15 +625,20 @@ async function translateContentHtml(html: string): Promise<string> {
     if (el.children.length > 0) continue;
     const original = (el.textContent || "").trim();
     if (!original) continue;
-    el.textContent = await translateViaGoogle(original);
+    el.textContent = await translateBestEffort(original, opts);
   }
   return root.innerHTML;
 }
 
 async function translateArticle(title: string, bodyHtml: string): Promise<{ title: string; bodyHtml: string }> {
+  // Adresse et clé de l'instance viennent des réglages (modifiables sans
+  // redéploiement) — lues une seule fois par article traduit, puis passées à
+  // chaque appel plutôt que relues à chaque bloc.
+  const { libretranslateUrl, libretranslateApiKey } = await getSettings();
+  const opts = { libretranslateUrl, libretranslateApiKey };
   const [translatedTitle, translatedBody] = await Promise.all([
-    translateViaGoogle(title),
-    translateContentHtml(bodyHtml)
+    translateBestEffort(title, opts),
+    translateContentHtml(bodyHtml, opts)
   ]);
   return { title: translatedTitle, bodyHtml: translatedBody };
 }

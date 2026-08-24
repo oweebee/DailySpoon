@@ -1,0 +1,69 @@
+# LibreTranslate — moteur de traduction auto-hébergé, déployé comme une
+# ressource Coolify SÉPARÉE de DailySpoon (et non dans son docker-compose).
+# DailySpoon s'y connecte via une simple URL, réglable dans
+# /admin/settings → Traduction : rien ne les couple, l'un peut redémarrer ou
+# être supprimé sans toucher à l'autre.
+#
+# Une fois en route, il devient le moteur PRINCIPAL : aucun quota, aucune
+# limite de longueur, aucun blocage d'IP possible, aucune donnée qui sort de
+# ton serveur. DeepL et MyMemory restent branchés en repli automatique (voir
+# src/lib/translate.ts) — s'il est éteint, en cours de démarrage ou en panne,
+# la traduction continue simplement par les autres moteurs.
+services:
+  libretranslate:
+    image: 'libretranslate/libretranslate:latest'
+    restart: unless-stopped
+    # "expose" et non "ports" : le service reste sur le réseau Docker, sans
+    # être ouvert sur Internet. Voir la note "ACCÈS DEPUIS DAILYSPOON" en bas
+    # de fichier pour relier les deux.
+    expose:
+      - '5000'
+    environment:
+      # LE réglage qui décide de tout côté mémoire : sans lui, LibreTranslate
+      # charge 30+ langues et réclame 8 Go de RAM. Limité à l'anglais et au
+      # français, on retombe autour de 200 Mo par langue, socle Python
+      # compris. Ajoute d'autres codes séparés par des virgules si tu ajoutes
+      # un jour des flux dans une autre langue (ex. 'en,fr,de,es').
+      LT_LOAD_ONLY: 'en,fr'
+      # Interface web inutile ici : DailySpoon n'appelle que l'API.
+      LT_DISABLE_WEB_UI: 'true'
+      # Pas de vérification de mise à jour des modèles à chaque démarrage —
+      # ils ne bougent quasiment jamais, et ça évite un délai (et un
+      # téléchargement) au boot.
+      LT_UPDATE_MODELS: 'false'
+    volumes:
+      # Les modèles sont téléchargés au PREMIER démarrage (quelques centaines
+      # de Mo, plusieurs minutes). Sans ce volume, c'est retéléchargé à chaque
+      # redéploiement — et le service reste indisponible le temps que ça se
+      # fasse.
+      - 'libretranslate_models:/home/libretranslate/.local/share/argos-translate'
+    healthcheck:
+      # Interroge l'API elle-même : le conteneur peut être "démarré" alors que
+      # les modèles ne sont pas encore chargés. start_period long pour couvrir
+      # le tout premier boot (téléchargement des modèles).
+      test:
+        - CMD-SHELL
+        - "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/languages')\" || exit 1"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+
+volumes:
+  libretranslate_models: null
+# ACCÈS DEPUIS DAILYSPOON — deux façons, au choix :
+#
+# 1. RÉSEAU INTERNE (recommandé, rien d'exposé sur Internet). Dans Coolify,
+#    rattache cette ressource ET DailySpoon au même réseau prédéfini
+#    ("Connect to Predefined Network"), puis renseigne dans
+#    /admin/settings → Traduction :
+#        http://libretranslate:5000
+#
+# 2. DOMAINE PUBLIC. Si tu préfères laisser Coolify attribuer un domaine à ce
+#    service, renseigne cette URL (https://...) à la place. ATTENTION : une
+#    API de traduction ouverte sur Internet finit toujours par se faire
+#    utiliser par d'autres. Dans ce cas, protège-la en ajoutant ici
+#        LT_REQUIRE_API_KEY: 'true'
+#        LT_API_KEYS: 'une-longue-chaine-aleatoire'
+#    et dis-le moi : il faudra alors passer cette clé dans les requêtes côté
+#    DailySpoon (un champ de plus dans les réglages).

@@ -61,14 +61,34 @@ const RECENT_ARTICLES_PER_FEED_TO_TRANSLATE = 20;
 // recalculé, le retard se rattrape tout seul au fil des passages.
 const MAX_TRANSLATE_BACKFILL_PER_RUN = 20;
 
-// Traitement des articles UN PAR UN. Toute tentative de parallélisme est
-// désormais inutile ici : la cadence réelle est imposée en amont par la file
-// d'attente partagée de src/lib/translate.ts (voir MYMEMORY_MIN_INTERVAL_MS),
-// qui sérialise de toute façon les requêtes vers le service gratuit. Lancer
-// plusieurs articles de front ne ferait qu'empiler des attentes, sans rien
-// accélérer — et c'est précisément la rafale qui déclenchait des 429 en
-// cascade.
+// Traitement des articles UN PAR UN. L'instance LibreTranslate est
+// auto-hébergée : elle traduit sur le processeur du serveur, celui-là même
+// qui fait tourner l'application et la base. Lancer plusieurs traductions de
+// front ne les accélérerait pas (le travail est limité par le processeur, pas
+// par l'attente réseau) et ralentirait tout le reste du site pendant ce
+// temps.
 const TRANSLATE_CONCURRENCY = 1;
+
+// Longueur maximale d'extrait envoyée à la traduction. Plus une question de
+// quota (l'instance est illimitée) mais de TEMPS PROCESSEUR : un extrait de
+// flux peut faire 1 500 caractères, soit plusieurs secondes de traduction
+// locale, alors que la vignette "En direct" plafonne de toute façon
+// l'affichage à 10 lignes (line-clamp). Traduire l'extrait ENTIER, c'est donc
+// faire chauffer le serveur pour du texte que personne ne voit. On coupe à
+// une fin de phrase avant cette limite — la coupe est invisible, le texte
+// affiché était déjà tronqué visuellement.
+const MAX_EXCERPT_CHARS_TO_TRANSLATE = 400;
+
+/** Tronque à la dernière fin de phrase avant `max`, sinon au dernier mot. */
+function shortenForTranslation(text: string, max = MAX_EXCERPT_CHARS_TO_TRANSLATE): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  const window = trimmed.slice(0, max);
+  const sentenceEnd = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+  if (sentenceEnd > max * 0.5) return window.slice(0, sentenceEnd + 1).trim();
+  const wordEnd = window.lastIndexOf(" ");
+  return (wordEnd > 0 ? window.slice(0, wordEnd) : window).trim();
+}
 
 // Coût IA : au plus ce nombre d'articles inclus PAR CATÉGORIE FreshRSS (celles
 // choisies dans /admin/categories) passent par l'IA à chaque génération.
@@ -448,7 +468,7 @@ export async function generateDailyEdition(options: { forceNoAi?: boolean } = {}
   await ingestRawItems(rawItems, edition.id);
 
   await syncMedalFlags();
-  await syncTranslateFlags(genSettings.translateEmail);
+  await syncTranslateFlags(genSettings.libretranslateUrl, genSettings.libretranslateApiKey);
 
   // Sélection IA : TOUT le vivier "included" du jour PAS ENCORE réécrit par
   // l'IA (aiRewritten: false) — pas seulement les items tout juste récupérés
@@ -811,7 +831,7 @@ async function syncMedalFlags(): Promise<void> {
  * mêmes : purement un cache d'affichage à côté, lu par directTitle/directText
  * (EditionView.tsx) — l'article ouvert reste toujours en langue d'origine.
  */
-async function syncTranslateFlags(translateEmail?: string): Promise<void> {
+async function syncTranslateFlags(libretranslateUrl?: string, libretranslateApiKey?: string): Promise<void> {
   const translateFeeds = await prisma.translateFeed.findMany({ select: { freshrssId: true, label: true } });
   const translateFeedIds = translateFeeds.map((f) => f.freshrssId);
   const translateTitles = translateFeeds.map((f) => f.label);
@@ -888,11 +908,17 @@ async function syncTranslateFlags(translateEmail?: string): Promise<void> {
     const chunk = toTranslate.slice(i, i + TRANSLATE_CONCURRENCY);
     await Promise.all(
       chunk.map(async (a) => {
-        const opts = { email: translateEmail || undefined };
-        const [titleResult, excerpt] = await Promise.all([
-          translateDetailed(a.sourceTitle, opts),
-          a.sourceExcerpt ? translateOrNull(a.sourceExcerpt, opts) : Promise.resolve(null)
-        ]);
+        const opts = {
+          libretranslateUrl: libretranslateUrl || undefined,
+          libretranslateApiKey: libretranslateApiKey || undefined
+        };
+        // Titre D'ABORD, extrait ENSUITE (et non les deux de front) : si le
+        // quota tombe en cours de route, on veut que ce soit l'extrait qui
+        // saute, jamais le titre — un article au titre traduit et à l'extrait
+        // d'origine reste lisible, l'inverse n'a aucun sens. Et si le titre
+        // échoue, on n'entame même pas l'extrait : rien ne sera enregistré de
+        // toute façon (voir juste en dessous), autant ne pas gaspiller.
+        const titleResult = await translateDetailed(a.sourceTitle, opts);
 
         // Échec de la traduction du TITRE : on n'écrit rien du tout et on
         // laisse translatedTitle à null, pour que l'article soit simplement
@@ -906,8 +932,16 @@ async function syncTranslateFlags(translateEmail?: string): Promise<void> {
           return;
         }
 
-        // excerpt peut légitimement rester null (article sans extrait dans le
-        // flux) — seul le titre conditionne la mise en cache.
+        // Extrait : tronqué avant envoi (voir shortenForTranslation) pour ne
+        // pas payer en quota du texte que la vignette masque de toute façon.
+        // Peut légitimement rester null — article sans extrait dans le flux,
+        // ou quota tombé entre-temps : seul le titre conditionne la mise en
+        // cache, l'extrait retombe alors proprement sur sa version d'origine
+        // à l'affichage (voir directText dans EditionView).
+        const excerpt = a.sourceExcerpt
+          ? await translateOrNull(shortenForTranslation(a.sourceExcerpt), opts)
+          : null;
+
         await prisma.article
           .update({
             where: { id: a.id },

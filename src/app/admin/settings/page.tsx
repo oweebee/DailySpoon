@@ -22,7 +22,8 @@ type SettingsForm = {
   customFeedsIntervalMinutes: string;
   telegramBotToken: string;
   telegramChatId: string;
-  translateEmail: string;
+  libretranslateUrl: string;
+  libretranslateApiKey: string;
   wallabagBaseUrl: string;
   wallabagClientId: string;
   wallabagClientSecret: string;
@@ -52,7 +53,8 @@ const EMPTY: SettingsForm = {
   customFeedsIntervalMinutes: "60",
   telegramBotToken: "",
   telegramChatId: "",
-  translateEmail: "",
+  libretranslateUrl: "",
+  libretranslateApiKey: "",
   wallabagBaseUrl: "",
   wallabagClientId: "",
   wallabagClientSecret: "",
@@ -184,7 +186,8 @@ export default function AdminSettingsPage() {
               : "60",
           telegramBotToken: s.telegramBotToken || "",
           telegramChatId: s.telegramChatId || "",
-          translateEmail: s.translateEmail || "",
+          libretranslateUrl: s.libretranslateUrl || "",
+          libretranslateApiKey: s.libretranslateApiKey || "",
           wallabagBaseUrl: s.wallabagBaseUrl || "",
           wallabagClientId: s.wallabagClientId || "",
           wallabagClientSecret: s.wallabagClientSecret || "",
@@ -292,7 +295,8 @@ export default function AdminSettingsPage() {
         form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes),
       telegramBotToken: form.telegramBotToken,
       telegramChatId: form.telegramChatId,
-      translateEmail: form.translateEmail,
+      libretranslateUrl: form.libretranslateUrl,
+      libretranslateApiKey: form.libretranslateApiKey,
       wallabagBaseUrl: form.wallabagBaseUrl,
       wallabagClientId: form.wallabagClientId,
       wallabagClientSecret: form.wallabagClientSecret,
@@ -664,18 +668,45 @@ export default function AdminSettingsPage() {
             <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Traduction</legend>
             <p className="text-xs italic text-sepia">
               Les flux cochés « traduction » dans /admin/categories s’affichent en français dans
-              « En direct » (titre et extrait). Le service utilisé, MyMemory, est gratuit et sans
-              inscription, mais limité à 5 000 caractères par jour — environ 9 articles. Renseigner
-              une adresse e-mail ci-dessous fait passer cette limite à 50 000 caractères par jour.
-              L’adresse ne sert QU’À ça et n’est envoyée nulle part ailleurs ; laissée vide, aucune
-              adresse n’est transmise.
+              « En direct » (titre et extrait). La traduction est assurée par une instance
+              LibreTranslate que tu héberges toi-même : aucun quota, aucune limite de longueur, et
+              aucune donnée qui sort de ton serveur.
             </p>
             <Field
-              label="E-mail (facultatif, augmente le quota)"
-              value={form.translateEmail}
-              onChange={(v) => set("translateEmail", v)}
-              placeholder="prenom.nom@exemple.fr"
+              label="URL de l’instance LibreTranslate"
+              value={form.libretranslateUrl}
+              onChange={(v) => set("libretranslateUrl", v)}
+              placeholder="http://libretranslate:5000"
             />
+            <Field
+              label="Clé d’accès (si l’instance est protégée)"
+              value={form.libretranslateApiKey}
+              onChange={(v) => set("libretranslateApiKey", v)}
+              type="password"
+              placeholder="laisser vide si l’instance est privée"
+            />
+            <p className="text-xs italic text-sepia">
+              <strong>Si ton instance porte un domaine public</strong>, protège-la : ajoute
+              <code> LT_REQUIRE_API_KEY=true</code> et <code>LT_API_KEYS=&lt;chaîne aléatoire&gt;</code>
+              au conteneur, puis recopie cette chaîne ci-dessus. Sans ça, n’importe qui peut
+              utiliser ton serveur pour traduire — ces instances ouvertes sont activement
+              recherchées. Inutile en revanche si tu la joins par le réseau Docker interne : elle
+              n’est alors pas exposée.
+            </p>
+            <p className="text-xs italic text-sepia">
+              Conteneur à déployer comme une ressource <strong>séparée</strong> de DailySpoon — le
+              fichier <code>libretranslate/docker-compose.yml</code> du projet est prêt à l’emploi.
+              Renseigne ici l’adresse interne (<code>http://libretranslate:5000</code> si les deux
+              ressources partagent le même réseau Docker) ou l’URL https si le service a reçu un
+              domaine.
+            </p>
+            <p className="text-xs italic text-sepia">
+              Laissé vide, ou instance injoignable : aucune traduction n’est faite et les articles
+              restent simplement dans leur langue d’origine — rien ne casse. Au tout premier
+              démarrage, le conteneur télécharge ses modèles pendant plusieurs minutes et refuse
+              les connexions ; les articles non traduits sont repris automatiquement aux passages
+              suivants. Le détail de chaque échec est consultable dans /admin/logs.
+            </p>
           </fieldset>
 
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">

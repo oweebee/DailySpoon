@@ -1,0 +1,13 @@
+-- MIGRATION ANNULÉE — VOLONTAIREMENT VIDE.
+--
+-- Elle devait ajouter une colonne "deeplApiKey" (moteur de traduction DeepL),
+-- abandonné avant tout déploiement au profit d'une instance LibreTranslate
+-- auto-hébergée (voir Settings.libretranslateUrl et src/lib/translate.ts).
+-- Elle n'a donc JAMAIS été appliquée nulle part, et la colonne n'existe dans
+-- aucune base.
+--
+-- Ce fichier est laissé vide plutôt que supprimé : le dossier de travail est
+-- un montage Windows qui refuse la suppression de fichiers depuis
+-- l'environnement de développement. Une migration ne contenant que des
+-- commentaires s'applique sans rien faire — aucun risque. Le dossier peut
+-- être supprimé à la main sous Windows si tu veux faire le ménage.

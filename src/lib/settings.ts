@@ -58,12 +58,19 @@ export type AppSettings = {
    *  notification, voir NotifyFeed et src/lib/telegramNotify.ts). */
   telegramBotToken: string;
   telegramChatId: string;
-  /** Adresse e-mail OPTIONNELLE transmise au service de traduction MyMemory
-   *  (paramètre "de=", voir src/lib/translate.ts), utilisé pour afficher en
-   *  français les flux cochés "traduction" dans /admin/categories. Vide = le
-   *  quota gratuit reste à 5 000 caractères/jour ; renseignée, il passe à
-   *  50 000. Aucune adresse n'est transmise tant que ce champ est vide. */
-  translateEmail: string;
+  /** URL de l'instance LibreTranslate auto-hébergée (conteneur déployé
+   *  séparément, voir libretranslate/docker-compose.yml) — SEUL moteur de
+   *  traduction des vignettes "En direct" (flux cochés "traduction" dans
+   *  /admin/categories). Aucun quota, aucune limite de longueur, aucune
+   *  donnée qui sort du serveur. Vide = aucune traduction, les articles
+   *  restent dans leur langue d'origine. */
+  libretranslateUrl: string;
+  /** Clé d'accès à l'instance LibreTranslate, si elle est protégée
+   *  (LT_REQUIRE_API_KEY côté conteneur). À renseigner impérativement quand
+   *  l'instance est jointe par un domaine public : sans clé, elle est
+   *  utilisable par n'importe qui, aux frais de ton serveur. Vide = aucune
+   *  clé envoyée. */
+  libretranslateApiKey: string;
   /** Intégration Wallabag : mettre un article en favori envoie son lien à
    *  Wallabag pour archivage (voir src/lib/wallabagSend.ts). Wallabag n'a pas
    *  de simple clé API — il exige un flux OAuth2 "password grant", d'où ces 5
@@ -123,7 +130,10 @@ export async function getSettings(): Promise<AppSettings> {
     logRetentionMinutes: row?.logRetentionMinutes ?? 1440,
     telegramBotToken: row?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "",
     telegramChatId: row?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "",
-    translateEmail: row?.translateEmail || process.env.TRANSLATE_EMAIL || "",
+    // "/" final retiré (comme wallabagBaseUrl) pour construire proprement
+    // "<url>/translate" ensuite, sans double slash.
+    libretranslateUrl: (row?.libretranslateUrl || process.env.LIBRETRANSLATE_URL || "").replace(/\/+$/, ""),
+    libretranslateApiKey: row?.libretranslateApiKey || process.env.LIBRETRANSLATE_API_KEY || "",
     // On retire un éventuel "/" final de l'URL de l'instance (comme morssBaseUrl)
     // pour construire proprement les chemins ensuite (voir wallabagSend.ts).
     wallabagBaseUrl: (row?.wallabagBaseUrl || process.env.WALLABAG_BASE_URL || "").replace(/\/+$/, ""),
@@ -150,7 +160,8 @@ const STRING_FIELDS = [
   "writingStyle",
   "telegramBotToken",
   "telegramChatId",
-  "translateEmail",
+  "libretranslateUrl",
+  "libretranslateApiKey",
   "wallabagBaseUrl",
   "wallabagClientId",
   "wallabagClientSecret",
@@ -180,7 +191,8 @@ export type SettingsInput = Partial<{
   logRetentionMinutes: number | null;
   telegramBotToken: string | null;
   telegramChatId: string | null;
-  translateEmail: string | null;
+  libretranslateUrl: string | null;
+  libretranslateApiKey: string | null;
   wallabagBaseUrl: string | null;
   wallabagClientId: string | null;
   wallabagClientSecret: string | null;
