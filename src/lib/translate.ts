@@ -28,8 +28,15 @@
 // Plus large qu'un appel réseau classique : la traduction tourne sur le
 // processeur du serveur, sans accélérateur graphique, et le conteneur peut
 // encore être en train de charger ses modèles (plusieurs minutes au tout
-// premier démarrage).
-const TIMEOUT_MS = 20000;
+// premier démarrage). Relevé de 20s à 45s le 2026-08-24 : avec un seul
+// worker (LT_THREADS=1, voir libretranslate/docker-compose.yml) et pas de
+// carte graphique, une traduction sous charge dépassait régulièrement les
+// 20s et faisait échouer toute la fournée du passage (constaté en usage réel
+// dans /admin/logs — des rafales de "libretranslate timeout" en alternance
+// avec des passages qui réussissaient). Les articles concernés n'étaient pas
+// perdus (retentés au passage suivant), mais ça ralentissait le rattrapage
+// pour rien.
+const TIMEOUT_MS = 45000;
 
 export type TranslateResult = { ok: true; text: string } | { ok: false; reason: string };
 
