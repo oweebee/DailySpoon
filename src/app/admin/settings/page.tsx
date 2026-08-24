@@ -1179,25 +1179,29 @@ export default function AdminSettingsPage() {
           </fieldset>
 
           <div className="flex flex-wrap items-center gap-x-8 gap-y-4 pt-2">
-            {/* Hauteur explicite (h-14) partagée par les deux boutons : sans
-                ça, chaque timbre se dimensionne sur la largeur de SON propre
-                texte (voir stamp-bg-* dans globals.css, aspect-ratio pilotée
-                par la largeur) — "Tester les réglages", plus long, donnait
-                donc un timbre plus haut que "Enregistrer". En fixant la
-                hauteur et en passant ce bouton sur le timbre "lg" (plus
-                large/plat), c'est la LARGEUR qui absorbe le texte plus long,
-                pas la hauteur — les deux gardent leur ratio propre. */}
+            {/* Les deux boutons partagent MÊME image de timbre, MÊME hauteur
+                et MÊME largeur — donc une silhouette rigoureusement
+                identique, quelle que soit la longueur de leur texte. Avant,
+                l'un utilisait le timbre "md" (presque carré) et l'autre le
+                "lg" (large et plat) : deux formes différentes côte à côte,
+                ce qui donnait un rendu bancal.
+                Largeur explicite calculée sur le ratio réel de l'image
+                (stamp-bg-lg = 900/205, voir globals.css) : sans elle, chaque
+                timbre se redimensionne sur la largeur de SON propre texte, et
+                le plus long ressort plus grand que l'autre. Mêmes valeurs que
+                les timbres d'action du bandeau (voir PrintStampButton), pour
+                une seule et même échelle dans toute l'application. */}
             <button
               onClick={save}
               disabled={saving}
-              className="stamp-button stamp-bg-md inline-flex h-14 items-center justify-center whitespace-nowrap px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap font-display text-[0.6rem] uppercase tracking-[0.14em] text-paper disabled:opacity-50"
             >
               {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
             <button
               onClick={test}
               disabled={testing}
-              className="stamp-button stamp-bg-lg inline-flex h-14 items-center justify-center whitespace-nowrap px-6 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap font-display text-[0.6rem] uppercase tracking-[0.14em] text-paper disabled:opacity-50"
             >
               {testing ? "Test en cours..." : "Tester les réglages"}
             </button>

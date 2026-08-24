@@ -82,8 +82,12 @@ export function Masthead({
         <div className={`flex items-center justify-between gap-3 ${compact ? "py-2" : "py-5"}`}>
           <Link
             href="/"
+            // Titre légèrement réduit en compact : il partage la ligne avec
+            // DEUX timbres désormais plus grands, et sur un écran de
+            // téléphone étroit c'est lui qui, sinon, se replie sur deux
+            // lignes (les timbres, eux, sont en shrink-0).
             className={`font-masthead font-black uppercase leading-none tracking-tight ${
-              compact ? "text-2xl" : "text-4xl md:text-6xl"
+              compact ? "text-xl" : "text-4xl md:text-6xl"
             }`}
           >
             DailySp
@@ -101,20 +105,23 @@ export function Masthead({
             {!hideLiveStamp && (
               <Link
                 href="/direct"
-                // Pas de padding horizontal ici, et "whitespace-nowrap" sur le
-                // texte : la largeur de ce timbre est ENTIÈREMENT déduite de sa
-                // hauteur (aspect-ratio 600/406 sur .stamp-bg-sm), elle ne
-                // s'adapte donc pas au texte. Le moindre px-* venait manger
-                // cette largeur déjà juste et faisait replier "EN DIRECT" sur
-                // deux lignes, en travers de l'inclinaison du texte — d'où
-                // l'aspect bancal. Interlignage et espacement des lettres
-                // resserrés pour la même raison : tout doit tenir sur une
-                // seule ligne, dans une boîte dont la taille ne dépend pas de
-                // ce qu'on y met.
-                className={`stamp-live stamp-bg-sm flex items-center justify-center font-display uppercase leading-none text-white ${
+                // Hauteur ET largeur fixées explicitement, dans le ratio EXACT
+                // de l'image de fond (stamp-bg-sm = 600/406). C'est ce qui
+                // permet d'aligner ce timbre sur le timbre d'action voisin :
+                // les deux partagent la même hauteur à chaque palier, alors
+                // que leurs images ont des proportions très différentes (ce
+                // dernier est bien plus large que haut). En ne fixant que la
+                // hauteur, la largeur d'un élément flex se calcule sur son
+                // CONTENU et non sur le ratio — d'où un timbre déformé ou du
+                // texte qui déborde.
+                //
+                // Pas de padding horizontal, et "whitespace-nowrap" : cette
+                // largeur ne s'adapte pas au texte, donc le moindre px-*
+                // faisait replier "EN DIRECT" sur deux lignes.
+                className={`stamp-live stamp-bg-sm flex shrink-0 items-center justify-center font-display uppercase leading-none text-white ${
                   compact
-                    ? "h-9 text-[0.45rem] tracking-[0.08em]"
-                    : "h-11 text-[0.5rem] tracking-[0.1em] md:h-14 md:text-[0.6rem] md:tracking-[0.12em]"
+                    ? "h-[2rem] w-[2.95rem] text-[0.48rem] tracking-[0.04em]"
+                    : "h-[2.75rem] w-[4.05rem] text-[0.6rem] tracking-[0.06em] md:h-[3.25rem] md:w-[4.8rem] md:text-[0.7rem] md:tracking-[0.07em]"
                 }`}
               >
                 <span className="stamp-live-text whitespace-nowrap">En direct</span>

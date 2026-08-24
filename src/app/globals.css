@@ -81,53 +81,53 @@ body {
    perforée) de l'image de fond — ça laissait voir un halo rectangulaire
    derrière le timbre, à travers ses propres perforations. drop-shadow suit
    le canal alpha réel du contenu (donc de l'image), silhouette comprise. */
-.stamp-button {
+/* TOUS les timbres cliquables ("En direct", "Lancer l'impression",
+   "Télégraphier les nouvelles") partagent exactement le même comportement —
+   c'est le but de cette règle commune. Auparavant chacun avait le sien, et
+   le résultat était incohérent à l'écran : le timbre d'action était penché
+   au repos puis se REDRESSAIT au survol, pendant que le timbre "En direct"
+   restait droit mais avec son texte incliné de 9° à l'intérieur. Deux
+   logiques opposées côte à côte sur la même ligne.
+
+   Règle retenue : DROIT au repos (posé bien à plat, texte compris), et
+   c'est le SURVOL qui décolle légèrement le timbre — l'inclinaison devient
+   une réaction, pas un état permanent.
+
+   drop-shadow et non box-shadow : cette dernière suit TOUJOURS le rectangle
+   de la boîte, pas la vraie silhouette (transparente, perforée) de l'image
+   de fond — ça laissait voir un halo rectangulaire derrière le timbre, à
+   travers ses propres perforations. drop-shadow suit le canal alpha réel du
+   contenu, silhouette comprise. */
+.stamp-button,
+.stamp-live {
   position: relative;
-  transform: rotate(-1.5deg);
+  transform: rotate(0deg);
   filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
   transition: transform 0.15s ease, filter 0.15s ease;
 }
 
-.stamp-button:hover {
-  transform: rotate(0deg) scale(1.03);
+.stamp-button:hover,
+.stamp-live:hover {
+  transform: rotate(-2deg) scale(1.03);
   filter: drop-shadow(3px 5px 10px rgba(26, 26, 26, 0.32));
 }
 
-.stamp-button:active {
+.stamp-button:active,
+.stamp-live:active {
   transform: rotate(0deg) scale(0.97);
   filter: drop-shadow(1px 2px 4px rgba(26, 26, 26, 0.28));
 }
 
-/* Timbre "EN DIRECT" du masthead — règle 100% autonome, ne réutilise PAS
-   .stamp-button : le combo des deux classes sur le même élément se
-   disputait la propriété "transform" (rotation de l'une, translateY de
-   centrage vertical Tailwind de l'autre), et la rotation ne s'affichait
-   jamais en pratique malgré "!important". Ici le centrage vertical se fait
-   SANS transform (inset-y-0 + my-auto côté Tailwind, voir Masthead.tsx), et
-   "transform" ne sert donc plus qu'à la rotation — plus aucune ambiguïté
-   possible.
-   PAS de "position" ici volontairement : les classes Tailwind @tailwind
-   utilities vivent dans un layer CSS nommé, qui perd TOUJOURS face à une
-   règle non "layered" comme celle-ci, quels que soient l'ordre ou la
-   spécificité — "position: relative" ici écrasait alors le "absolute" posé
-   en JSX (Masthead.tsx), transformant le timbre en bloc pleine largeur qui,
-   une fois pivoté, traversait tout l'écran en diagonale. La position se
-   règle donc entièrement via les classes Tailwind côté JSX (relative en
-   mobile, absolute en desktop).
-   PAS de rotation ici (contrairement à .stamp-button) : le FOND du timbre
-   "En direct" reste bien droit, sur demande explicite — seul le texte à
-   l'intérieur garde l'inclinaison (voir .stamp-live-text plus bas et
-   Masthead.tsx, qui l'enveloppe dans un <span> séparé). drop-shadow (pas
-   box-shadow) pour la même raison que .stamp-button — voir plus haut. */
-.stamp-live {
-  filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
-}
-
-/* Texte "En direct" — pivoté indépendamment du fond de timbre (voir
-   .stamp-live juste au-dessus, plus de rotation sur le conteneur). */
+/* Texte "En direct" : plus aucune rotation propre. Elle existait pour
+   compenser un fond volontairement droit ; les deux timbres étant désormais
+   droits au repos et inclinés ensemble au survol (voir la règle commune
+   ci-dessus), un texte penché dans une boîte droite n'aurait plus aucun
+   sens. Le <span> reste (Masthead.tsx) pour porter le "whitespace-nowrap".
+   Note : les deux classes peuvent maintenant cohabiter sans conflit de
+   "transform" — l'ancienne mise en garde à ce sujet ne vaut plus, le
+   centrage vertical ne passant plus par un positionnement absolu. */
 .stamp-live-text {
   display: inline-block;
-  transform: rotate(-9deg);
 }
 
 /* Fonds de timbre — 3 tailles/ratios (voir public/stamps/). Le ratio RÉEL de

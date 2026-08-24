@@ -67,7 +67,14 @@ export function PrintStampButton({ provider }: { provider?: string }) {
       <button
         onClick={print}
         disabled={printing}
-        className="stamp-button stamp-bg-lg flex w-[9.5rem] flex-col items-center justify-center px-3 font-display text-[0.5rem] uppercase leading-tight tracking-[0.15em] text-paper disabled:opacity-50 sm:w-[13rem] sm:px-5 sm:text-[0.65rem] sm:tracking-[0.2em]"
+        // Hauteurs identiques à celles du timbre "En direct" voisin (voir
+        // Masthead) à chaque palier, et largeurs déduites du ratio EXACT de
+        // l'image de fond (stamp-bg-lg = 900/205) : c'est ce qui aligne
+        // proprement les deux timbres sur la ligne du titre, malgré des
+        // proportions d'image très différentes. Les paliers suivent ceux du
+        // Masthead : version compacte sous sm (carrousel mobile), puis les
+        // deux tailles du bandeau normal.
+        className="stamp-button stamp-bg-lg flex h-[2rem] w-[8.8rem] flex-col items-center justify-center font-display text-[0.45rem] uppercase leading-none tracking-[0.1em] text-paper disabled:opacity-50 sm:h-[2.75rem] sm:w-[12.1rem] sm:text-[0.6rem] sm:tracking-[0.14em] md:h-[3.25rem] md:w-[14.25rem] md:text-[0.7rem] md:tracking-[0.16em]"
       >
         {printing ? (
           <>

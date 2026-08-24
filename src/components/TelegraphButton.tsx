@@ -45,12 +45,12 @@ export function TelegraphButton({ className = "" }: { className?: string }) {
       <button
         onClick={pull}
         disabled={pulling}
-        // Largeur fixe (et non un simple padding) : le fond de timbre
-        // (stamp-bg-lg) tire sa HAUTEUR de la largeur du bouton via
-        // aspect-ratio (voir globals.css) — sans largeur imposée, un texte
-        // replié sur 2 lignes réduirait la largeur naturelle et écraserait
-        // donc aussi la hauteur, trop juste pour ces 2 lignes.
-        className="stamp-button stamp-bg-lg flex w-[9.5rem] flex-col items-center justify-center px-3 font-display text-[0.5rem] uppercase leading-tight tracking-[0.15em] text-paper disabled:opacity-50 sm:w-[13rem] sm:px-5 sm:text-[0.65rem] sm:tracking-[0.2em]"
+        // Exactement les mêmes dimensions que PrintStampButton (voir son
+        // commentaire) : ces deux timbres d'action occupent la même place
+        // dans le bandeau, l'un sur l'accueil, l'autre sur /direct — ils
+        // doivent donc être rigoureusement de la même taille, et de la même
+        // hauteur que le timbre "En direct" quand les deux cohabitent.
+        className="stamp-button stamp-bg-lg flex h-[2rem] w-[8.8rem] flex-col items-center justify-center font-display text-[0.45rem] uppercase leading-none tracking-[0.1em] text-paper disabled:opacity-50 sm:h-[2.75rem] sm:w-[12.1rem] sm:text-[0.6rem] sm:tracking-[0.14em] md:h-[3.25rem] md:w-[14.25rem] md:text-[0.7rem] md:tracking-[0.16em]"
       >
         {pulling ? (
           <>
