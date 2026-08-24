@@ -105,23 +105,30 @@ export function Masthead({
             {!hideLiveStamp && (
               <Link
                 href="/direct"
-                // Hauteur ET largeur fixées explicitement, dans le ratio EXACT
-                // de l'image de fond (stamp-bg-sm = 600/406). C'est ce qui
-                // permet d'aligner ce timbre sur le timbre d'action voisin :
-                // les deux partagent la même hauteur à chaque palier, alors
-                // que leurs images ont des proportions très différentes (ce
-                // dernier est bien plus large que haut). En ne fixant que la
-                // hauteur, la largeur d'un élément flex se calcule sur son
-                // CONTENU et non sur le ratio — d'où un timbre déformé ou du
-                // texte qui déborde.
+                // Timbre "md" (700/270) et non plus "sm" (600/406) : ce
+                // dernier est presque carré, donc très étroit une fois sa
+                // hauteur alignée sur celle du timbre d'action — "EN DIRECT"
+                // n'y tenait pas et débordait sur le cadre perforé de
+                // l'image. Le "md" est nettement plus large à hauteur égale,
+                // ce qui correspond bien mieux à un texte court et large.
                 //
-                // Pas de padding horizontal, et "whitespace-nowrap" : cette
-                // largeur ne s'adapte pas au texte, donc le moindre px-*
-                // faisait replier "EN DIRECT" sur deux lignes.
-                className={`stamp-live stamp-bg-sm flex shrink-0 items-center justify-center font-display uppercase leading-none text-white ${
+                // Hauteur ET largeur fixées, dans le ratio EXACT de l'image
+                // (700/270) : c'est ce qui aligne ce timbre sur son voisin
+                // (même hauteur à chaque palier) sans jamais le déformer. En
+                // ne fixant que la hauteur, la largeur d'un élément flex se
+                // calculerait sur son contenu, pas sur le ratio.
+                //
+                // px-* INDISPENSABLE : l'image de timbre a un cadre perforé
+                // décoratif sur son pourtour, le texte ne doit donc jamais
+                // occuper toute la largeur de la boîte. Les tailles de police
+                // ci-dessous laissent volontairement une grosse marge (le
+                // texte occupe environ la moitié de la place disponible) :
+                // une police se mesure mal à l'estimation, et un débordement
+                // est bien plus laid qu'un texte un peu petit.
+                className={`stamp-live stamp-bg-md flex shrink-0 items-center justify-center font-display uppercase leading-none text-white ${
                   compact
-                    ? "h-[2rem] w-[2.95rem] text-[0.48rem] tracking-[0.04em]"
-                    : "h-[2.75rem] w-[4.05rem] text-[0.6rem] tracking-[0.06em] md:h-[3.25rem] md:w-[4.8rem] md:text-[0.7rem] md:tracking-[0.07em]"
+                    ? "h-[2rem] w-[5.2rem] px-2 text-[0.42rem] tracking-[0.05em]"
+                    : "h-[2.75rem] w-[7.15rem] px-3 text-[0.5rem] tracking-[0.05em] md:h-[3.25rem] md:w-[8.45rem] md:px-4 md:text-[0.6rem] md:tracking-[0.06em]"
                 }`}
               >
                 <span className="stamp-live-text whitespace-nowrap">En direct</span>

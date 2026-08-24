@@ -30,6 +30,24 @@ const MYMEMORY_MAX_BYTES = 450;
 
 const GOOGLE_ENDPOINTS = ["https://translate.googleapis.com", "https://clients5.google.com"];
 
+// Intervalle MINIMUM entre deux requêtes vers MyMemory, tous appelants
+// confondus. Le service répond 429 ("trop de requêtes") dès qu'on l'attaque
+// en rafale : constaté en usage réel — 54 traductions lancées coup sur coup,
+// 54 échecs en 429. Ce n'est pas un quota mais une cadence, et rien ne sert
+// de réessayer plus vite. File d'attente en série (voir throttle) plutôt
+// qu'un simple délai par appel : les traductions partent de plusieurs
+// endroits en parallèle, seule une file partagée garantit la cadence.
+const MYMEMORY_MIN_INTERVAL_MS = 400;
+
+let throttleChain: Promise<void> = Promise.resolve();
+
+/** Sérialise les appels et garantit MYMEMORY_MIN_INTERVAL_MS entre chacun. */
+function throttle(): Promise<void> {
+  const ready = throttleChain;
+  throttleChain = ready.then(() => new Promise((resolve) => setTimeout(resolve, MYMEMORY_MIN_INTERVAL_MS)));
+  return ready;
+}
+
 export type TranslateResult = { ok: true; text: string } | { ok: false; reason: string };
 
 export type TranslateOptions = {
@@ -91,6 +109,8 @@ async function myMemoryChunk(text: string, targetLang: string, email?: string): 
   const params = new URLSearchParams({ q: text, langpair: `Autodetect|${targetLang}` });
   if (email) params.set("de", email);
 
+  await throttle();
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -98,6 +118,20 @@ async function myMemoryChunk(text: string, targetLang: string, email?: string): 
       signal: controller.signal,
       headers: { "User-Agent": BROWSER_USER_AGENT }
     });
+    if (res.status === 429) {
+      // 429 chez MyMemory = plafond atteint. Deux causes possibles, et le
+      // service ne les distingue pas : le quota JOURNALIER en caractères
+      // (5 000 sans adresse e-mail renseignée, 50 000 avec — voir
+      // Settings.translateEmail) ou la CADENCE (voir throttle plus haut).
+      // Message explicite : sans lui, /admin/logs affiche un code HTTP nu
+      // qui n'indique pas la seule action réellement utile.
+      return {
+        ok: false,
+        reason: email
+          ? "mymemory 429 — quota journalier (50 000 caractères) atteint, reprise demain"
+          : "mymemory 429 — quota journalier de 5 000 caractères atteint : renseigne un e-mail dans /admin/settings → Traduction pour passer à 50 000"
+      };
+    }
     if (!res.ok) return { ok: false, reason: `mymemory HTTP ${res.status}` };
 
     const data: any = await res.json().catch(() => null);
@@ -179,6 +213,13 @@ export async function translateDetailed(text: string, options: TranslateOptions 
   const primary = await viaMyMemory(text, targetLang, options.email);
   if (primary.ok) return primary;
   reasons.push(primary.reason);
+
+  // Plafond atteint : inutile d'aller taper chez Google derrière. Il est de
+  // toute façon bloqué depuis les IP d'hébergeur (429 lui aussi), et
+  // insister ajoutait DEUX requêtes vouées à l'échec pour CHAQUE texte —
+  // soit une centaine d'appels inutiles par passage, qui ne faisaient
+  // qu'aggraver la limitation de cadence.
+  if (primary.reason.includes("429")) return { ok: false, reason: primary.reason };
 
   // Repli Google — voir le commentaire de tête : bloqué depuis les IP
   // d'hébergeur au moment où ces lignes sont écrites, gardé au cas où.

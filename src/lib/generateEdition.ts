@@ -52,17 +52,23 @@ const RECENT_ARTICLES_PER_FEED_TO_TRANSLATE = 20;
 // n'enchaîne quand même pas des centaines d'appels dans une seule aspiration
 // — le reliquat est repris au passage suivant, en commençant toujours par les
 // articles les plus récents.
-const MAX_TRANSLATE_BACKFILL_PER_RUN = 120;
+//
+// Volontairement BAS (120 au premier jet). Le service de traduction gratuit
+// est plafonné à la fois en cadence et en volume quotidien : un lot trop gros
+// se faisait refuser EN ENTIER (429 sur les 54 tentatives d'un passage, vu en
+// usage réel) et ne traduisait donc rien du tout. Mieux vaut un petit lot qui
+// aboutit vraiment à chaque aspiration — le cache étant cumulatif et jamais
+// recalculé, le retard se rattrape tout seul au fil des passages.
+const MAX_TRANSLATE_BACKFILL_PER_RUN = 20;
 
-// Nombre d'articles traduits SIMULTANÉMENT (chacun = 1 ou 2 requêtes : titre
-// + extrait, donc 6 requêtes en vol au maximum ici). L'endpoint Google
-// utilisé est public et non officiel : au-delà d'une poignée de requêtes en
-// parallèle, il répond 429/403 et translateOrNull renvoie null pour tout le
-// lot. Volontairement bas — le débit reste largement suffisant vu que seuls
-// les RECENT_ARTICLES_PER_FEED_TO_TRANSLATE articles les plus récents de
-// chaque flux sont concernés, et qu'un article traduit ne l'est jamais deux
-// fois.
-const TRANSLATE_CONCURRENCY = 3;
+// Traitement des articles UN PAR UN. Toute tentative de parallélisme est
+// désormais inutile ici : la cadence réelle est imposée en amont par la file
+// d'attente partagée de src/lib/translate.ts (voir MYMEMORY_MIN_INTERVAL_MS),
+// qui sérialise de toute façon les requêtes vers le service gratuit. Lancer
+// plusieurs articles de front ne ferait qu'empiler des attentes, sans rien
+// accélérer — et c'est précisément la rafale qui déclenchait des 429 en
+// cascade.
+const TRANSLATE_CONCURRENCY = 1;
 
 // Coût IA : au plus ce nombre d'articles inclus PAR CATÉGORIE FreshRSS (celles
 // choisies dans /admin/categories) passent par l'IA à chaque génération.

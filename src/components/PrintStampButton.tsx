@@ -71,10 +71,13 @@ export function PrintStampButton({ provider }: { provider?: string }) {
         // Masthead) à chaque palier, et largeurs déduites du ratio EXACT de
         // l'image de fond (stamp-bg-lg = 900/205) : c'est ce qui aligne
         // proprement les deux timbres sur la ligne du titre, malgré des
-        // proportions d'image très différentes. Les paliers suivent ceux du
-        // Masthead : version compacte sous sm (carrousel mobile), puis les
-        // deux tailles du bandeau normal.
-        className="stamp-button stamp-bg-lg flex h-[2rem] w-[8.8rem] flex-col items-center justify-center font-display text-[0.45rem] uppercase leading-none tracking-[0.1em] text-paper disabled:opacity-50 sm:h-[2.75rem] sm:w-[12.1rem] sm:text-[0.6rem] sm:tracking-[0.14em] md:h-[3.25rem] md:w-[14.25rem] md:text-[0.7rem] md:tracking-[0.16em]"
+        // proportions d'image très différentes.
+        //
+        // px-* et tailles de police prudentes pour la même raison que le
+        // timbre "En direct" : l'image a un cadre perforé décoratif sur tout
+        // son pourtour, sur lequel le texte ne doit jamais mordre. On laisse
+        // donc une marge large plutôt que de viser au plus juste.
+        className="stamp-button stamp-bg-lg flex h-[2rem] w-[8.8rem] flex-col items-center justify-center px-3 font-display text-[0.42rem] uppercase leading-none tracking-[0.08em] text-paper disabled:opacity-50 sm:h-[2.75rem] sm:w-[12.1rem] sm:px-4 sm:text-[0.55rem] sm:tracking-[0.1em] md:h-[3.25rem] md:w-[14.25rem] md:px-5 md:text-[0.65rem] md:tracking-[0.1em]"
       >
         {printing ? (
           <>

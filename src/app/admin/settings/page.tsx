@@ -1194,14 +1194,14 @@ export default function AdminSettingsPage() {
             <button
               onClick={save}
               disabled={saving}
-              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap font-display text-[0.6rem] uppercase tracking-[0.14em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap px-4 font-display text-[0.55rem] uppercase tracking-[0.1em] text-paper disabled:opacity-50"
             >
               {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
             <button
               onClick={test}
               disabled={testing}
-              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap font-display text-[0.6rem] uppercase tracking-[0.14em] text-paper disabled:opacity-50"
+              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap px-4 font-display text-[0.55rem] uppercase tracking-[0.1em] text-paper disabled:opacity-50"
             >
               {testing ? "Test en cours..." : "Tester les réglages"}
             </button>
