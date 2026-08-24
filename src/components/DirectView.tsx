@@ -63,11 +63,19 @@ export function DirectView({
           désormais calé à droite du titre dans le bandeau du haut (voir
           TelegraphButton, passé en "action" au Masthead depuis
           app/direct/page.tsx). Ne restent donc que l'intitulé de la page et
-          le champ de recherche. */}
-      <div className="mb-4 border-b-2 border-ink pb-2 sm:mb-8 sm:pb-4">
-        <p className="pb-2 text-center text-xs uppercase tracking-[0.35em] text-journal sm:pb-4">
-          ✦ En direct ✦
-        </p>
+          le champ de recherche, désormais sur UNE SEULE ligne (avant :
+          empilés, plus un gros filet noir en dessous — beaucoup de hauteur
+          perdue avant le premier article).
+
+          Grille à 3 colonnes (et non un simple flex justify-between) : la
+          colonne vide de gauche et celle de la recherche à droite se
+          partagent l'espace restant à parts égales (1fr), ce qui laisse
+          "✦ En direct ✦" VRAIMENT centré sur la ligne — un
+          justify-between l'aurait collé à gauche, et un centrage flex l'aurait
+          décalé de la moitié de la largeur du champ de recherche. */}
+      <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:mb-6 sm:gap-3">
+        <span />
+        <p className="text-center text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
 
         <div className="flex justify-end">
           <label className="flex items-center gap-2 border-b border-ink/40 pb-1 focus-within:border-journal">
@@ -76,8 +84,11 @@ export function DirectView({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher dans l’historique…"
-              className="w-48 bg-transparent text-sm italic text-ink placeholder:text-sepia/70 focus:outline-none sm:w-64"
+              placeholder="Rechercher…"
+              // Champ volontairement étroit sous sm : sur la même ligne que
+              // l'intitulé, un champ large repousserait ce dernier hors de son
+              // centrage (voire hors écran) sur un téléphone.
+              className="w-28 bg-transparent text-sm italic text-ink placeholder:text-sepia/70 focus:outline-none sm:w-64"
             />
           </label>
         </div>

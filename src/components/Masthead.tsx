@@ -57,15 +57,13 @@ export function Masthead({
           filet. Plus aucun positionnement absolu ici depuis que les timbres
           vivent dans la ligne du titre elle-même (voir plus bas). */}
       <div>
-        {/* Bandeau supérieur */}
-        <div
-          className={`flex items-center justify-between border-b border-ink uppercase tracking-[0.25em] text-sepia ${
-            compact ? "py-0.5 text-[0.55rem]" : "py-1 text-[0.65rem]"
-          }`}
-        >
-          <span>Édition quotidienne personnelle</span>
-          <span>Prix : ≈ 10 ¢</span>
-        </div>
+        {/* Filet supérieur seul : les mentions "Édition quotidienne
+            personnelle" / "Prix : ≈ 10 ¢" qui l'accompagnaient ont été
+            retirées (purement décoratives, elles coûtaient une ligne de
+            hauteur sur chaque copie du bandeau — et le carrousel mobile en
+            affiche une par colonne). Le trait, lui, reste : c'est lui qui
+            ferme le haut de la tête de journal. */}
+        <div className="border-b border-ink" />
 
         {/* Ligne du titre : nom du journal calé à GAUCHE, timbres calés à
             DROITE (le "En direct" puis, s'il y en a un, le timbre d'action de
@@ -103,13 +101,23 @@ export function Masthead({
             {!hideLiveStamp && (
               <Link
                 href="/direct"
-                className={`stamp-live stamp-bg-sm flex items-center justify-center font-display uppercase text-white ${
+                // Pas de padding horizontal ici, et "whitespace-nowrap" sur le
+                // texte : la largeur de ce timbre est ENTIÈREMENT déduite de sa
+                // hauteur (aspect-ratio 600/406 sur .stamp-bg-sm), elle ne
+                // s'adapte donc pas au texte. Le moindre px-* venait manger
+                // cette largeur déjà juste et faisait replier "EN DIRECT" sur
+                // deux lignes, en travers de l'inclinaison du texte — d'où
+                // l'aspect bancal. Interlignage et espacement des lettres
+                // resserrés pour la même raison : tout doit tenir sur une
+                // seule ligne, dans une boîte dont la taille ne dépend pas de
+                // ce qu'on y met.
+                className={`stamp-live stamp-bg-sm flex items-center justify-center font-display uppercase leading-none text-white ${
                   compact
-                    ? "h-9 px-2 text-[0.5rem] tracking-[0.15em]"
-                    : "h-11 px-3 text-[0.6rem] tracking-[0.2em] md:h-14 md:px-4 md:text-xs md:tracking-[0.25em]"
+                    ? "h-9 text-[0.45rem] tracking-[0.08em]"
+                    : "h-11 text-[0.5rem] tracking-[0.1em] md:h-14 md:text-[0.6rem] md:tracking-[0.12em]"
                 }`}
               >
-                <span className="stamp-live-text">En direct</span>
+                <span className="stamp-live-text whitespace-nowrap">En direct</span>
               </Link>
             )}
             {action}
