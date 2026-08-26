@@ -9,6 +9,14 @@ import { Masthead } from "./Masthead";
 // scroll fluide lent façon smooth-scroll classique.
 const SNAP_DURATION_MS = 180;
 
+// Silence (sans aucun événement de défilement horizontal) au bout duquel on
+// considère le swipe terminé et le scroll-snap posé. Assez long pour couvrir
+// la fin de l'animation de snap du navigateur — sinon on conclurait trop tôt,
+// en plein geste, ce qui est exactement le bug que ce délai corrige. Assez
+// court pour rester imperceptible : le rattrapage vertical s'enchaîne juste
+// après, sans temps mort ressenti.
+const SETTLE_DELAY_MS = 140;
+
 // Ease-IN-OUT : démarre doucement, accélère, PUIS ralentit à nouveau juste
 // avant d'arriver pour se poser en douceur sur la position cible — plutôt
 // qu'un ease-in pur qui finirait à pleine vitesse et s'arrêterait net (ce qui
@@ -28,24 +36,16 @@ function animateScrollTo(target: number, cancelRef: { current: number | null }, 
 
   const html = document.documentElement;
 
-  // Sur iOS Safari — y compris en PWA "standalone" sur l'écran d'accueil,
-  // là où le bug a été signalé — un swipe rapide après un défilement
-  // vertical profond laisse une animation d'inertie ("momentum scroll")
-  // native en cours. Si on lance notre propre window.scrollTo() par-dessus
-  // sans rien faire, les deux animations se battent pour la position de
-  // défilement, et l'atterrissage ne remonte jamais vraiment tout en haut
-  // (bug documenté : https://github.com/bvaughn/react-window/issues/122).
-  // Un bref passage à "overflow: hidden" sur l'élément qui défile force
-  // WebKit à annuler immédiatement l'inertie en cours ; on le restaure
-  // aussitôt après (technique standard, voir
-  // https://css-tricks.com/snippets/css/momentum-scrolling-on-ios-overflow-elements/).
-  // Sans ce forçage, plus on avait défilé vite/loin avant de swiper, plus
-  // l'inertie encore active avait de chances de gagner ce bras de fer.
-  const previousOverflow = html.style.overflow;
-  html.style.overflow = "hidden";
-  void html.offsetHeight; // force le reflow qui coupe l'inertie en cours
-  html.style.overflow = previousOverflow;
-
+  // NE JAMAIS toucher à "overflow" de <html> ici. Une version précédente y
+  // basculait brièvement "hidden" pour couper l'inertie de défilement iOS.
+  // Effet de bord constaté en usage réel : cette fonction étant appelée au
+  // changement de colonne, et le changement de colonne étant alors détecté
+  // EN PLEIN GESTE, rendre le document non défilable ne serait-ce qu'un
+  // reflow annulait le défilement tactile en cours — y compris le swipe
+  // horizontal lui-même, qui restait bloqué entre deux colonnes. Le
+  // déclenchement se fait désormais une fois le geste terminé (voir le
+  // détecteur de colonne active plus bas), ce qui règle le problème
+  // d'inertie à la source, sans rien forcer.
   const start = window.scrollY;
   const distance = target - start;
   if (Math.abs(distance) < 1) {
@@ -148,24 +148,55 @@ export function MobilePagedSection({
     activeIndexRef.current = activeIndex;
   }, [activeIndex]);
 
-  // Détecte quelle page est actuellement affichée après un swipe.
+  // Détecte quelle page est affichée, UNE FOIS LE GESTE TERMINÉ et le
+  // scroll-snap posé — jamais pendant que le doigt bouge encore.
+  //
+  // La version précédente réagissait à chaque événement de défilement :
+  // Math.round(scrollLeft / width) bascule dès qu'on dépasse la moitié d'une
+  // page, donc en plein geste. Tout ce qui suit ce changement d'index (recalage
+  // de la hauteur du conteneur, défilement vertical de rattrapage) venait
+  // alors se jouer PENDANT le swipe, avec deux conséquences observées en
+  // usage réel :
+  //   - le swipe restait bloqué entre deux colonnes, le geste tactile étant
+  //     interrompu par ces manipulations ;
+  //   - la hauteur du conteneur rétrécissait d'un coup vers celle de la
+  //     colonne suivante, plus courte : le navigateur ramenait alors
+  //     "scrollY" dans les nouvelles limites, et on se retrouvait au-delà de
+  //     la fin de cette colonne, face à une zone vide.
+  //
+  // On attend donc l'arrêt complet du défilement horizontal (SETTLE_DELAY_MS
+  // sans le moindre événement), ET une position posée pile sur une page
+  // (tolérance de 2 px) — sinon on laisse le snap finir son travail.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    function onScroll() {
-      const width = container!.clientWidth || 1;
-      const index = Math.round(container!.scrollLeft / width);
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function commitActivePage() {
+      const el = containerRef.current;
+      if (!el) return;
+      const width = el.clientWidth || 1;
+      const index = Math.round(el.scrollLeft / width);
+      // Snap pas encore terminé : on ne fait rien, un nouvel événement de
+      // défilement relancera ce contrôle.
+      if (Math.abs(el.scrollLeft - index * width) > 2) return;
       setActiveIndex((prev) => {
         if (prev === index) return prev;
-        // Marqué synchronement ICI, avant même que React ne traite le
-        // changement d'état — voir onWindowScroll plus bas pour pourquoi
-        // c'est le tout premier moment possible qui compte.
         isTransitioningRef.current = true;
         return index;
       });
     }
+
+    function onScroll() {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(commitActivePage, SETTLE_DELAY_MS);
+    }
+
     container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      if (settleTimer) clearTimeout(settleTimer);
+    };
   }, []);
 
   // Enregistre en continu la position de défilement de la page ACTUELLEMENT
