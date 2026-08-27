@@ -90,6 +90,38 @@ function resolveImgSrc(el: Element): string | null {
   return lazyCandidate || null;
 }
 
+/**
+ * Force les liens du corps de l'article (ceux en rouge) à s'ouvrir dans un
+ * NOUVEL onglet. Cette page est servie dans l'iframe du lecteur interne :
+ * sans "target", un clic remplace le lecteur lui-même par le site externe —
+ * on perd l'article en cours de lecture, et beaucoup de sites refusent de
+ * toute façon d'être affichés en iframe, laissant une zone blanche.
+ *
+ * Les URL sont aussi rendues absolues au passage : Readability conserve
+ * parfois des liens relatifs ("/produit/123"), qui pointeraient sinon vers
+ * NOTRE domaine et non vers le site d'origine.
+ *
+ * rel="noopener noreferrer" : sans "noopener", la page ouverte garde une
+ * référence JavaScript vers celle qui l'a ouverte et peut la faire naviguer
+ * ailleurs à notre insu.
+ */
+function openContentLinksInNewTab(contentDom: JSDOM, baseUrl: string): void {
+  contentDom.window.document.querySelectorAll("a[href]").forEach((el) => {
+    const href = el.getAttribute("href") || "";
+    // Les ancres internes ("#section") n'ont aucun sens dans un nouvel
+    // onglet : elles ne mènent nulle part hors de cette page.
+    if (!href.trim() || href.startsWith("#")) return;
+    try {
+      el.setAttribute("href", new URL(href, baseUrl).toString());
+    } catch {
+      // href inexploitable (javascript:, mailto:, URL malformée) : on laisse
+      // tel quel plutôt que de le casser.
+    }
+    el.setAttribute("target", "_blank");
+    el.setAttribute("rel", "noopener noreferrer");
+  });
+}
+
 /** Réécrit tous les src d'images/sources d'un fragment de contenu déjà
  *  extrait (Readability...) pour passer par notre proxy d'images (contourne
  *  le hotlinking), avec repli lazy-load (voir resolveImgSrc) — factorisé ici
@@ -964,6 +996,7 @@ export async function GET(req: NextRequest) {
       if (redlibArticle && redlibArticle.content) {
         const contentDom = new JSDOM(`<div id="root">${redlibArticle.content}</div>`);
         rewriteContentImages(contentDom, redlib.baseUrl);
+        openContentLinksInNewTab(contentDom, redlib.baseUrl);
         contentDom.window.document.querySelectorAll("script, style, iframe").forEach((el) => el.remove());
         const rootEl = contentDom.window.document.getElementById("root");
         if (rootEl) deepTrimJunk(rootEl);
@@ -1000,6 +1033,7 @@ export async function GET(req: NextRequest) {
       // le proxy d'images pour les éventuelles illustrations du self-post.
       const contentDom = new JSDOM(`<div id="root">${redditPost.bodyHtml}</div>`);
       rewriteContentImages(contentDom, "https://www.reddit.com");
+      openContentLinksInNewTab(contentDom, "https://www.reddit.com");
       let finalTitle = redditPost.title;
       let finalBody = contentDom.window.document.getElementById("root")?.innerHTML || "";
       if (wantsTranslation) {
@@ -1116,6 +1150,7 @@ export async function GET(req: NextRequest) {
     // donc même traitement : on les fait passer par notre proxy d'images.
     const contentDom = new JSDOM(`<div id="root">${article.content}</div>`);
     rewriteContentImages(contentDom, fetchUrl);
+    openContentLinksInNewTab(contentDom, fetchUrl);
     contentDom.window.document.querySelectorAll("script, style, iframe").forEach((el) => el.remove());
 
     const rootEl = contentDom.window.document.getElementById("root");
