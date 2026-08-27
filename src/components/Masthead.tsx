@@ -113,7 +113,14 @@ export function Masthead({
             <SpoonO />n
           </Link>
 
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {/* "items-start" et non "items-center" : le timbre d'impression
+              emporte sous lui une mention d'avertissement (conso de tokens),
+              ce qui rend son bloc plus haut que le timbre "En direct" voisin.
+              Centrés, les deux blocs s'alignaient sur leur milieu — donc des
+              bords hauts décalés, alors que ce sont les BOUTONS eux-mêmes
+              qu'on veut voir alignés. Calés en haut, leurs bords supérieurs
+              coïncident et l'avertissement pend simplement en dessous. */}
+          <div className="flex shrink-0 items-start gap-2 sm:gap-3">
             {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
                 globals.css), qui NE se combine PAS avec ".stamp-button" :
                 les deux se disputaient la propriété "transform" (rotation vs
