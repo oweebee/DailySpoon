@@ -60,7 +60,11 @@ function SheriffStar({ filled }: { filled: boolean }) {
       viewBox="0 0 24 24"
       width="16"
       height="16"
-      className={filled ? "text-[#8a0303]" : "text-sepia/50 hover:text-sepia"}
+      // "favorite-star" : point d'accroche pour le thème (voir globals.css).
+      // Cette étoile est posée sur le FOND de la page — contrairement au
+      // tampon-date, qui est lui posé sur une photo — d'où un traitement
+      // différent en thème sombre.
+      className={filled ? "favorite-star text-[#8a0303]" : "text-sepia/50 hover:text-sepia"}
     >
       <path
         d="M12,2 L14.35,8.76 L21.51,8.91 L15.80,13.24 L17.88,20.09 L12,16 L6.12,20.09 L8.20,13.24 L2.49,8.91 L9.65,8.76 Z"

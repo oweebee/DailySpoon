@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Rye&family=JetBrains+Mono:ital,wght@0,300..800;1,300..800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Rye&family=Inter:ital,wght@0,300..800;1,300..800&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -55,13 +55,17 @@
   --color-journal: 239 131 131; /* accent rouge éclairci : le #8b1a1a d'origine
                                    est illisible sur fond sombre */
 
-  /* Une seule police pour tout, monospace (voir l'échantillon fourni). Les
-     quatre familles pointent dessus : les composants continuent d'écrire
-     font-display ou font-masthead sans le savoir. */
-  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-display: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-masthead: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Une seule police pour tout. Inter et non plus une chasse fixe : sur des
+     paragraphes entiers, la monospace donnait une impression de texte mal
+     aligné — toutes les lettres occupant la même largeur, les mots ne
+     forment plus de silhouettes reconnaissables et l'œil accroche. Inter est
+     dessinée pour les écrans, très neutre, et lit proprement en petit corps
+     comme en titre. Les quatre familles pointent dessus : les composants
+     continuent d'écrire font-display ou font-masthead sans le savoir. */
+  --font-serif: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-display: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-masthead: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
 
   --paper-texture: none;
   --ornament-display: none;
@@ -310,6 +314,22 @@ body {
   display: inline;
 }
 
+/* ---- Thème Material : texte au fil de l'eau ---------------------------
+   La classe .newsprint justifie le texte et active les césures, pour imiter
+   une colonne de presse imprimée. C'est très bien sur du papier ; dans une
+   interface sombre c'est le principal responsable de l'impression que "tout
+   est décalé" : pour aligner les deux bords, le navigateur étire les espaces
+   entre les mots ligne par ligne, ce qui creuse des trous irréguliers et des
+   rivières blanches verticales, et coupe les mots en fin de ligne
+   ("ré-clamer", "évidem-ment").
+
+   On repasse donc en drapeau (bord droit libre), sans césure : les espaces
+   redeviennent tous identiques et le bloc se lit d'un trait. */
+[data-theme="material"] .newsprint {
+  text-align: left;
+  hyphens: none;
+}
+
 /* ---- Thème Material : textes à gris fixe ------------------------------
    Le corps des articles, les libellés de formulaire et diverses mentions
    secondaires utilisent des gris FIXES de la palette Tailwind
@@ -335,14 +355,14 @@ body {
   color: rgb(var(--color-sepia));
 }
 
-/* Étoile "favori" et tampon "médaille" : rouge très sombre (#8a0303), pensé
-   pour ressortir sur du papier clair. Illisible sur fond noir — on reprend
-   l'accent éclairci du thème. */
-[data-theme="material"] .text-\[\#8a0303\] {
+/* Étoile "favori" : rouge très sombre (#8a0303), pensé pour ressortir sur du
+   papier clair — trop éteint sur fond noir, on reprend l'accent éclairci.
+   UNIQUEMENT elle : le tampon-date et la médaille utilisent le même rouge,
+   mais ils sont posés SUR UNE PHOTO en noir et blanc, jamais sur le fond de
+   la page. Ce rouge profond y ressort très bien, et l'éclaircir le faisait
+   virer au rose. */
+[data-theme="material"] .favorite-star {
   color: rgb(var(--color-journal));
-}
-[data-theme="material"] .border-\[\#8a0303\] {
-  border-color: rgb(var(--color-journal));
 }
 
 /* ---- Thème Material : ornements et cadres -----------------------------

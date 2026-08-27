@@ -234,10 +234,10 @@ const MATERIAL_READER_CSS = `
     background-color: #121212;
     background-image: none;
     color: #e2e2e2;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   }
   h1, .kicker, .article-body h2, .article-body h3 {
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   }
   .kicker, .meta-top a, .article-body a { color: #ef8383; }
   .meta-top { color: #969696; border-bottom-color: #3c3c3c; }
@@ -329,7 +329,7 @@ function renderPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Inter:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
 <style>
   * { box-sizing: border-box; }
   html { background: #dcdcdc; }
