@@ -22,6 +22,7 @@ type SettingsForm = {
   customFeedsIntervalMinutes: string;
   telegramBotToken: string;
   telegramChatId: string;
+  theme: string;
   libretranslateUrl: string;
   libretranslateApiKey: string;
   wallabagBaseUrl: string;
@@ -53,6 +54,7 @@ const EMPTY: SettingsForm = {
   customFeedsIntervalMinutes: "60",
   telegramBotToken: "",
   telegramChatId: "",
+  theme: "dailyspoon",
   libretranslateUrl: "",
   libretranslateApiKey: "",
   wallabagBaseUrl: "",
@@ -186,6 +188,7 @@ export default function AdminSettingsPage() {
               : "60",
           telegramBotToken: s.telegramBotToken || "",
           telegramChatId: s.telegramChatId || "",
+          theme: s.theme || "dailyspoon",
           libretranslateUrl: s.libretranslateUrl || "",
           libretranslateApiKey: s.libretranslateApiKey || "",
           wallabagBaseUrl: s.wallabagBaseUrl || "",
@@ -295,6 +298,7 @@ export default function AdminSettingsPage() {
         form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes),
       telegramBotToken: form.telegramBotToken,
       telegramChatId: form.telegramChatId,
+      theme: form.theme,
       libretranslateUrl: form.libretranslateUrl,
       libretranslateApiKey: form.libretranslateApiKey,
       wallabagBaseUrl: form.wallabagBaseUrl,
@@ -572,6 +576,31 @@ export default function AdminSettingsPage() {
         <p className="italic text-sepia">Chargement...</p>
       ) : (
         <div className="space-y-8">
+          <fieldset className="space-y-3 border-t-2 border-ink pt-4">
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Thème</legend>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
+                Apparence du site
+              </span>
+              <select
+                value={form.theme}
+                onChange={(e) => set("theme", e.target.value)}
+                className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
+              >
+                <option value="dailyspoon">DailySpoon (journal papier)</option>
+                <option value="material">Material (sombre, minimaliste)</option>
+              </select>
+            </label>
+            <p className="text-xs italic text-sepia">
+              « DailySpoon » est l’habillage d’origine : papier texturé, polices de presse,
+              timbres-poste, traces de surligneur. « Material » retire tout cet habillage au profit
+              d’une interface sombre et sobre en monospace — les timbres redeviennent de simples
+              boutons, les cadres gardent leur fond mais perdent leur contour. Les vignettes en noir
+              et blanc et les petites cuillères sont conservées dans les deux cas. Le changement
+              s’applique à tout le site, cette page comprise, dès l’enregistrement.
+            </p>
+          </fieldset>
+
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">
             <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">FreshRSS</legend>
             <label className="flex items-center gap-2 text-xs italic text-sepia">

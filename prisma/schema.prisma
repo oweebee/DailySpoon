@@ -442,6 +442,13 @@ model Settings {
   // les articles restent dans leur langue d'origine.
   // Ex. "http://libretranslate:5000" (réseau interne) ou une URL https si le
   // service a reçu un domaine.
+  // Thème visuel de toute l'application, admin comprise : "dailyspoon"
+  // (défaut — l'habillage journal papier d'origine) ou "material" (sombre,
+  // minimaliste, monospace). Posé côté serveur sur <html data-theme> dans
+  // layout.tsx, d'où tout découle via des variables CSS (voir globals.css) —
+  // aucun composant ne connaît le thème actif.
+  theme               String?
+
   libretranslateUrl   String?
 
   // Clé d'accès à cette instance LibreTranslate, si elle est protégée

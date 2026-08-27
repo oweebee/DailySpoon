@@ -140,7 +140,7 @@ export function CategoryColumn({
         // (moyenne échantillonnée sur public/textures/journal.jpg, #e5e3df —
         // plus chaude que le gris plat "paper" du thème), partout, web
         // comme mobile (plus de distinction responsive ici).
-        className={`relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] text-[#e5e3df] ${
+        className={`category-band relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] text-[#e5e3df] ${
           draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
         }`}
       >
@@ -155,7 +155,10 @@ export function CategoryColumn({
           src={CATEGORY_HIGHLIGHTS[highlightIndex % CATEGORY_HIGHLIGHTS.length]}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
+          // "ornament" : masqué par le thème Material (voir globals.css,
+          // variable --ornament-display) — une trace de surligneur peinte
+          // n'a aucun sens dans une interface sombre minimaliste.
+          className="ornament pointer-events-none absolute left-1/2 top-1/2 h-8 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
         />
         <span className="relative">{label}</span>
       </h2>
@@ -169,7 +172,10 @@ export function CategoryColumn({
           // même teinte que les encadrés de rubrique de la page IA
           // (CATEGORY_BOX_TONES dans FrontPageView, bg-ink/[0.07]). Remplace
           // l'ancien filet horizontal (divide-y) entre articles.
-          <article key={article.id} className="border-2 border-ink bg-ink/[0.07] p-4">
+          // "article-card" : simple point d'accroche pour le thème (voir
+          // globals.css). En Material, le fond gris est conservé — c'est lui
+          // qui délimite la carte — mais le trait de contour disparaît.
+          <article key={article.id} className="article-card border-2 border-ink bg-ink/[0.07] p-4">
             {article.imageUrl && (
               <ArticleLink
                 href={directHref(article)}

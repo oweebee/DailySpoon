@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ArticleModalProvider } from "@/components/ArticleModalContext";
 import { PwaRegister } from "@/components/PwaRegister";
+import { getSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: "DailySpoon — le journal du jour",
@@ -44,9 +45,28 @@ export const viewport: Viewport = {
   viewportFit: "cover"
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// Le thème est lu en base à chaque rendu : sans ça, changer de thème dans
+// l'admin n'aurait d'effet qu'au prochain redéploiement (Next met en cache
+// les layouts statiques).
+export const dynamic = "force-dynamic";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Lecture CÔTÉ SERVEUR, posée directement sur <html> : le thème est donc
+  // déjà correct au tout premier pixel affiché. Une bascule côté navigateur
+  // (script au chargement, classe ajoutée après coup) ferait apparaître un
+  // éclair de page claire avant de basculer en sombre à chaque navigation —
+  // le fameux "flash of unstyled content", particulièrement voyant sur un
+  // thème sombre.
+  //
+  // Best-effort : si la base est injoignable au moment du rendu (démarrage,
+  // migration en cours), on retombe sur le thème d'origine plutôt que de
+  // faire échouer TOUTE l'application pour une question d'apparence.
+  const theme = await getSettings()
+    .then((s) => s.theme)
+    .catch(() => "dailyspoon" as const);
+
   return (
-    <html lang="fr">
+    <html lang="fr" data-theme={theme}>
       {/* Le fond (texture papier) est entièrement géré par la règle "body"
           dans globals.css, pas ici — ne pas dupliquer/surcharger avec un
           style inline, ça avait écrasé ce fond par-dessus la règle CSS

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
-import { MORSS_BASE_URL, getSettings } from "@/lib/settings";
+import { MORSS_BASE_URL, getSettings, type ThemeName } from "@/lib/settings";
 import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
 import { isAlreadyMorssUrl, splitIntoReadableParagraphs, BROWSER_USER_AGENT } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
@@ -216,6 +216,61 @@ function spoonSvg(rotateDeg: number): string {
   return `<svg viewBox="0 0 24 24" preserveAspectRatio="none" width="12" height="17" style="transform: rotate(${rotateDeg}deg)"><ellipse cx="12" cy="6.2" rx="5.1" ry="6.2"/><rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4"/></svg>`;
 }
 
+/**
+ * Habillage sombre du lecteur d'article, ajouté EN FIN de feuille de style
+ * (donc prioritaire à spécificité égale) quand le thème Material est actif.
+ * Écrit en surcharge plutôt qu'en variables : cette page est du HTML autonome
+ * et figé, servi en iframe hors du CSS de l'application — dupliquer ici tout
+ * le système de thèmes de globals.css pour un seul autre thème coûterait plus
+ * cher que ces quelques règles.
+ *
+ * Le fleuron en cuillères et les photos d'article restent intacts : seule
+ * l'illusion "vieux papier" (grain, vignette, empattements, lettrine) est
+ * retirée.
+ */
+const MATERIAL_READER_CSS = `
+  html { background: #121212; }
+  body {
+    background-color: #121212;
+    background-image: none;
+    color: #e2e2e2;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  h1, .kicker, .article-body h2, .article-body h3 {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .kicker, .meta-top a, .article-body a { color: #ef8383; }
+  .meta-top { color: #969696; border-bottom-color: #3c3c3c; }
+  .byline, .source-bottom, .fav-star, .embed-note, .article-body figcaption { color: #969696; }
+  .double-rule { border-top: 1px solid #3c3c3c; border-bottom: none; }
+  /* Lettrine retirée : ornement de presse papier, incongru en monospace. */
+  .article-body > p:first-of-type::first-letter {
+    float: none; font-size: inherit; font-weight: inherit; line-height: inherit; padding: 0; color: inherit;
+  }
+  /* Texte au fil de l'eau plutôt que justifié avec césures : la justification
+     sert à imiter une colonne de presse, elle creuse des rivières blanches
+     dans une monospace. */
+  .article-body { text-align: left; hyphens: none; }
+  .article-body img, .article-body picture { border-color: #3c3c3c; box-shadow: none; }
+  .article-body blockquote { border-left-color: #3c3c3c; color: #c8c8c8; }
+  .notice-box { border-color: #3c3c3c; background: rgba(255, 255, 255, 0.06); color: #c8c8c8; }
+  /* Le timbre-poste redevient un bouton, comme dans le reste de l'app. */
+  .stamp-link {
+    background-image: none;
+    aspect-ratio: auto;
+    padding: 0.5rem 1rem;
+    border: 1px solid #3c3c3c;
+    border-radius: 0.25rem;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #e2e2e2;
+    transform: none;
+    filter: none;
+    text-shadow: none;
+  }
+  .stamp-link:hover { transform: none; filter: none; background-color: rgba(255, 255, 255, 0.14); }
+  .translate-progress { background: #e2e2e2; }
+`;
+
 function renderPage(opts: {
   title: string;
   byline?: string | null;
@@ -241,8 +296,14 @@ function renderPage(opts: {
    *  zone reste alors vide — "Voir l'original"/"Ouvrir dans un nouvel
    *  onglet" restent le recours dans ce cas. */
   embedFallback?: boolean;
+  /** Thème actif (voir Settings.theme). Cette page est du HTML autonome,
+   *  servi dans une iframe et donc TOTALEMENT hors du CSS de l'application :
+   *  elle ne peut pas hériter des variables de globals.css et doit porter son
+   *  propre habillage. Sans ça, ouvrir un article en thème sombre projetait
+   *  une page blanche en pleine figure. */
+  theme?: ThemeName;
 }): string {
-  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite, embedFallback } =
+  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite, embedFallback, theme } =
     opts;
   const kickerRaw = siteName || new URL(originalUrl).hostname.replace(/^www\./, "");
   const kicker = escapeHtml(kickerRaw);
@@ -511,6 +572,7 @@ function renderPage(opts: {
     0% { margin-left: -40%; }
     100% { margin-left: 100%; }
   }
+${theme === "material" ? MATERIAL_READER_CSS : ""}
 </style>
 </head>
 <body>
@@ -841,6 +903,15 @@ export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   if (!url) return new NextResponse("URL manquante", { status: 400 });
 
+  // Thème actif, lu UNE FOIS et transmis à tous les rendus de cette requête
+  // (y compris les pages d'erreur et de repli) : cette page étant du HTML
+  // autonome servi en iframe, elle n'hérite de rien et doit s'habiller
+  // elle-même. Best-effort — en cas de souci de base, on sert l'habillage
+  // d'origine plutôt que de refuser d'afficher l'article.
+  const theme: ThemeName = await getSettings()
+    .then((s) => s.theme)
+    .catch(() => "dailyspoon" as const);
+
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -911,6 +982,7 @@ export async function GET(req: NextRequest) {
   if (isRedditImageHostname(parsed.hostname)) {
     return htmlResponse(
       renderPage({
+        theme,
         title: "Image Reddit",
         siteName: "reddit.com",
         bodyHtml: `<p style="text-align:center;"><img src="${proxyImageUrl(originalUrl)}" alt="" /></p>`,
@@ -952,6 +1024,7 @@ export async function GET(req: NextRequest) {
     `;
     return htmlResponse(
       renderPage({
+        theme,
         title: "Vidéo Reddit",
         siteName: "reddit.com",
         bodyHtml,
@@ -976,6 +1049,7 @@ export async function GET(req: NextRequest) {
     if (fallbackExcerpt) {
       return htmlResponse(
         renderPage({
+          theme,
           title: fallbackTitle || "Post Reddit",
           siteName: "reddit.com",
           bodyHtml: `${excerptToParagraphsHtml(fallbackExcerpt)}<div class="notice-box">Texte tel que récupéré depuis le flux (même texte qu'en vignette). Pour le texte original et les commentaires, utilise « Voir l'original » en haut de page.</div>`,
@@ -1011,6 +1085,7 @@ export async function GET(req: NextRequest) {
 
         return htmlResponse(
           renderPage({
+            theme,
             title: finalTitle,
             byline: redlibArticle.byline,
             siteName: "reddit.com",
@@ -1044,6 +1119,7 @@ export async function GET(req: NextRequest) {
 
       return htmlResponse(
         renderPage({
+          theme,
           title: finalTitle,
           byline: `Posté par u/${redditPost.author}`,
           siteName: redditPost.subreddit,
@@ -1062,6 +1138,7 @@ export async function GET(req: NextRequest) {
     // tronqué, contrairement à la vignette limitée à 10 lignes.
     return htmlResponse(
       renderPage({
+        theme,
         title: fallbackTitle || "Reddit indisponible depuis ce serveur",
         bodyHtml: excerptFallbackBodyHtml(
           "Reddit bloque les requêtes venant de ce serveur (IP d'hébergeur), y compris via son API publique et les miroirs de secours essayés. Utilise « Ouvrir dans un nouvel onglet » pour lire ce post directement" +
@@ -1090,6 +1167,7 @@ export async function GET(req: NextRequest) {
       if (fallbackExcerpt) {
         return htmlResponse(
           renderPage({
+            theme,
             title: fallbackTitle || new URL(originalUrl).hostname.replace(/^www\./, ""),
             bodyHtml: excerptFallbackBodyHtml(
               "Lecture directe indisponible sur ce serveur (site bloquant, y compris via le repli morss) — voici l'aperçu récupéré depuis le flux. Utilise « Ouvrir dans un nouvel onglet » pour lire l'article complet."
@@ -1112,6 +1190,7 @@ export async function GET(req: NextRequest) {
       // seul recours.
       return htmlResponse(
         renderPage({
+          theme,
           title: new URL(originalUrl).hostname.replace(/^www\./, ""),
           bodyHtml: "",
           originalUrl,
@@ -1133,6 +1212,7 @@ export async function GET(req: NextRequest) {
     if (!article || !article.content) {
       return htmlResponse(
         renderPage({
+          theme,
           title: fallbackTitle || "Article non extrait",
           bodyHtml: excerptFallbackBodyHtml(
             "Impossible d'extraire proprement le contenu de cet article. Utilise « Ouvrir dans un nouvel onglet » pour le lire directement sur le site source" +
@@ -1176,6 +1256,7 @@ export async function GET(req: NextRequest) {
 
     return htmlResponse(
       renderPage({
+        theme,
         title: finalTitle,
         byline: article.byline,
         siteName: article.siteName,
@@ -1190,6 +1271,7 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     return htmlResponse(
       renderPage({
+        theme,
         title: "Erreur",
         bodyHtml: `<p>Erreur lors de la récupération de l'article : ${escapeHtml(
           err?.message || "inconnue"

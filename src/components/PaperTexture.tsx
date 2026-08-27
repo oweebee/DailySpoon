@@ -16,7 +16,9 @@
  */
 export function PaperTexture() {
   return (
-    <svg aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 h-full w-full">
+    // "ornament" : le thème Material masque ce fond (voir globals.css) — un
+    // papier froissé n'a pas sa place derrière une interface sombre épurée.
+    <svg aria-hidden="true" className="ornament pointer-events-none fixed inset-0 -z-10 h-full w-full">
       <filter id="paper-crumple" x="0" y="0" width="100%" height="100%">
         <feTurbulence
           type="fractalNoise"

@@ -1,12 +1,77 @@
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Rye&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Rye&family=JetBrains+Mono:ital,wght@0,300..800;1,300..800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ===================================================================
+   THÈMES
+   -------------------------------------------------------------------
+   Toute l'apparence de l'application tient dans les variables ci-dessous,
+   consommées par tailwind.config.ts. Changer de thème = changer l'attribut
+   data-theme sur <html> (posé côté serveur dans layout.tsx à partir de
+   Settings.theme), jamais une classe dans un composant.
+
+   Les composantes de couleur sont écrites SANS "rgb()" (juste "240 240 240")
+   parce que Tailwind les enveloppe lui-même dans rgb(... / opacité) — c'est
+   ce qui garde fonctionnels les bg-ink/[0.07], text-sepia/70 et autres
+   modificateurs d'opacité employés partout dans le projet.
+   =================================================================== */
+
+/* Thème "dailyspoon" — celui d'origine, valeurs strictement identiques à ce
+   qui était écrit en dur auparavant. C'est le défaut : sans attribut
+   data-theme, ou avec data-theme="dailyspoon", rien ne change. */
+:root {
+  --color-paper: 240 240 240; /* #f0f0f0 */
+  --color-ink: 26 26 26; /* #1a1a1a */
+  --color-rule: 26 26 26;
+  --color-sepia: 92 92 92; /* #5c5c5c */
+  --color-journal: 139 26 26; /* #8b1a1a */
+
+  --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-masthead: "Rye", Georgia, serif;
+  --font-sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  /* Ornements propres au thème journal, éteints en Material (voir plus bas).
+     Passer par une variable plutôt que par des règles séparées permet de
+     neutraliser d'un coup texture, filets épais et traces de surligneur. */
+  --paper-texture: url("/textures/journal.jpg");
+  --ornament-display: block; /* traces de surligneur, cul-de-lampe décoratif */
+  --rule-top-width: 3px; /* filet double des bandeaux */
+  --rule-bottom-width: 1px;
+}
+
+/* Thème "material" — sombre, minimaliste, sans aucun ornement de journal.
+   On garde volontairement : les vignettes en noir et blanc (traitées côté
+   composant, pas ici) et les petites cuillères, seule signature visuelle
+   conservée. Tout le reste — texture papier, timbres-poste, lettrines,
+   surligneurs, doubles filets, polices à empattements — disparaît. */
+[data-theme="material"] {
+  --color-paper: 18 18 18; /* fond Material sombre de référence (#121212) */
+  --color-ink: 226 226 226; /* texte principal, gris très clair et non blanc pur */
+  --color-rule: 60 60 60; /* séparateurs discrets, jamais francs */
+  --color-sepia: 150 150 150; /* texte secondaire */
+  --color-journal: 239 131 131; /* accent rouge éclairci : le #8b1a1a d'origine
+                                   est illisible sur fond sombre */
+
+  /* Une seule police pour tout, monospace (voir l'échantillon fourni). Les
+     quatre familles pointent dessus : les composants continuent d'écrire
+     font-display ou font-masthead sans le savoir. */
+  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-masthead: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --paper-texture: none;
+  --ornament-display: none;
+  --rule-top-width: 1px;
+  --rule-bottom-width: 0px;
+}
+
 body {
-  background-color: #f0f0f0;
-  color: #1a1a1a;
+  background-color: rgb(var(--color-paper));
+  color: rgb(var(--color-ink));
   /* En PWA plein écran (display: "fullscreen"), le contenu peut s'étendre
      sous l'encoche/la barre de statut et l'indicateur d'accueil (iOS) —
      on réserve cet espace ici plutôt que de laisser le masthead ou le bas
@@ -20,6 +85,10 @@ body {
      safe-area-inset-top) doit être noire plutôt que dans le gris clair du
      reste des marges — peint par-dessus le fond uni via un dégradé calé
      sur exactement cette hauteur, sans toucher au reste du fond. */
+  /* Volontairement en dur et NON via une variable de thème : cette bande
+     est celle de l'encoche/barre de statut en PWA, elle doit rester noire
+     dans les deux thèmes. En Material, --color-ink est clair — la passer en
+     variable produirait une bande blanche en haut de l'écran. */
   background-image: linear-gradient(#1a1a1a, #1a1a1a);
   background-repeat: no-repeat;
   background-size: 100% env(safe-area-inset-top);
@@ -35,16 +104,17 @@ body {
    d'origine de l'image, sans opacité/filtre qui l'éclaircirait (d'où
    "bg-paper/70" remplacé par cette classe plutôt que gardé en plus). */
 .paper-panel {
-  background-color: #f0f0f0;
+  background-color: rgb(var(--color-paper));
   /* Image telle quelle, sans voile ni filtre — l'utilisateur ajuste la
-     couleur/le contraste directement dans le fichier image lui-même. */
-  background-image: url("/textures/journal.jpg");
+     couleur/le contraste directement dans le fichier image lui-même.
+     Variable plutôt qu'URL en dur : le thème Material la met à "none". */
+  background-image: var(--paper-texture);
 }
 
 /* Lettrine de une, comme dans les vieux quotidiens */
 .drop-cap::first-letter {
   float: left;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 900;
   font-size: 3.4em;
   line-height: 0.85;
@@ -52,15 +122,27 @@ body {
   padding-top: 0.05em;
 }
 
-/* Double filet horizontal typique des mastheads */
+/* Double filet horizontal typique des mastheads — devient un filet simple et
+   discret en Material (voir --rule-*-width). */
 .double-rule {
-  border-top: 3px solid #1a1a1a;
-  border-bottom: 1px solid #1a1a1a;
+  border-top: var(--rule-top-width) solid rgb(var(--color-rule));
+  border-bottom: var(--rule-bottom-width) solid rgb(var(--color-rule));
   height: 6px;
 }
 
 .rule-thin {
-  border-top: 1px solid #1a1a1a;
+  border-top: 1px solid rgb(var(--color-rule));
+}
+
+/* En Material, la lettrine de une n'a plus lieu d'être : c'est un ornement
+   de presse papier, et en monospace elle ressort comme une erreur de mise en
+   page plutôt que comme un effet. */
+[data-theme="material"] .drop-cap::first-letter {
+  float: none;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  padding: 0;
 }
 
 /* Texte justifié avec césure pour l'effet colonne de presse */
@@ -158,6 +240,90 @@ body {
 .stamp-bg-sm { background-image: url("/stamps/stamp-sm.png"); aspect-ratio: 600 / 406; }
 .stamp-bg-md { background-image: url("/stamps/stamp-md.png"); aspect-ratio: 700 / 270; }
 .stamp-bg-lg { background-image: url("/stamps/stamp-lg.png"); aspect-ratio: 900 / 205; }
+
+/* ---- Thème Material : les timbres deviennent de vrais boutons ----------
+   L'image de timbre-poste, l'ombre portée découpée et l'inclinaison au
+   survol disparaissent au profit d'un rectangle plein aux angles adoucis.
+   Les dimensions posées côté JSX (hauteurs et largeurs calculées sur le
+   ratio des images) sont neutralisées ici : sans ça, un bouton plat
+   garderait la silhouette très allongée d'un timbre, avec un texte minuscule
+   perdu au milieu. On repasse donc à une taille dictée par le contenu, comme
+   n'importe quel bouton d'interface. */
+[data-theme="material"] .stamp-bg-sm,
+[data-theme="material"] .stamp-bg-md,
+[data-theme="material"] .stamp-bg-lg {
+  background-image: none;
+  aspect-ratio: auto;
+  width: auto;
+  height: auto;
+  min-height: 2.25rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  background-color: rgb(var(--color-ink) / 0.1);
+  border: 1px solid rgb(var(--color-rule));
+  color: rgb(var(--color-ink));
+  /* Le texte des timbres est en très petit corps et fortement espacé pour
+     tenir dans l'image ; rendu à taille normale ici. */
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+}
+
+[data-theme="material"] .stamp-button,
+[data-theme="material"] .stamp-live {
+  transform: none;
+  filter: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+[data-theme="material"] .stamp-button:hover,
+[data-theme="material"] .stamp-live:hover {
+  transform: none;
+  filter: none;
+  background-color: rgb(var(--color-ink) / 0.18);
+}
+
+[data-theme="material"] .stamp-button:active,
+[data-theme="material"] .stamp-live:active {
+  transform: none;
+  filter: none;
+  background-color: rgb(var(--color-ink) / 0.24);
+}
+
+/* Les libellés de timbre sont volontairement coupés en deux lignes côté JSX
+   ("Lancer l'impression" / "du journal") pour tenir dans l'image. Sur un
+   bouton plat, ils se relisent naturellement sur une seule ligne. */
+[data-theme="material"] .stamp-button > span,
+[data-theme="material"] .stamp-live-text {
+  display: inline;
+}
+
+/* ---- Thème Material : ornements et cadres -----------------------------
+   Les ornements peints (traces de surligneur derrière les titres de
+   rubrique) disparaissent : ce sont des images d'encre sur papier, sans
+   équivalent dans une interface sombre. */
+[data-theme="material"] .ornament {
+  display: var(--ornament-display);
+}
+
+/* Les cadres (cartes d'article, bandeaux de rubrique) sont CONSERVÉS, mais
+   sans leur trait de contour : c'est le fond, légèrement plus clair que la
+   page, qui délimite désormais le bloc. On neutralise la couleur de bordure
+   plutôt que son épaisseur, pour ne décaler aucun alignement — le trait
+   devient simplement invisible et son espace reste. */
+[data-theme="material"] .article-card,
+[data-theme="material"] .category-band {
+  border-color: transparent;
+}
+
+/* Le bandeau de rubrique tirait tout son contraste du surligneur peint
+   derrière son texte. Sans lui, il lui faut un fond propre, sinon le titre
+   flotte sans repère au-dessus de la colonne. */
+[data-theme="material"] .category-band {
+  background-color: rgb(var(--color-ink) / 0.1);
+  border-radius: 0.25rem;
+  color: rgb(var(--color-ink));
+}
 
 /* Ouverture du lecteur d'article interne : la page pivote depuis sa
    tranche gauche pour s'ouvrir face à l'écran, comme une page de journal

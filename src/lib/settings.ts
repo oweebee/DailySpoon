@@ -10,6 +10,17 @@ const SINGLETON_ID = "singleton";
  */
 export const MORSS_BASE_URL = "http://morss:8000";
 
+/** Thèmes visuels disponibles (voir globals.css et Settings.theme). */
+export const THEMES = ["dailyspoon", "material"] as const;
+export type ThemeName = (typeof THEMES)[number];
+
+/** Ramène n'importe quelle valeur stockée à un thème connu — une valeur
+ *  absente, vide ou devenue invalide (thème retiré du code) doit redonner
+ *  l'habillage d'origine, jamais une page sans style. */
+export function normalizeTheme(value: string | null | undefined): ThemeName {
+  return THEMES.includes(value as ThemeName) ? (value as ThemeName) : "dailyspoon";
+}
+
 export type AppSettings = {
   freshrssBaseUrl: string;
   freshrssUsername: string;
@@ -58,6 +69,11 @@ export type AppSettings = {
    *  notification, voir NotifyFeed et src/lib/telegramNotify.ts). */
   telegramBotToken: string;
   telegramChatId: string;
+  /** Thème visuel de toute l'application, admin comprise. "dailyspoon" =
+   *  habillage journal papier d'origine (défaut) ; "material" = sombre,
+   *  minimaliste, monospace. Appliqué en posant data-theme sur <html> côté
+   *  serveur (layout.tsx) — tout le reste suit via des variables CSS. */
+  theme: ThemeName;
   /** URL de l'instance LibreTranslate auto-hébergée (conteneur déployé
    *  séparément, voir libretranslate/docker-compose.yml) — SEUL moteur de
    *  traduction des vignettes "En direct" (flux cochés "traduction" dans
@@ -132,6 +148,7 @@ export async function getSettings(): Promise<AppSettings> {
     telegramChatId: row?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "",
     // "/" final retiré (comme wallabagBaseUrl) pour construire proprement
     // "<url>/translate" ensuite, sans double slash.
+    theme: normalizeTheme(row?.theme || process.env.THEME),
     libretranslateUrl: (row?.libretranslateUrl || process.env.LIBRETRANSLATE_URL || "").replace(/\/+$/, ""),
     libretranslateApiKey: row?.libretranslateApiKey || process.env.LIBRETRANSLATE_API_KEY || "",
     // On retire un éventuel "/" final de l'URL de l'instance (comme morssBaseUrl)
@@ -160,6 +177,7 @@ const STRING_FIELDS = [
   "writingStyle",
   "telegramBotToken",
   "telegramChatId",
+  "theme",
   "libretranslateUrl",
   "libretranslateApiKey",
   "wallabagBaseUrl",
@@ -191,6 +209,7 @@ export type SettingsInput = Partial<{
   logRetentionMinutes: number | null;
   telegramBotToken: string | null;
   telegramChatId: string | null;
+  theme: string | null;
   libretranslateUrl: string | null;
   libretranslateApiKey: string | null;
   wallabagBaseUrl: string | null;
