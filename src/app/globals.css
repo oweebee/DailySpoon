@@ -22,7 +22,11 @@
    qui était écrit en dur auparavant. C'est le défaut : sans attribut
    data-theme, ou avec data-theme="dailyspoon", rien ne change. */
 :root {
-  --color-paper: 240 240 240; /* #f0f0f0 */
+  --color-paper: 240 240 240; /* #f0f0f0 — fond de page, marges comprises */
+  /* Fond du bloc de contenu (<main>, .paper-panel). Identique au fond de page
+     ici : dans le thème journal, c'est la TEXTURE papier qui distingue le
+     bloc de ses marges, pas une différence de couleur. */
+  --color-surface: 240 240 240;
   --color-ink: 26 26 26; /* #1a1a1a */
   --color-rule: 26 26 26;
   --color-sepia: 92 92 92; /* #5c5c5c */
@@ -48,12 +52,27 @@
    conservée. Tout le reste — texture papier, timbres-poste, lettrines,
    surligneurs, doubles filets, polices à empattements — disparaît. */
 [data-theme="material"] {
-  --color-paper: 18 18 18; /* fond Material sombre de référence (#121212) */
+  /* Marges de la page, volontairement PLUS SOMBRES que le bloc de contenu
+     (#0a0a0a) : c'est ce contraste qui détache la colonne de lecture. */
+  --color-paper: 10 10 10;
+  /* Le bloc de contenu est LÉGÈREMENT plus clair que la page qui l'entoure
+     (#1e1e1e contre #121212). Sans texture papier pour l'en distinguer, il
+     se fondait sinon exactement dans ses marges et la colonne de lecture
+     n'avait plus aucune limite visible. C'est la convention Material : une
+     surface posée au-dessus d'une autre s'éclaircit légèrement plutôt que de
+     se border d'un trait. */
+  --color-surface: 30 30 30;
   --color-ink: 226 226 226; /* texte principal, gris très clair et non blanc pur */
   --color-rule: 60 60 60; /* séparateurs discrets, jamais francs */
   --color-sepia: 150 150 150; /* texte secondaire */
-  --color-journal: 239 131 131; /* accent rouge éclairci : le #8b1a1a d'origine
-                                   est illisible sur fond sombre */
+  /* UN SEUL rouge pour tout ce qui est rouge dans ce thème (#d64040) :
+     entrée de menu active, intitulés d'accent, étoile favori, tampon-date sur
+     les photos. Choisi pour tenir dans les deux contextes à la fois — assez
+     clair pour ressortir sur le fond quasi noir de la page, assez saturé pour
+     rester franchement rouge par-dessus une photo en noir et blanc.
+     Le #8b1a1a du thème journal y est trop sombre, et un rouge simplement
+     éclairci (premier essai à 239/131/131) virait au rose. */
+  --color-journal: 214 64 64;
 
   /* Une seule police pour tout. Inter et non plus une chasse fixe : sur des
      paragraphes entiers, la monospace donnait une impression de texte mal
@@ -108,7 +127,7 @@ body {
    d'origine de l'image, sans opacité/filtre qui l'éclaircirait (d'où
    "bg-paper/70" remplacé par cette classe plutôt que gardé en plus). */
 .paper-panel {
-  background-color: rgb(var(--color-paper));
+  background-color: rgb(var(--color-surface));
   /* Image telle quelle, sans voile ni filtre — l'utilisateur ajuste la
      couleur/le contraste directement dans le fichier image lui-même.
      Variable plutôt qu'URL en dur : le thème Material la met à "none". */
@@ -314,6 +333,21 @@ body {
   display: inline;
 }
 
+/* ---- Thème Material : détachement du bloc de contenu ------------------
+   L'ombre portée posée côté JSX sur chaque <main> est noire
+   (rgba(26,26,26,.35)) : pensée pour du papier clair, elle est rigoureusement
+   invisible sur des marges noires. On la remplace par une ombre PLUS DENSE
+   ET PLUS LARGE, qui creuse un dégradé sombre autour du bloc — combinée au
+   fond légèrement plus clair, c'est ce qui fait décoller la colonne de
+   lecture de son fond.
+
+   "!important" : l'ombre vient d'un utilitaire Tailwind arbitraire
+   (shadow-[...]) écrit directement dans le JSX de chaque page, impossible à
+   surcharger autrement sans repasser sur toutes ces pages une par une. */
+[data-theme="material"] .paper-panel {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 24px 70px -20px rgb(0 0 0 / 0.9) !important;
+}
+
 /* ---- Thème Material : texte au fil de l'eau ---------------------------
    La classe .newsprint justifie le texte et active les césures, pour imiter
    une colonne de presse imprimée. C'est très bien sur du papier ; dans une
@@ -355,14 +389,16 @@ body {
   color: rgb(var(--color-sepia));
 }
 
-/* Étoile "favori" : rouge très sombre (#8a0303), pensé pour ressortir sur du
-   papier clair — trop éteint sur fond noir, on reprend l'accent éclairci.
-   UNIQUEMENT elle : le tampon-date et la médaille utilisent le même rouge,
-   mais ils sont posés SUR UNE PHOTO en noir et blanc, jamais sur le fond de
-   la page. Ce rouge profond y ressort très bien, et l'éclaircir le faisait
-   virer au rose. */
-[data-theme="material"] .favorite-star {
+/* L'étoile "favori" et le tampon-date des photos sont écrits en dur avec un
+   rouge très sombre (#8a0303), pensé pour du papier clair. On les ramène au
+   rouge UNIQUE du thème, pour qu'il n'y ait pas deux rouges différents à
+   l'écran selon l'élément regardé. */
+[data-theme="material"] .favorite-star,
+[data-theme="material"] .text-\[\#8a0303\] {
   color: rgb(var(--color-journal));
+}
+[data-theme="material"] .border-\[\#8a0303\] {
+  border-color: rgb(var(--color-journal));
 }
 
 /* ---- Thème Material : ornements et cadres -----------------------------

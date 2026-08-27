@@ -239,7 +239,11 @@ const MATERIAL_READER_CSS = `
   h1, .kicker, .article-body h2, .article-body h3 {
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   }
-  .kicker, .meta-top a, .article-body a { color: #ef8383; }
+  /* Même rouge unique que le reste de l'application en thème Material (voir
+     --color-journal dans globals.css) : cette page étant du HTML autonome,
+     la valeur doit y être recopiée en dur — elle n'a accès à aucune variable
+     de l'app. À garder synchronisée si le rouge du thème change. */
+  .kicker, .meta-top a, .article-body a, .fav-star.is-fav { color: #d64040; }
   .meta-top { color: #969696; border-bottom-color: #3c3c3c; }
   .byline, .source-bottom, .fav-star, .embed-note, .article-body figcaption { color: #969696; }
   .double-rule { border-top: 1px solid #3c3c3c; border-bottom: none; }
