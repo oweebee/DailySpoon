@@ -93,12 +93,14 @@ export function EditionView({
   clampSummary = false,
   date,
   mastheadAction,
+  navExtra,
   hideLiveStamp = false
 }: {
   articles: ArticleLike[];
   /** Simplement relayés jusqu'au Masthead du carrousel mobile — voir
    *  CategoryGrid/MobilePagedSection/Masthead. */
   mastheadAction?: ReactNode;
+  navExtra?: ReactNode;
   hideLiveStamp?: boolean;
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  CategoryGrid/MobilePagedSection. */
@@ -272,6 +274,7 @@ export function EditionView({
         clampSummary={clampSummary}
         date={date}
         mastheadAction={mastheadAction}
+        navExtra={navExtra}
         hideLiveStamp={hideLiveStamp}
       />
 

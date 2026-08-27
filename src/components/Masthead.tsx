@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 /** Remplace les "o" de "Sp[o][o]n" dans le masthead par la même silhouette
@@ -24,6 +27,7 @@ export function Masthead({
   date,
   compact = false,
   action,
+  navExtra,
   hideLiveStamp = false
 }: {
   date: Date;
@@ -39,11 +43,24 @@ export function Masthead({
    *  bandeau, ce qui repoussait le début des articles très bas — surtout en
    *  mobile, où ce bandeau est en plus dupliqué à chaque colonne. */
   action?: ReactNode;
+  /** Élément ajouté à DROITE du menu, sur la même ligne (champ de recherche
+   *  de la page "En direct"). Passé en tant que nœud plutôt que rendu ici :
+   *  son état vit chez l'appelant, qui en fait quelque chose (filtrer la
+   *  liste d'articles). */
+  navExtra?: ReactNode;
   /** Masque le timbre "En direct". Utilisé sur /direct même : y proposer un
    *  raccourci vers la page où l'on se trouve déjà n'a aucun intérêt, et ça
    *  libère la place pour le timbre d'action. */
   hideLiveStamp?: boolean;
 }) {
+  // Sert à mettre en évidence l'entrée de menu correspondant à la page
+  // courante. usePathname plutôt qu'une propriété à transmettre : ce bandeau
+  // est rendu depuis une demi-douzaine d'endroits, dont certains composants
+  // serveur, et il aurait fallu faire descendre l'information à travers
+  // toute la chaîne du carrousel mobile juste pour colorer un lien.
+  const pathname = usePathname();
+  const isDirectPage = pathname === "/direct";
+
   const formatted = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
     day: "numeric",
@@ -157,11 +174,15 @@ export function Masthead({
       >
         <span className="capitalize">{formatted}</span>
         <nav
-          className={`flex flex-wrap justify-center sm:flex-nowrap sm:gap-y-0 ${
-            compact ? "gap-x-3 gap-y-0.5 sm:space-x-4" : "gap-x-5 gap-y-1 sm:space-x-6"
+          className={`flex flex-wrap items-center justify-center sm:flex-nowrap sm:gap-y-0 ${
+            compact ? "gap-x-3 gap-y-0.5 sm:gap-x-4" : "gap-x-5 gap-y-1 sm:gap-x-6"
           }`}
         >
-          <Link href="/direct" className="text-journal hover:underline">
+          {/* "En direct" ne s'affiche en rouge que lorsqu'on EST sur cette
+              page — c'est un repère de position, pas une décoration
+              permanente. Ailleurs il se fond dans le menu comme les autres
+              entrées. */}
+          <Link href="/direct" className={`${isDirectPage ? "text-journal" : ""} hover:underline`}>
             En direct
           </Link>
           <Link href="/archive" className="hover:underline">
@@ -173,6 +194,7 @@ export function Masthead({
           <Link href="/admin/categories" className="text-sepia hover:underline">
             Admin
           </Link>
+          {navExtra}
         </nav>
       </div>
       <div className="double-rule rotate-180" />

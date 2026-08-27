@@ -5,7 +5,7 @@ import { EditionView, SourceLine, formatStamp, directTitle, directText, directHr
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
 import { WesternMagnifier } from "./WesternMagnifier";
-import { SpoonDivider } from "./SpoonDivider";
+import { Masthead } from "./Masthead";
 
 export function DirectView({
   initialArticles,
@@ -59,51 +59,40 @@ export function DirectView({
 
   const isSearching = query.trim().length > 0;
 
+  // Champ de recherche transmis au Masthead pour être posé À DROITE du menu,
+  // après "Admin" — et non plus sur une ligne à lui juste en dessous. Son
+  // état reste ici : c'est DirectView qui s'en sert pour remplacer la liste
+  // d'articles par les résultats. Le Masthead ne fait que l'afficher.
+  const searchField = (
+    <label className="ml-auto flex items-center gap-2 border-b border-ink/40 pb-0.5 focus-within:border-journal">
+      <WesternMagnifier className="h-3.5 w-3.5 shrink-0 text-ink/70" />
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Rechercher…"
+        // Étroit, et normalisé (ni majuscules ni interlettrage) : il hérite
+        // sinon du style du menu qui l'entoure, ce qui donne un champ de
+        // saisie tout en capitales espacées.
+        className="w-24 bg-transparent text-xs normal-case italic tracking-normal text-ink placeholder:text-sepia/70 focus:outline-none sm:w-40"
+      />
+    </label>
+  );
+
   return (
     <div>
-      {/* Le timbre "Télégraphier les nouvelles" ne vit plus ici : il est
-          désormais calé à droite du titre dans le bandeau du haut (voir
-          TelegraphButton, passé en "action" au Masthead depuis
-          app/direct/page.tsx). Ne restent donc que l'intitulé de la page et
-          le champ de recherche, désormais sur UNE SEULE ligne (avant :
-          empilés, plus un gros filet noir en dessous — beaucoup de hauteur
-          perdue avant le premier article).
-
-          Grille à 3 colonnes (et non un simple flex justify-between) : la
-          colonne de gauche et celle de la recherche à droite se
-          partagent l'espace restant à parts égales (1fr), ce qui laisse
-          "✦ En direct ✦" VRAIMENT centré sur la ligne — un
-          justify-between l'aurait collé à gauche, et un centrage flex l'aurait
-          décalé de la moitié de la largeur du champ de recherche.
-
-          Colonne de gauche : les trois cuillères (mobile uniquement, voir
-          SpoonDivider) — auparavant sur leur propre ligne, juste au-dessus du
-          Masthead compact du carrousel (EditionView), ce qui creusait un
-          espace vide entre cette ligne et le titre. Remontées ici, sur la
-          même ligne que "En direct", pas de vide en plus, pas de ligne en
-          moins. Vide sur desktop (span vide, comme avant) : ce bandeau y est
-          juste au-dessus du Masthead desktop qui a déjà ses propres
-          cuillères en fin de page (cul-de-lampe). */}
-      <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:mb-6 sm:gap-3">
-        <SpoonDivider className="text-left text-sepia md:hidden" />
-        <p className="text-center text-xs uppercase tracking-[0.35em] text-journal">✦ En direct ✦</p>
-
-        <div className="flex justify-end">
-          <label className="flex items-center gap-2 border-b border-ink/40 pb-1 focus-within:border-journal">
-            <WesternMagnifier className="h-4 w-4 shrink-0 text-ink/70" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher…"
-              // Champ volontairement étroit sous sm : sur la même ligne que
-              // l'intitulé, un champ large repousserait ce dernier hors de son
-              // centrage (voire hors écran) sur un téléphone.
-              className="w-28 bg-transparent text-sm italic text-ink placeholder:text-sepia/70 focus:outline-none sm:w-64"
-            />
-          </label>
-        </div>
+      {/* Bandeau desktop rendu ICI et non dans app/direct/page.tsx : le champ
+          de recherche ci-dessus doit y être injecté, or son état vit dans ce
+          composant. Le laisser dans la page (composant serveur) rendait
+          impossible de l'y faire descendre. */}
+      <div className="hidden md:block">
+        <Masthead date={date} action={mastheadAction} navExtra={searchField} hideLiveStamp />
       </div>
+      {/* L'intitulé "✦ En direct ✦" a été retiré : le menu du bandeau
+          indique déjà la page courante en colorant son entrée "En direct"
+          (voir Masthead), le répéter juste en dessous ne faisait que
+          consommer une ligne. Les trois cuillères mobiles qui
+          l'accompagnaient partaient avec — le carrousel a déjà les siennes. */}
 
       {isSearching ? (
         <SearchResults results={searchResults} searching={searching} />
@@ -119,6 +108,7 @@ export function DirectView({
           clampSummary
           date={date}
           mastheadAction={mastheadAction}
+          navExtra={searchField}
           hideLiveStamp
         />
       )}

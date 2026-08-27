@@ -53,6 +53,7 @@ export function CategoryGrid({
   showFavorite = true,
   date,
   mastheadAction,
+  navExtra,
   hideLiveStamp = false
 }: {
   initialCategories: CategoryEntry[];
@@ -67,6 +68,7 @@ export function CategoryGrid({
   date: Date;
   /** Simplement relayés au Masthead du carrousel mobile — voir Masthead. */
   mastheadAction?: ReactNode;
+  navExtra?: ReactNode;
   hideLiveStamp?: boolean;
 }) {
   const [categories, setCategories] = useState(initialCategories);
@@ -111,6 +113,7 @@ export function CategoryGrid({
         date={date}
         className="md:hidden"
         mastheadAction={mastheadAction}
+        navExtra={navExtra}
         hideLiveStamp={hideLiveStamp}
         pages={categories.map((cat, i) => ({
           key: cat.label,

@@ -255,9 +255,13 @@ body {
   background-image: none;
   aspect-ratio: auto;
   width: auto;
-  height: auto;
-  min-height: 2.25rem;
-  padding: 0.5rem 1rem;
+  /* Hauteur FIXE et identique pour tous les boutons, quel que soit le fond
+     de timbre d'origine et quel que soit leur libellé : c'est ce qui les
+     aligne proprement côte à côte dans le bandeau. Sans elle, "En direct"
+     (une ligne) et "Lancer l'impression du journal" (deux lignes côté JSX)
+     ne faisaient pas la même hauteur. */
+  height: 2.5rem;
+  padding: 0 1rem;
   border-radius: 0.25rem;
   background-color: rgb(var(--color-ink) / 0.1);
   border: 1px solid rgb(var(--color-rule));
@@ -274,6 +278,14 @@ body {
   transform: none;
   filter: none;
   transition: background-color 0.15s ease, border-color 0.15s ease;
+  /* Les libellés longs sont découpés en deux <span> et empilés par un
+     "flex-col" posé côté JSX, pour tenir dans la silhouette très plate du
+     timbre-poste. Sur un bouton d'interface, ils se lisent sur une seule
+     ligne : on repasse donc en rangée, avec une espace entre les deux
+     morceaux (le texte ne contient aucun espace à la jonction). */
+  flex-direction: row;
+  gap: 0.35em;
+  white-space: nowrap;
 }
 
 [data-theme="material"] .stamp-button:hover,
@@ -296,6 +308,41 @@ body {
 [data-theme="material"] .stamp-button > span,
 [data-theme="material"] .stamp-live-text {
   display: inline;
+}
+
+/* ---- Thème Material : textes à gris fixe ------------------------------
+   Le corps des articles, les libellés de formulaire et diverses mentions
+   secondaires utilisent des gris FIXES de la palette Tailwind
+   (text-neutral-500 à 800) plutôt que les couleurs du thème. Sur le papier
+   clair d'origine c'est parfaitement lisible ; sur fond sombre, ce sont des
+   gris foncés sur du noir — le texte devenait quasiment invisible.
+
+   On surcharge ici ces utilitaires plutôt que de les remplacer un par un
+   dans une trentaine d'endroits : le thème journal reste ainsi rigoureusement
+   inchangé (aucune de ses valeurs n'est touchée), et rien ne peut être
+   oublié en route. Une règle CSS non "layered" comme celle-ci passe devant
+   les utilitaires Tailwind, qui vivent eux dans un layer.
+
+   Deux niveaux conservés, comme dans l'original : texte courant bien lisible,
+   mentions secondaires volontairement en retrait. */
+[data-theme="material"] .text-neutral-700,
+[data-theme="material"] .text-neutral-800 {
+  color: rgb(var(--color-ink) / 0.88);
+}
+
+[data-theme="material"] .text-neutral-500,
+[data-theme="material"] .text-neutral-600 {
+  color: rgb(var(--color-sepia));
+}
+
+/* Étoile "favori" et tampon "médaille" : rouge très sombre (#8a0303), pensé
+   pour ressortir sur du papier clair. Illisible sur fond noir — on reprend
+   l'accent éclairci du thème. */
+[data-theme="material"] .text-\[\#8a0303\] {
+  color: rgb(var(--color-journal));
+}
+[data-theme="material"] .border-\[\#8a0303\] {
+  border-color: rgb(var(--color-journal));
 }
 
 /* ---- Thème Material : ornements et cadres -----------------------------

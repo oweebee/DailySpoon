@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { Masthead } from "@/components/Masthead";
 import { DirectView } from "@/components/DirectView";
 import { TelegraphButton } from "@/components/TelegraphButton";
 import { getSettings } from "@/lib/settings";
@@ -76,16 +75,9 @@ export default async function DirectPage() {
 
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
-      {/* Masqué en mobile : chaque page du carrousel de colonnes (voir
-          MobilePagedSection, via EditionView/CategoryGrid) y affiche sa
-          propre copie du menu, donc ce Masthead unique ne reste utile qu'en
-          desktop/tablette.
-          "hideLiveStamp" : inutile de proposer un raccourci "En direct"
-          depuis la page En direct elle-même — la place sert au timbre
-          d'action, calé à droite sur la ligne du titre. */}
-      <div className="hidden md:block">
-        <Masthead date={editionDate} action={<TelegraphButton />} hideLiveStamp />
-      </div>
+      {/* Le bandeau desktop est rendu par DirectView lui-même (et non ici) :
+          il doit recevoir le champ de recherche, dont l'état vit dans ce
+          composant client. Voir DirectView. */}
       <DirectView
         initialArticles={articles}
         categoryOrder={categoryOrder}
