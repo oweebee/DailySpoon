@@ -65,6 +65,18 @@ export default async function HomePage() {
 
   const editionDate = latestEdition?.date ?? new Date();
 
+  // Libellé du compte d'articles, calculé une fois : il s'affiche à DEUX
+  // endroits selon la largeur — sur sa propre ligne en desktop, et à droite du
+  // titre dans le bandeau compact du carrousel en PWA.
+  const countLabel = (
+    <>
+      {articles.length} article{articles.length > 1 ? "s" : ""}
+      {latestEdition?.sourcePoolCount != null && latestEdition.sourcePoolCount !== articles.length && (
+        <> (sur {latestEdition.sourcePoolCount} récupéré{latestEdition.sourcePoolCount > 1 ? "s" : ""})</>
+      )}
+    </>
+  );
+
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
       {/* Masqué en mobile : chaque page du carrousel de FrontPageView y
@@ -89,15 +101,13 @@ export default async function HomePage() {
           le vivier de départ (avant plafond IA par catégorie) entre
           parenthèses quand il diffère du compte final retenu sur la une.
           Voir aussi /archive/[id] pour l'équivalent sur une édition passée.
-          Pas de marge négative en mobile : le Masthead au-dessus y est masqué
-          (il vit dans le carrousel), donc il n'y a rien à remonter — ça ne
-          ferait que coller cette ligne au bord du panneau. */}
+          Masqué SOUS sm : en PWA, ce compte est affiché à droite du titre
+          dans le bandeau du carrousel (voir titleAside plus bas) plutôt que
+          sur une ligne à lui — le laisser ici aussi le ferait apparaître deux
+          fois. */}
       {latestEdition && articles.length > 0 && (
-        <p className="mb-3 text-center text-xs uppercase tracking-[0.3em] text-sepia sm:mb-6 sm:-mt-6">
-          {articles.length} article{articles.length > 1 ? "s" : ""}
-          {latestEdition.sourcePoolCount != null && latestEdition.sourcePoolCount !== articles.length && (
-            <> (sur {latestEdition.sourcePoolCount} récupéré{latestEdition.sourcePoolCount > 1 ? "s" : ""})</>
-          )}
+        <p className="mb-3 hidden text-center text-xs uppercase tracking-[0.3em] text-sepia sm:mb-6 sm:-mt-6 sm:block">
+          {countLabel}
         </p>
       )}
       {articles.length > 0 ? (
@@ -107,6 +117,13 @@ export default async function HomePage() {
           date={editionDate}
           mastheadAction={
             settings.editionScheduleEnabled ? undefined : <PrintStampButton provider={settings.aiProvider} />
+          }
+          mastheadTitleAside={
+            latestEdition ? (
+              <span className="shrink-0 whitespace-nowrap text-[0.6rem] uppercase tracking-[0.2em] text-sepia">
+                {countLabel}
+              </span>
+            ) : undefined
           }
         />
       ) : (

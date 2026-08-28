@@ -212,7 +212,11 @@ export function CategoryColumn({
       {!expanded && !autoInfinite && remaining > 0 && (
         <button
           onClick={handleShowMore}
-          className="mt-3 w-full border-t border-dashed border-ink/40 pt-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:text-ink hover:underline"
+          // Filet pointillé en bordure BASSE (et non haute) : ce bouton
+          // appartient à la rubrique qui le précède, il doit donc rester du
+          // même côté qu'elle. En bordure haute, le trait passait avant le
+          // bouton, qui semblait alors annoncer la rubrique SUIVANTE.
+          className="mt-3 w-full border-b border-dashed border-ink/40 pb-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:text-ink hover:underline"
         >
           {scrollExpand
             ? "Afficher plus d'articles"

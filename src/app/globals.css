@@ -311,6 +311,22 @@ body {
   white-space: nowrap;
 }
 
+/* En compact (PWA), les timbres occupent une ligne à eux : ils s'y partagent
+   toute la largeur à parts égales plutôt que de rester tassés à gauche.
+   "min-width: 0" indispensable — sans lui, un élément flex refuse de
+   rétrécir en dessous de la largeur de son contenu et le dernier bouton
+   déborderait de l'écran. Réservé au thème Material : dans le thème journal,
+   les timbres sont des IMAGES à ratio fixe, les étirer les entourerait de
+   vide. */
+[data-theme="material"] .stamp-row.w-full > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+[data-theme="material"] .stamp-row.w-full .stamp-button,
+[data-theme="material"] .stamp-row.w-full .stamp-live {
+  width: 100%;
+}
+
 [data-theme="material"] .stamp-button:hover,
 [data-theme="material"] .stamp-live:hover {
   transform: none;

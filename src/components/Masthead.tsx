@@ -27,6 +27,7 @@ export function Masthead({
   date,
   compact = false,
   action,
+  titleAside,
   navExtra,
   hideLiveStamp = false
 }: {
@@ -43,6 +44,10 @@ export function Masthead({
    *  bandeau, ce qui repoussait le début des articles très bas — surtout en
    *  mobile, où ce bandeau est en plus dupliqué à chaque colonne. */
   action?: ReactNode;
+  /** Élément posé à DROITE du titre, sur la même ligne — uniquement en mode
+   *  compact (PWA). Sert au compte d'articles de l'accueil, qui occupait
+   *  sinon une ligne à lui seul juste au-dessus du bandeau. */
+  titleAside?: ReactNode;
   /** Élément ajouté à DROITE du menu, sur la même ligne (champ de recherche
    *  de la page "En direct"). Passé en tant que nœud plutôt que rendu ici :
    *  son état vit chez l'appelant, qui en fait quelque chose (filtrer la
@@ -67,6 +72,67 @@ export function Masthead({
     month: "long",
     year: "numeric"
   }).format(date);
+
+  // Groupe des timbres (raccourci "En direct" + timbre d'action de la page),
+  // extrait en variable parce qu'il se place à DEUX endroits différents selon
+  // la largeur : à droite du titre en desktop, et sur une ligne à lui en
+  // compact (PWA) — voir le rendu plus bas.
+  //
+  // "items-start" et non "items-center" : le timbre d'impression emporte sous
+  // lui une mention d'avertissement (conso de tokens), ce qui rend son bloc
+  // plus haut que le timbre "En direct" voisin. Centrés, les deux blocs
+  // s'alignaient sur leur milieu — donc des bords hauts décalés, alors que ce
+  // sont les BOUTONS eux-mêmes qu'on veut voir alignés.
+  const stamps = (
+          {/* "items-start" et non "items-center" : le timbre d'impression
+              emporte sous lui une mention d'avertissement (conso de tokens),
+              ce qui rend son bloc plus haut que le timbre "En direct" voisin.
+              Centrés, les deux blocs s'alignaient sur leur milieu — donc des
+              bords hauts décalés, alors que ce sont les BOUTONS eux-mêmes
+              qu'on veut voir alignés. Calés en haut, leurs bords supérieurs
+              coïncident et l'avertissement pend simplement en dessous. */}
+    <div className={`stamp-row flex items-start gap-2 sm:gap-3 ${compact ? "w-full" : "shrink-0"}`}>
+            {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
+                globals.css), qui NE se combine PAS avec ".stamp-button" :
+                les deux se disputaient la propriété "transform" (rotation vs
+                centrage), et la rotation ne s'affichait alors jamais. Le
+                fond reste droit ; seul le texte, enveloppé dans
+                .stamp-live-text, garde l'inclinaison. */}
+            {!hideLiveStamp && (
+              <Link
+                href="/direct"
+                // Timbre "md" (700/270) et non plus "sm" (600/406) : ce
+                // dernier est presque carré, donc très étroit une fois sa
+                // hauteur alignée sur celle du timbre d'action — "EN DIRECT"
+                // n'y tenait pas et débordait sur le cadre perforé de
+                // l'image. Le "md" est nettement plus large à hauteur égale,
+                // ce qui correspond bien mieux à un texte court et large.
+                //
+                // Hauteur ET largeur fixées, dans le ratio EXACT de l'image
+                // (700/270) : c'est ce qui aligne ce timbre sur son voisin
+                // (même hauteur à chaque palier) sans jamais le déformer. En
+                // ne fixant que la hauteur, la largeur d'un élément flex se
+                // calculerait sur son contenu, pas sur le ratio.
+                //
+                // px-* INDISPENSABLE : l'image de timbre a un cadre perforé
+                // décoratif sur son pourtour, le texte ne doit donc jamais
+                // occuper toute la largeur de la boîte. Les tailles de police
+                // ci-dessous laissent volontairement une grosse marge (le
+                // texte occupe environ la moitié de la place disponible) :
+                // une police se mesure mal à l'estimation, et un débordement
+                // est bien plus laid qu'un texte un peu petit.
+                className={`stamp-live stamp-bg-md flex shrink-0 items-center justify-center font-display uppercase leading-none text-white ${
+                  compact
+                    ? "h-[2rem] w-[5.2rem] px-2 text-[0.42rem] tracking-[0.05em]"
+                    : "h-[2.75rem] w-[7.15rem] px-3 text-[0.5rem] tracking-[0.05em] md:h-[3.25rem] md:w-[8.45rem] md:px-4 md:text-[0.6rem] md:tracking-[0.06em]"
+                }`}
+              >
+                <span className="stamp-live-text whitespace-nowrap">En direct</span>
+              </Link>
+            )}
+            {action}
+          </div>
+  );
 
   return (
     <header className={compact ? "mb-3" : "mb-10"}>
@@ -113,55 +179,20 @@ export function Masthead({
             <SpoonO />n
           </Link>
 
-          {/* "items-start" et non "items-center" : le timbre d'impression
-              emporte sous lui une mention d'avertissement (conso de tokens),
-              ce qui rend son bloc plus haut que le timbre "En direct" voisin.
-              Centrés, les deux blocs s'alignaient sur leur milieu — donc des
-              bords hauts décalés, alors que ce sont les BOUTONS eux-mêmes
-              qu'on veut voir alignés. Calés en haut, leurs bords supérieurs
-              coïncident et l'avertissement pend simplement en dessous. */}
-          <div className="flex shrink-0 items-start gap-2 sm:gap-3">
-            {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
-                globals.css), qui NE se combine PAS avec ".stamp-button" :
-                les deux se disputaient la propriété "transform" (rotation vs
-                centrage), et la rotation ne s'affichait alors jamais. Le
-                fond reste droit ; seul le texte, enveloppé dans
-                .stamp-live-text, garde l'inclinaison. */}
-            {!hideLiveStamp && (
-              <Link
-                href="/direct"
-                // Timbre "md" (700/270) et non plus "sm" (600/406) : ce
-                // dernier est presque carré, donc très étroit une fois sa
-                // hauteur alignée sur celle du timbre d'action — "EN DIRECT"
-                // n'y tenait pas et débordait sur le cadre perforé de
-                // l'image. Le "md" est nettement plus large à hauteur égale,
-                // ce qui correspond bien mieux à un texte court et large.
-                //
-                // Hauteur ET largeur fixées, dans le ratio EXACT de l'image
-                // (700/270) : c'est ce qui aligne ce timbre sur son voisin
-                // (même hauteur à chaque palier) sans jamais le déformer. En
-                // ne fixant que la hauteur, la largeur d'un élément flex se
-                // calculerait sur son contenu, pas sur le ratio.
-                //
-                // px-* INDISPENSABLE : l'image de timbre a un cadre perforé
-                // décoratif sur son pourtour, le texte ne doit donc jamais
-                // occuper toute la largeur de la boîte. Les tailles de police
-                // ci-dessous laissent volontairement une grosse marge (le
-                // texte occupe environ la moitié de la place disponible) :
-                // une police se mesure mal à l'estimation, et un débordement
-                // est bien plus laid qu'un texte un peu petit.
-                className={`stamp-live stamp-bg-md flex shrink-0 items-center justify-center font-display uppercase leading-none text-white ${
-                  compact
-                    ? "h-[2rem] w-[5.2rem] px-2 text-[0.42rem] tracking-[0.05em]"
-                    : "h-[2.75rem] w-[7.15rem] px-3 text-[0.5rem] tracking-[0.05em] md:h-[3.25rem] md:w-[8.45rem] md:px-4 md:text-[0.6rem] md:tracking-[0.06em]"
-                }`}
-              >
-                <span className="stamp-live-text whitespace-nowrap">En direct</span>
-              </Link>
-            )}
-            {action}
-          </div>
+          {/* En COMPACT (PWA) : le titre partage sa ligne avec le compte
+              d'articles, calé à droite — celui-ci occupait sinon une ligne
+              entière juste au-dessus du bandeau. Les timbres, eux, descendent
+              sur leur propre ligne (voir juste en dessous) où ils disposent
+              de toute la largeur.
+              En desktop : disposition inchangée, les timbres restent à droite
+              du titre. */}
+          {compact ? titleAside : stamps}
         </div>
+
+        {/* Ligne de timbres en pleine largeur, réservée au mode compact : sur
+            un écran de téléphone, titre ET timbres sur la même ligne ne
+            laissaient à chacun qu'une place étriquée. */}
+        {compact && <div className="pb-2">{stamps}</div>}
 
         <div className="double-rule" />
       </div>

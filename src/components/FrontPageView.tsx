@@ -31,7 +31,8 @@ export function FrontPageView({
   articles,
   categoryOrder = [],
   date,
-  mastheadAction
+  mastheadAction,
+  mastheadTitleAside
 }: {
   articles: ArticleLike[];
   categoryOrder?: CategoryOrderEntry[];
@@ -39,6 +40,9 @@ export function FrontPageView({
    *  titre dans le bandeau — relayé au carrousel mobile, qui rend sa propre
    *  copie du bandeau pour chaque rubrique. Voir Masthead. */
   mastheadAction?: ReactNode;
+  /** Compte d'articles, affiché à droite du titre dans le bandeau compact
+   *  (PWA) plutôt que sur une ligne à lui — voir Masthead. */
+  mastheadTitleAside?: ReactNode;
   /** Date de l'édition (Masthead) — dupliquée en haut de CHAQUE page du
    *  carrousel mobile (voir MobilePagedSection), puisque chaque rubrique y
    *  emporte sa propre copie du menu du haut plutôt que de partager celui
@@ -171,6 +175,7 @@ export function FrontPageView({
           pages={mobilePages}
           className="mb-10 sm:hidden"
           mastheadAction={mastheadAction}
+          titleAside={mastheadTitleAside}
         />
       )}
 

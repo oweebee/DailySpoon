@@ -110,6 +110,7 @@ export function MobilePagedSection({
   pages,
   className = "",
   mastheadAction,
+  titleAside,
   navExtra,
   hideLiveStamp = false
 }: {
@@ -121,6 +122,8 @@ export function MobilePagedSection({
    *  bandeau — chaque copie est indépendante, ce qui est sans conséquence
    *  puisque l'action recharge la page. */
   mastheadAction?: ReactNode;
+  /** Posé à droite du titre en compact (compte d'articles) — voir Masthead. */
+  titleAside?: ReactNode;
   /** Élément posé à droite du menu (recherche) — voir Masthead. */
   navExtra?: ReactNode;
   /** Masque le timbre "En direct" du bandeau (déjà sur /direct). */
@@ -294,7 +297,7 @@ export function MobilePagedSection({
           }}
           className="w-full shrink-0 snap-center px-6"
         >
-          <Masthead date={date} compact action={mastheadAction} navExtra={navExtra} hideLiveStamp={hideLiveStamp} />
+          <Masthead date={date} compact action={mastheadAction} titleAside={titleAside} navExtra={navExtra} hideLiveStamp={hideLiveStamp} />
           {page.content}
         </div>
       ))}
