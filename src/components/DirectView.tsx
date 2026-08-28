@@ -18,9 +18,9 @@ export function DirectView({
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  EditionView/CategoryGrid/MobilePagedSection. */
   date: Date;
-  /** Timbre "Télégraphier les nouvelles", relayé jusqu'au Masthead du
-   *  carrousel mobile. Le timbre "En direct" y est toujours masqué : on est
-   *  déjà sur cette page. */
+  /** Timbre "Télégraphier les nouvelles" — SEUL timbre d'action de cette
+   *  page (le Journal IA a le sien, "Lancer l'impression"). Relayé jusqu'au
+   *  Masthead du carrousel mobile. */
   mastheadAction?: ReactNode;
 }) {
   // Recherche live : interroge /api/articles/search (tout l'historique en
@@ -81,18 +81,36 @@ export function DirectView({
 
   return (
     <div>
-      {/* Bandeau desktop rendu ICI et non dans app/direct/page.tsx : le champ
-          de recherche ci-dessus doit y être injecté, or son état vit dans ce
-          composant. Le laisser dans la page (composant serveur) rendait
-          impossible de l'y faire descendre. */}
+      {/* Bandeau desktop rendu ICI et non dans la page : le champ de
+          recherche ci-dessus doit y être injecté, or son état vit dans ce
+          composant client. Le laisser dans la page (composant serveur)
+          rendait impossible de l'y faire descendre. */}
       <div className="hidden md:block">
-        <Masthead date={date} action={mastheadAction} navExtra={searchField} hideLiveStamp />
+        <Masthead date={date} action={mastheadAction} navExtra={searchField} />
       </div>
-      {/* L'intitulé "✦ En direct ✦" a été retiré : le menu du bandeau
-          indique déjà la page courante en colorant son entrée "En direct"
-          (voir Masthead), le répéter juste en dessous ne faisait que
-          consommer une ligne. Les trois cuillères mobiles qui
-          l'accompagnaient partaient avec — le carrousel a déjà les siennes. */}
+      {/* Bandeau mobile de secours, affiché UNIQUEMENT pendant une recherche.
+          Hors recherche, c'est le carrousel qui fournit le bandeau (une copie
+          par colonne) ; mais il disparaît avec les colonnes dès qu'on tape,
+          et on se retrouvait alors sans titre ni menu — donc sans moyen de
+          quitter la page. Il ne contient pas le champ de recherche : celui-ci
+          est juste en dessous, hors de toute condition, pour ne jamais perdre
+          le focus (voir ci-après). */}
+      {isSearching && (
+        <div className="md:hidden">
+          <Masthead date={date} compact action={mastheadAction} />
+        </div>
+      )}
+
+      {/* Champ de recherche MOBILE, rendu ici et non dans le bandeau.
+          En desktop il vit bien dans le menu (voir le Masthead ci-dessus),
+          parce que ce bandeau-là est permanent. En mobile, le seul bandeau
+          est celui que le carrousel duplique à chaque colonne — or dès la
+          première lettre tapée, le carrousel est remplacé par les résultats
+          de recherche : le champ disparaissait donc du DOM au moment même où
+          on écrivait dedans, emportant le focus et le clavier, et la page
+          semblait se vider. Rendu ICI, hors de la condition, il reste monté
+          quoi qu'il arrive. */}
+      <div className="mb-3 flex justify-end md:hidden">{searchField}</div>
 
       {isSearching ? (
         <SearchResults results={searchResults} searching={searching} />
@@ -108,8 +126,6 @@ export function DirectView({
           clampSummary
           date={date}
           mastheadAction={mastheadAction}
-          navExtra={searchField}
-          hideLiveStamp
         />
       )}
     </div>
@@ -153,7 +169,7 @@ function SearchResults({ results, searching }: { results: ArticleLike[] | null; 
             </ArticleLink>
           )}
           <h3 className="font-display text-base font-bold leading-snug">{directTitle(article)}</h3>
-          <p className="newsprint mt-1 line-clamp-[10] text-[0.8rem] leading-snug text-neutral-700">
+          <p className="mt-1 line-clamp-[10] text-[0.8rem] leading-snug text-neutral-700">
             {directText(article)}
           </p>
           <SourceLine article={article} showDate={!article.imageUrl} />

@@ -111,8 +111,7 @@ export function MobilePagedSection({
   className = "",
   mastheadAction,
   titleAside,
-  navExtra,
-  hideLiveStamp = false
+  navExtra
 }: {
   date: Date;
   pages: { key: string; content: ReactNode }[];
@@ -126,8 +125,6 @@ export function MobilePagedSection({
   titleAside?: ReactNode;
   /** Élément posé à droite du menu (recherche) — voir Masthead. */
   navExtra?: ReactNode;
-  /** Masque le timbre "En direct" du bandeau (déjà sur /direct). */
-  hideLiveStamp?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -297,7 +294,7 @@ export function MobilePagedSection({
           }}
           className="w-full shrink-0 snap-center px-6"
         >
-          <Masthead date={date} compact action={mastheadAction} titleAside={titleAside} navExtra={navExtra} hideLiveStamp={hideLiveStamp} />
+          <Masthead date={date} compact action={mastheadAction} titleAside={titleAside} navExtra={navExtra} />
           {page.content}
         </div>
       ))}

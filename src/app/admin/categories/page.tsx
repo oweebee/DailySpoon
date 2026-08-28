@@ -725,7 +725,7 @@ export default function AdminCategoriesPage() {
                   !editFeedForm.categoryChoice ||
                   (editFeedForm.categoryChoice === "new" && !editFeedForm.newCategoryLabel.trim())
                 }
-                className="stamp-button stamp-bg-md inline-flex items-center justify-center px-3 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+                className="stamp-button font-display uppercase disabled:opacity-50"
               >
                 {savingFeedEdit ? "Enregistrement..." : "Enregistrer"}
               </button>
@@ -926,7 +926,7 @@ export default function AdminCategoriesPage() {
         Catégories & flux FreshRSS
       </h1>
 
-      <p className="newsprint mb-6 text-sm text-neutral-700">
+      <p className="mb-6 text-sm text-neutral-700">
         La gestion des flux (ajout, suppression, organisation) se fait directement dans FreshRSS.
         Ici, tu choisis quelles catégories — et quels flux précis, regroupés dessous — DailySpoon
         doit inclure. Décocher une catégorie ou un flux le retire immédiatement de l’édition
@@ -940,7 +940,7 @@ export default function AdminCategoriesPage() {
           ce cas, ce qui suffit déjà à ne montrer que les perso. */}
       {!loading && (categories.length > 0 || customCategories.length > 0) && (
         <CollapsibleSection title="Impression IA">
-          <p className="newsprint mb-4 text-sm text-neutral-700">
+          <p className="mb-4 text-sm text-neutral-700">
             L’impression IA (la une générée sur la page d’accueil, uniquement les news du jour) est
             indépendante d’« En direct » : elle liste ici TOUTES les catégories, FreshRSS ET
             personnalisées, cochées ou non pour En direct, et travaille directement sur les news
@@ -1004,7 +1004,7 @@ export default function AdminCategoriesPage() {
       )}
 
       <CollapsibleSection title="Catégories & flux personnalisés">
-      <p className="newsprint mb-6 text-sm text-neutral-700">
+      <p className="mb-6 text-sm text-neutral-700">
         Crée d’abord une catégorie personnalisée si besoin, ajoute ensuite un flux RSS/Atom (sans
         passer par FreshRSS) en choisissant où le ranger — une catégorie FreshRSS existante (le flux
         est alors traité en tout point comme un flux FreshRSS de cette catégorie, affichage En direct
@@ -1025,7 +1025,7 @@ export default function AdminCategoriesPage() {
           type="button"
           onClick={forceSyncCustomFeeds}
           disabled={forcingSync}
-          className="stamp-button stamp-bg-lg inline-flex h-24 items-center justify-center whitespace-nowrap px-10 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+          className="stamp-button font-display uppercase disabled:opacity-50"
         >
           {forcingSync ? "Récupération en cours..." : "Forcer la récupération maintenant"}
         </button>
@@ -1115,7 +1115,7 @@ export default function AdminCategoriesPage() {
               !feedForm.categoryChoice ||
               (feedForm.categoryChoice === "new" && !feedForm.newCategoryLabel.trim())
             }
-            className="stamp-button stamp-bg-md inline-flex items-center justify-center px-4 font-display text-xs uppercase tracking-[0.2em] text-paper disabled:opacity-50"
+            className="stamp-button font-display uppercase disabled:opacity-50"
           >
             {addingFeed ? "Ajout..." : "Ajouter le flux"}
           </button>

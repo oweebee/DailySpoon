@@ -1,137 +1,93 @@
+// Page d'ACCUEIL du site : "En direct", toutes les rubriques en colonnes,
+// sans aucune IA. C'est la page consultée au quotidien, d'où sa place à la
+// racine depuis la V1 — la "une" produite par l'IA vit maintenant sur
+// /journal. L'ancienne adresse /direct redirige ici (voir src/app/direct).
 import { prisma } from "@/lib/prisma";
-import { Masthead } from "@/components/Masthead";
-import { FrontPageView } from "@/components/FrontPageView";
-import { PrintStampButton } from "@/components/PrintStampButton";
+import { DirectView } from "@/components/DirectView";
+import { TelegraphButton } from "@/components/TelegraphButton";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  // La une ne montre QUE les articles de la dernière impression (l'édition
-  // la plus récente) — pas un flot glissant toutes éditions confondues comme
-  // avant. Elle reste donc figée telle quelle jusqu'à la prochaine
-  // impression, plutôt que de bouger toute seule au fil des aspirations en
-  // arrière-plan.
+  const { freshrssEnabled } = await getSettings();
+
+  // Même agrégation que la page d'accueil : on ne filtre pas sur l'édition
+  // du jour, sinon toute catégorie sans nouveauté aujourd'hui apparaît vide
+  // et tout ce qui a été aspiré hier disparaît dès minuit. On prend les
+  // articles les plus récents toutes éditions confondues ; EditionView ne
+  // plafonne plus par catégorie (l'encart "Afficher plus d'articles" sur
+  // desktop défile en interne dans tout ce qui est chargé ici).
   //
-  // Plusieurs éditions peuvent désormais partager la même date (chaque
-  // régénération est conservée séparément) : trier uniquement par "date"
-  // laissait l'ordre entre elles indéfini en cas d'égalité, et pouvait donc
-  // faire remonter une édition vide/plus ancienne du même jour au lieu de la
-  // toute dernière — d'où "generatedAt" en second critère, et le filtre sur
-  // "published" pour ignorer les brouillons vides (rien de neuf à récupérer
-  // ce jour-là, aucun article qualifiant...).
-  const latestEdition = await prisma.edition.findFirst({
-    where: { status: "published" },
-    orderBy: [{ date: "desc" }, { generatedAt: "desc" }]
-  });
+  // FreshRSS désactivé (voir /admin/settings) : les articles FreshRSS déjà
+  // en base restent en base (pour la recherche, /api/articles/search, qui
+  // interroge la table sans ce filtre) mais n'apparaissent plus ici — sur
+  // demande explicite, pour ne pas mélanger du contenu "figé" (plus jamais
+  // rafraîchi tant que c'est désactivé) avec les flux perso toujours actifs.
+  // Un article de flux perso a TOUJOURS un feedId préfixé "custom-feed:"
+  // (voir customFeedFreshrssId / customFeeds.ts, feedId jamais null pour eux)
+  // — c'est le SEUL marqueur fiable d'un article perso, donc on ne garde QUE
+  // ceux-là. Tout le reste (feedId FreshRSS, ou feedId null quand
+  // item.origin.streamId manquait à l'ingestion) est du FreshRSS et doit
+  // disparaître : un feedId null n'est jamais un flux perso, l'inclure "par
+  // prudence" laissait justement passer tous les vieux articles FreshRSS.
+  // Filtre commun à toutes les requêtes d'articles ci-dessous : voir plus haut
+  // (FreshRSS désactivé -> uniquement les flux perso "custom-feed:").
+  const feedFilter = freshrssEnabled ? {} : { feedId: { startsWith: "custom-feed:" } };
 
-  const [selectedCategories, settings] = await Promise.all([
+  const [latestEdition, selectedCategories, distinctLabels] = await Promise.all([
+    // "generatedAt" en second critère : plusieurs éditions peuvent désormais
+    // partager la même date (une par régénération), sinon l'ordre entre
+    // elles n'est pas garanti et le masthead pourrait afficher une date
+    // correcte mais issue d'une édition qui n'est pas vraiment la dernière.
+    prisma.edition.findFirst({ orderBy: [{ date: "desc" }, { generatedAt: "desc" }] }),
     prisma.selectedCategory.findMany({ orderBy: { order: "asc" } }),
-    getSettings()
+    // Les LIBELLÉS de catégorie distincts présents parmi les articles à
+    // afficher — pour ensuite récupérer les plus récents CATÉGORIE PAR
+    // CATÉGORIE (voir plus bas).
+    prisma.article.findMany({
+      where: { processed: true, included: true, ...feedFilter },
+      select: { categoryLabel: true },
+      distinct: ["categoryLabel"]
+    })
   ]);
-  const categoryOrder = selectedCategories.map((c) => ({ freshrssId: c.freshrssId, label: c.label }));
 
-  // La une lit désormais la photo figée (EditionArticle) de cette édition,
-  // pas la table Article "vivante" : Article.editionId pointe seulement vers
-  // la DERNIÈRE édition ayant touché cet article, et serait donc réattribué
-  // (voire vidé) dès la génération suivante si on continuait à s'en servir
-  // ici. EditionArticle ne change plus jamais après coup — voir
-  // schema.prisma et generateEdition.ts. Le contenu réel est sur
-  // ArticleSnapshotContent (déduplication entre régénérations d'un même
-  // jour), d'où le "include" ci-dessous.
-  const snapshot = latestEdition
-    ? await prisma.editionArticle.findMany({
-        where: { editionId: latestEdition.id },
-        include: { content: true },
-        orderBy: { content: { publishedAt: "desc" } }
+  // Récupération des plus récents PAR CATÉGORIE plutôt qu'un plafond global.
+  // Avant, un simple `take: 1000` trié par date toutes catégories confondues
+  // coupait la queue la plus ancienne — et une catégorie qui publie moins vite
+  // (ex. un journal scientifique dont le dernier article date de plusieurs
+  // jours) voyait TOUS ses articles tomber hors de ces 1000, donc disparaissait
+  // ENTIÈREMENT d'« En direct » alors que ses articles étaient bien inclus (bug
+  // "catégorie Science absente", constaté avec 1288 articles inclus > 1000).
+  // Ici chaque catégorie est garantie représentée par ses propres articles
+  // récents, quelle que soit sa cadence de publication. Le plafond par
+  // catégorie reste large (bien au-delà de ce qu'une colonne affiche, même
+  // déroulée) — c'est juste un garde-fou de volume, pas une curation.
+  const PER_CATEGORY_LIMIT = 250;
+  const perCategory = await Promise.all(
+    distinctLabels.map((row) =>
+      prisma.article.findMany({
+        where: { processed: true, included: true, ...feedFilter, categoryLabel: row.categoryLabel },
+        orderBy: { publishedAt: "desc" },
+        take: PER_CATEGORY_LIMIT
       })
-    : [];
-
-  const articles = snapshot.map((a) => ({
-    id: a.id,
-    headline: a.content.headline,
-    summary: a.content.summary,
-    frontPageSummary: a.content.frontPageSummary,
-    category: a.content.category,
-    priorityScore: a.content.priorityScore,
-    sourceUrl: a.content.sourceUrl,
-    sourceTitle: a.content.sourceTitle,
-    feedTitle: a.content.feedTitle,
-    imageUrl: a.content.imageUrl,
-    publishedAt: a.content.publishedAt,
-    favorite: false,
-    medal: a.content.medal
-  }));
-
-  const editionDate = latestEdition?.date ?? new Date();
-
-  // Libellé du compte d'articles, calculé une fois : il s'affiche à DEUX
-  // endroits selon la largeur — sur sa propre ligne en desktop, et à droite du
-  // titre dans le bandeau compact du carrousel en PWA.
-  const countLabel = (
-    <>
-      {articles.length} article{articles.length > 1 ? "s" : ""}
-      {latestEdition?.sourcePoolCount != null && latestEdition.sourcePoolCount !== articles.length && (
-        <> (sur {latestEdition.sourcePoolCount} récupéré{latestEdition.sourcePoolCount > 1 ? "s" : ""})</>
-      )}
-    </>
+    )
   );
+  const articles = perCategory.flat();
+  const categoryOrder = selectedCategories.map((c) => ({ freshrssId: c.freshrssId, label: c.label }));
+  const editionDate = latestEdition?.date ?? new Date();
 
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
-      {/* Masqué en mobile : chaque page du carrousel de FrontPageView y
-          affiche sa propre copie du menu (voir MobilePagedSection), donc ce
-          Masthead unique ne reste utile qu'en desktop/tablette.
-          Le timbre d'impression est passé en "action" : il s'affiche calé à
-          droite sur la ligne du titre, au lieu de l'ancien gros bloc centré
-          au-dessus du bandeau. Planning désactivé dans /admin/settings : pas
-          de génération auto, donc on propose ce déclenchement manuel — sinon
-          aucun timbre d'action, le worker s'en charge tout seul. */}
-      <div className="hidden sm:block">
-        <Masthead
-          date={editionDate}
-          action={
-            settings.editionScheduleEnabled ? undefined : <PrintStampButton provider={settings.aiProvider} />
-          }
-        />
-      </div>
-      {/* Compte d'articles affiché en permanence (pas seulement dans le
-          message transitoire du bouton d'impression, qui peut ne jamais
-          s'afficher si la requête traîne au-delà du timeout du proxy) — avec
-          le vivier de départ (avant plafond IA par catégorie) entre
-          parenthèses quand il diffère du compte final retenu sur la une.
-          Voir aussi /archive/[id] pour l'équivalent sur une édition passée.
-          Masqué SOUS sm : en PWA, ce compte est affiché à droite du titre
-          dans le bandeau du carrousel (voir titleAside plus bas) plutôt que
-          sur une ligne à lui — le laisser ici aussi le ferait apparaître deux
-          fois. */}
-      {latestEdition && articles.length > 0 && (
-        <p className="mb-3 hidden text-center text-xs uppercase tracking-[0.3em] text-sepia sm:mb-6 sm:-mt-6 sm:block">
-          {countLabel}
-        </p>
-      )}
-      {articles.length > 0 ? (
-        <FrontPageView
-          articles={articles}
-          categoryOrder={categoryOrder}
-          date={editionDate}
-          mastheadAction={
-            settings.editionScheduleEnabled ? undefined : <PrintStampButton provider={settings.aiProvider} />
-          }
-          mastheadTitleAside={
-            latestEdition ? (
-              <span className="shrink-0 whitespace-nowrap text-[0.6rem] uppercase tracking-[0.2em] text-sepia">
-                {countLabel}
-              </span>
-            ) : undefined
-          }
-        />
-      ) : (
-        <p className="py-24 text-center italic text-sepia">
-          Aucune édition générée pour l’instant. Sélectionne des catégories FreshRSS dans l’admin
-          puis lance une génération.
-        </p>
-      )}
+      {/* Le bandeau desktop est rendu par DirectView lui-même (et non ici) :
+          il doit recevoir le champ de recherche, dont l'état vit dans ce
+          composant client. Voir DirectView. */}
+      <DirectView
+        initialArticles={articles}
+        categoryOrder={categoryOrder}
+        date={editionDate}
+        mastheadAction={<TelegraphButton />}
+      />
     </main>
   );
 }

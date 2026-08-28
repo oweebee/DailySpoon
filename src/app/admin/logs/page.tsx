@@ -178,7 +178,7 @@ export default function AdminLogsPage() {
 
       <h1 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-[0.15em]">Journal</h1>
 
-      <p className="newsprint mb-8 text-sm text-neutral-700">
+      <p className="mb-8 text-sm text-neutral-700">
         Trace en direct la récupération des flux (persos et FreshRSS), la génération de l’édition, les
         appels IA et le worker — pour voir d’un coup d’œil si tout se passe bien, sans aller fouiller
         les logs bruts du serveur. Se rafraîchit automatiquement toutes les {AUTO_REFRESH_MS / 1000}{" "}

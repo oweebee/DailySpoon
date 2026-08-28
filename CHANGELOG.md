@@ -2,65 +2,83 @@
 
 Toutes les évolutions notables de DailySpoon sont listées ici.
 
-Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/). Numérotation :
-- **x.y.Z** (ex. 1.0.1) — petit correctif, sans nouvelle fonctionnalité
-- **x.Y.z** (ex. 1.1.0, 1.2.0) — fonctionnalité ou amélioration moyenne
-- **X.y.z** (ex. 2.0.0, 3.0.0) — grosse feature ou refonte
+## Numérotation
 
-## [1.2.3] - 2026-07-29
+L'application repart de **V1**. Les versions suivantes s'appellent **V1.01**,
+**V1.02**, etc., jusqu'à un passage explicite en **V2**.
 
-### Corrigé
-- PWA mobile : le retour en haut de colonne au swipe restait aléatoire (marchait au début, cassait après quelques colonnes). Cause : pendant la transition, des mouvements de scroll "fantômes" (clamp automatique du navigateur quand la colonne rétrécit, notre propre défilement de rattrapage) s'enregistraient comme si c'était la position de lecture réelle de l'utilisateur, corrompant la mémoire de position des colonnes suivantes. L'enregistrement est maintenant suspendu tant que la transition n'est pas totalement arrivée à destination.
+Correspondance avec `package.json` : le champ `version` doit respecter le
+format semver, qui n'accepte pas « 1.01 ». On y écrit donc le numéro
+équivalent, la table ci-dessous faisant foi.
 
-## [1.2.2] - 2026-07-29
+| Version affichée | Tag Git | `package.json` |
+| ---------------- | ------- | -------------- |
+| V1               | `v1`    | `1.0.0`        |
+| V1.01            | `v1.01` | `1.0.1`        |
+| V1.02            | `v1.02` | `1.0.2`        |
+| …                | …       | …              |
 
-### Corrigé
-- PWA mobile : en swipant d'une colonne longue (scrollée bas) vers une colonne plus courte, celle-ci restait étirée avec un grand vide sous son contenu et le défilement ne remontait pas en haut (mesure de hauteur faussée par l'étirement flex par défaut, `items-start` ajouté).
+## [V1] - 2026-08-28
 
-## [1.2.1] - 2026-07-29
+Première version de référence. L'historique des versions antérieures (1.0.0 à
+1.2.3) est retiré : ces numéros ne correspondent plus à rien de déployé, et
+leurs tags comme leurs *releases* sont supprimés du dépôt en publiant cette
+version. Ce fichier repart donc de zéro à partir d'ici.
 
-### Corrigé
-- Légende Telegram : le résumé s'affichait en un seul bloc de texte illisible. Reformaté en paragraphes (titre toujours en citation rose).
+État de l'application à cette version :
 
-## [1.2.0] - 2026-07-29
+### Lecture
 
-### Modifié
-- Notifications Telegram : envoi de l'image réelle de l'article (og:image / illustration extraite) au lieu de la bannière fixe systématique, avec filtrage des images inexploitables (favicon générique, placeholder de lazy-load, logo de marque) et repli automatique sur la bannière fixe si l'article n'a pas d'image utilisable ou si Telegram échoue à la récupérer.
+- Page d'accueil (`/`) : « En direct », toutes les rubriques en colonnes,
+  sans aucune IA — titres et extraits bruts des flux. Carrousel horizontal en
+  mobile, une rubrique par page, avec chargement infini.
+- Page « Journal IA » (`/journal`) : la « une » quotidienne figée, générée par
+  IA à l'impression.
+- Lecteur d'article interne (extraction Readability côté serveur), plein écran
+  en PWA, avec traduction à la demande.
+- Favoris avec filtre par mot-clé, archives et recherche sur tout
+  l'historique.
 
-## [1.1.0] - 2026-07-28
+### Sources
 
-### Ajouté
-- Export/import des archives (éditions IA déjà générées) dans `/admin/settings`, section « Archives (éditions IA) » — séparé de l'export de configuration existant, qui exclut volontairement articles et éditions. L'import n'ajoute que les éditions absentes, sans jamais écraser ni supprimer.
+- Flux FreshRSS et flux RSS personnalisés, gérés depuis `/admin/categories`.
+- Options par flux : médaille (mise en avant), notification Telegram,
+  traduction automatique en français.
+- Cas Reddit traités à part (miroirs Redlib, API JSON, image et vidéo
+  directes).
 
-## [1.0.3] - 2026-07-28
+### Apparence
 
-### Modifié
-- Outil de test de scraping morss déplacé de `/admin/settings` vers `/admin/categories`, juste au-dessus du formulaire d'ajout de flux perso (plus logique pour tester une URL avant de l'ajouter directement en dessous).
+Un seul habillage : sombre et minimaliste. L'habillage « journal papier »
+d'origine (texture froissée, timbres-poste, lettrines, surligneurs peints,
+polices de presse) a été entièrement retiré — code, règles CSS et images.
 
-## [1.0.2] - 2026-07-28
+Deux réglages restent disponibles dans `/admin/settings` :
 
-### Ajouté
-- Barre de progression noire affichée en haut de la page de lecture d'un article pendant le rechargement déclenché par « Traduire en français » (la traduction peut prendre plusieurs secondes sans aucun autre signe de chargement visible).
+- six déclinaisons de couleur, toutes sur base sombre (« Ardoise » par
+  défaut) ;
+- vignettes en noir et blanc (défaut) ou en couleur.
 
-## [1.0.1] - 2026-07-28
+### Traduction
 
-### Corrigé
-- Flux personnalisés « Reuters World » et « Reuters Europe » (morts depuis l'arrêt du RSS officiel de Reuters en 2020) remplacés par les flux officiels BBC News (`/world` et `/world/europe`).
+- Instance LibreTranslate auto-hébergée, déployée séparément et raccordée par
+  une simple URL. Aucun quota, aucune donnée envoyée à un tiers.
 
-## [1.0.0] - 2026-07-28
+### Intégrations (toutes optionnelles)
 
-Version de référence — repart d'un historique Git propre (squash), regroupant tout ce qui existait avant cette date.
+- **Telegram** : photo + légende poussées dans un canal à chaque nouvel
+  article des flux cochés « notification ».
+- **Wallabag** : mettre un article en favori l'envoie à l'instance pour
+  archivage, avec le tag `DailySpoon`.
+- **morss** : repli de scraping pour les sites qui bloquent la lecture
+  directe, avec tunnel OpenVPN optionnel réglable et testable depuis l'admin.
+- **Lecteur RSS externe** : API Google Reader exposée sur `/api/greader.php`,
+  compatible avec n'importe quel client FreshRSS.
+- **PWA** installable sur mobile et bureau.
 
-### Contenu de la V1
+### Administration
 
-- Génération quotidienne d'une édition (« une » de journal) à partir des catégories FreshRSS suivies, avec réécriture/résumé/classement/priorisation par IA (Anthropic ou Google Gemini, au choix)
-- **En direct** (`/direct`) : tous les articles récents groupés par catégorie, recherche dans l'historique, bouton « Télégraphier les news » (0 IA)
-- **Favoris** (`/favoris`) et **archives** (`/archive`, éditions figées consultables par date)
-- Flux RSS/Atom personnalisés (en plus de FreshRSS), avec repli automatique **morss** (scraping) en cas de blocage d'un site source, tunnel **OpenVPN optionnel** pour morss (réglable/testable depuis `/admin/settings`), et outil de test de scraping morss intégré
-- Contournement automatique des blocages Reddit au niveau flux (API JSON, miroirs Redlib auto-rafraîchis, bascule d'abonnement FreshRSS)
-- Lecture des articles directement dans l'appli (extraction façon Reader View, nettoyage du « junk » des pages sources)
-- Intégrations optionnelles : notifications **Telegram**, archivage **Wallabag**
-- **PWA** installable (mobile et bureau)
-- **Lecteur RSS externe** compatible FreshRSS/Google Reader (`/api/greader.php`)
-- Rétention configurable de l'historique, journal technique (`/admin/logs`)
-- Déploiement Docker Compose auto-hébergé (Coolify), 4 services : `db` / `web` / `worker` / `morss`
+- Réglages modifiables sans redéploiement (`/admin/settings`) : fournisseur
+  IA, horaire d'impression, rétention, apparence, intégrations.
+- Export/import de la configuration et des archives.
+- Journal technique consultable dans `/admin/logs`.

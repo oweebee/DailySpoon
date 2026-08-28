@@ -3,6 +3,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { SpoonDivider } from "@/components/SpoonDivider";
 import { MATERIAL_ACCENTS } from "@/lib/theme";
+import { APP_VERSION } from "@/lib/version";
 
 type SettingsForm = {
   freshrssBaseUrl: string;
@@ -23,7 +24,6 @@ type SettingsForm = {
   customFeedsIntervalMinutes: string;
   telegramBotToken: string;
   telegramChatId: string;
-  theme: string;
   materialAccent: string;
   materialColorImages: boolean;
   libretranslateUrl: string;
@@ -57,7 +57,6 @@ const EMPTY: SettingsForm = {
   customFeedsIntervalMinutes: "60",
   telegramBotToken: "",
   telegramChatId: "",
-  theme: "material",
   materialAccent: "ardoise",
   materialColorImages: false,
   libretranslateUrl: "",
@@ -193,7 +192,6 @@ export default function AdminSettingsPage() {
               : "60",
           telegramBotToken: s.telegramBotToken || "",
           telegramChatId: s.telegramChatId || "",
-          theme: s.theme || "material",
           materialAccent: s.materialAccent || "ardoise",
           materialColorImages: s.materialColorImages === true,
           libretranslateUrl: s.libretranslateUrl || "",
@@ -305,7 +303,6 @@ export default function AdminSettingsPage() {
         form.customFeedsIntervalMinutes === "" ? null : Number(form.customFeedsIntervalMinutes),
       telegramBotToken: form.telegramBotToken,
       telegramChatId: form.telegramChatId,
-      theme: form.theme,
       materialAccent: form.materialAccent,
       materialColorImages: form.materialColorImages,
       libretranslateUrl: form.libretranslateUrl,
@@ -575,7 +572,7 @@ export default function AdminSettingsPage() {
         Réglages
       </h1>
 
-      <p className="newsprint mb-8 text-sm text-neutral-700">
+      <p className="mb-8 text-sm text-neutral-700">
         Ces valeurs remplacent les variables d’environnement une fois enregistrées ici — pas besoin
         de redéployer pour changer un mot de passe ou l’heure de l’édition. Laisse un champ vide
         pour revenir à la variable d’environnement correspondante.
@@ -586,64 +583,37 @@ export default function AdminSettingsPage() {
       ) : (
         <div className="space-y-8">
           <fieldset className="space-y-3 border-t-2 border-ink pt-4">
-            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Thème</legend>
+            <legend className="mb-1 font-display text-xs uppercase tracking-[0.2em]">Apparence</legend>
             <label className="block">
               <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
-                Apparence du site
+                Couleur dominante
               </span>
               <select
-                value={form.theme}
-                onChange={(e) => set("theme", e.target.value)}
+                value={form.materialAccent}
+                onChange={(e) => set("materialAccent", e.target.value)}
                 className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
               >
-                <option value="material">Material (sombre, minimaliste) — défaut</option>
-                <option value="dailyspoon">DailySpoon (journal papier)</option>
+                {Object.entries(MATERIAL_ACCENTS).map(([value, { label }]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
-            {/* Réglages propres au thème Material : affichés seulement quand
-                il est sélectionné, ils n'ont aucun effet sur l'autre thème et
-                n'encombrent donc pas la page inutilement. */}
-            {form.theme === "material" && (
-              <>
-                <label className="block">
-                  <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
-                    Couleur dominante
-                  </span>
-                  <select
-                    value={form.materialAccent}
-                    onChange={(e) => set("materialAccent", e.target.value)}
-                    className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
-                  >
-                    {Object.entries(MATERIAL_ACCENTS).map(([value, { label }]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex items-center gap-2 text-xs italic text-sepia">
-                  <input
-                    type="checkbox"
-                    checked={form.materialColorImages}
-                    onChange={(e) => set("materialColorImages", e.target.checked)}
-                    className="accent-journal"
-                  />
-                  vignettes en couleur (au lieu du noir et blanc)
-                </label>
-                <p className="text-xs italic text-sepia">
-                  Six déclinaisons, toutes sur base sombre : seule la teinte du fond, des
-                  séparateurs et de l’accent change, les niveaux de clarté restent ceux du Material
-                  sombre d’origine. « Ardoise » est le gris quasi noir par défaut.
-                </p>
-              </>
-            )}
+            <label className="flex items-center gap-2 text-xs italic text-sepia">
+              <input
+                type="checkbox"
+                checked={form.materialColorImages}
+                onChange={(e) => set("materialColorImages", e.target.checked)}
+                className="accent-journal"
+              />
+              vignettes en couleur (au lieu du noir et blanc)
+            </label>
             <p className="text-xs italic text-sepia">
-              « Material » est l’habillage par défaut : interface sombre et sobre, timbres
-              redevenus de simples boutons, cadres conservés mais sans contour. « DailySpoon »
-              restitue l’habillage journal d’origine — papier texturé, polices de presse,
-              timbres-poste, traces de surligneur. Les vignettes en noir
-              et blanc et les petites cuillères sont conservées dans les deux cas. Le changement
-              s’applique à tout le site, cette page comprise, dès l’enregistrement.
+              Six déclinaisons, toutes sur base sombre : seule la teinte du fond, des séparateurs
+              et de l’accent change, les niveaux de clarté restent les mêmes. « Ardoise » est le
+              gris quasi noir par défaut. Le changement s’applique à tout le site, cette page
+              comprise, dès l’enregistrement.
             </p>
           </fieldset>
 
@@ -1285,29 +1255,20 @@ export default function AdminSettingsPage() {
           </fieldset>
 
           <div className="flex flex-wrap items-center gap-x-8 gap-y-4 pt-2">
-            {/* Les deux boutons partagent MÊME image de timbre, MÊME hauteur
-                et MÊME largeur — donc une silhouette rigoureusement
-                identique, quelle que soit la longueur de leur texte. Avant,
-                l'un utilisait le timbre "md" (presque carré) et l'autre le
-                "lg" (large et plat) : deux formes différentes côte à côte,
-                ce qui donnait un rendu bancal.
-                Largeur explicite calculée sur le ratio réel de l'image
-                (stamp-bg-lg = 900/205, voir globals.css) : sans elle, chaque
-                timbre se redimensionne sur la largeur de SON propre texte, et
-                le plus long ressort plus grand que l'autre. Mêmes valeurs que
-                les timbres d'action du bandeau (voir PrintStampButton), pour
-                une seule et même échelle dans toute l'application. */}
+            {/* Même classe .stamp-button que partout ailleurs (globals.css) :
+                hauteur fixe commune, largeur dictée par le texte. Une seule
+                et même échelle de bouton dans toute l'application. */}
             <button
               onClick={save}
               disabled={saving}
-              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap px-4 font-display text-[0.55rem] uppercase tracking-[0.1em] text-paper disabled:opacity-50"
+              className="stamp-button font-display uppercase disabled:opacity-50"
             >
               {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
             <button
               onClick={test}
               disabled={testing}
-              className="stamp-button stamp-bg-lg inline-flex h-[2.75rem] w-[12.1rem] items-center justify-center whitespace-nowrap px-4 font-display text-[0.55rem] uppercase tracking-[0.1em] text-paper disabled:opacity-50"
+              className="stamp-button font-display uppercase disabled:opacity-50"
             >
               {testing ? "Test en cours..." : "Tester les réglages"}
             </button>
@@ -1316,6 +1277,11 @@ export default function AdminSettingsPage() {
         </div>
       )}
       <SpoonDivider />
+      {/* Version de l'application — voir src/lib/version.ts pour la table de
+          correspondance avec package.json. */}
+      <p className="mt-2 text-center text-[0.65rem] uppercase tracking-[0.25em] text-sepia">
+        DailySpoon {APP_VERSION}
+      </p>
     </main>
   );
 }

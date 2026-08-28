@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
 import { MORSS_BASE_URL, getSettings } from "@/lib/settings";
-import { paletteFor, rgb, type ThemeName } from "@/lib/theme";
+import { paletteFor, rgb } from "@/lib/theme";
 import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
 import { isAlreadyMorssUrl, splitIntoReadableParagraphs, BROWSER_USER_AGENT } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
@@ -217,75 +217,6 @@ function spoonSvg(rotateDeg: number): string {
   return `<svg viewBox="0 0 24 24" preserveAspectRatio="none" width="12" height="17" style="transform: rotate(${rotateDeg}deg)"><ellipse cx="12" cy="6.2" rx="5.1" ry="6.2"/><rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4"/></svg>`;
 }
 
-/**
- * Habillage sombre du lecteur d'article, ajouté EN FIN de feuille de style
- * (donc prioritaire à spécificité égale) quand le thème Material est actif.
- * Écrit en surcharge plutôt qu'en variables : cette page est du HTML autonome
- * et figé, servi en iframe hors du CSS de l'application — dupliquer ici tout
- * le système de thèmes de globals.css pour un seul autre thème coûterait plus
- * cher que ces quelques règles.
- *
- * Le fleuron en cuillères et les photos d'article restent intacts : seule
- * l'illusion "vieux papier" (grain, vignette, empattements, lettrine) est
- * retirée.
- */
-function materialReaderCss(accent: string | null | undefined): string {
-  const p = paletteFor(accent);
-  const paper = rgb(p.paper);
-  const surface = rgb(p.surface);
-  const ink = rgb(p.ink);
-  const rule = rgb(p.rule);
-  const sepia = rgb(p.sepia);
-  const journal = rgb(p.journal);
-  return `
-  /* Le lecteur est une SURFACE posée au-dessus du site, pas le fond de page :
-     il prend donc le ton "surface" (un cran plus clair), comme le bloc de
-     contenu. Avec le ton "paper", il paraissait simplement noir. */
-  html { background: ${surface}; }
-  body {
-    background-color: ${surface};
-    background-image: none;
-    color: ${ink};
-    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  }
-  h1, .kicker, .article-body h2, .article-body h3 {
-    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  }
-  .kicker, .meta-top a, .article-body a, .fav-star.is-fav { color: ${journal}; }
-  .meta-top { color: ${sepia}; border-bottom-color: ${rule}; }
-  .byline, .source-bottom, .fav-star, .embed-note, .article-body figcaption { color: ${sepia}; }
-  /* Cul-de-lampe en cuillères : prend la couleur d'accent du thème plutôt
-     que le gris fixe du thème journal, où il devenait invisible. */
-  .colophon { color: ${journal}; }
-  .double-rule { border-top: 1px solid ${rule}; border-bottom: none; }
-  /* Lettrine retirée : ornement de presse papier, incongru ici. */
-  .article-body > p:first-of-type::first-letter {
-    float: none; font-size: inherit; font-weight: inherit; line-height: inherit; padding: 0; color: inherit;
-  }
-  /* Texte au fil de l'eau plutôt que justifié avec césures : la justification
-     sert à imiter une colonne de presse, elle creuse des rivières blanches. */
-  .article-body { text-align: left; hyphens: none; }
-  .article-body img, .article-body picture { border-color: ${rule}; box-shadow: none; }
-  .article-body blockquote { border-left-color: ${rule}; color: ${sepia}; }
-  .notice-box { border-color: ${rule}; background: ${paper}; color: ${sepia}; }
-  /* Le timbre-poste redevient un bouton, comme dans le reste de l'app. */
-  .stamp-link {
-    background-image: none;
-    aspect-ratio: auto;
-    padding: 0.5rem 1rem;
-    border: 1px solid ${rule};
-    border-radius: 0.25rem;
-    background-color: ${paper};
-    color: ${ink};
-    transform: none;
-    filter: none;
-    text-shadow: none;
-  }
-  .stamp-link:hover { transform: none; filter: none; border-color: ${journal}; }
-  .translate-progress { background: ${ink}; }
-`;
-}
-
 function renderPage(opts: {
   title: string;
   byline?: string | null;
@@ -311,17 +242,25 @@ function renderPage(opts: {
    *  zone reste alors vide — "Voir l'original"/"Ouvrir dans un nouvel
    *  onglet" restent le recours dans ce cas. */
   embedFallback?: boolean;
-  /** Thème actif (voir Settings.theme). Cette page est du HTML autonome,
-   *  servi dans une iframe et donc TOTALEMENT hors du CSS de l'application :
-   *  elle ne peut pas hériter des variables de globals.css et doit porter son
-   *  propre habillage. Sans ça, ouvrir un article en thème sombre projetait
-   *  une page blanche en pleine figure. */
-  theme?: ThemeName;
-  /** Déclinaison de couleur du thème Material (voir src/lib/theme.ts). */
+  /** Déclinaison de couleur choisie dans /admin/settings (voir
+   *  src/lib/theme.ts). Cette page est du HTML autonome, servi en iframe
+   *  hors du CSS de l'application : elle ne peut lire aucune variable CSS et
+   *  reçoit donc les couleurs en dur, écrites dans sa propre feuille. */
   accent?: string | null;
 }): string {
-  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite, embedFallback, theme, accent } =
+  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite, embedFallback, accent } =
     opts;
+  // Couleurs de la déclinaison choisie, écrites EN DUR dans la feuille de
+  // style ci-dessous : cette page est du HTML autonome servi en iframe, hors
+  // du bundle de l'application — elle ne peut lire aucune variable CSS de
+  // globals.css. src/lib/theme.ts reste la source unique des deux côtés.
+  const pal = paletteFor(accent);
+  const paper = rgb(pal.paper);
+  const surface = rgb(pal.surface);
+  const ink = rgb(pal.ink);
+  const rule = rgb(pal.rule);
+  const sepia = rgb(pal.sepia);
+  const journal = rgb(pal.journal);
   const kickerRaw = siteName || new URL(originalUrl).hostname.replace(/^www\./, "");
   const kicker = escapeHtml(kickerRaw);
   // La ligne "source" sous le titre reste toujours affichée (repli sur le
@@ -346,26 +285,21 @@ function renderPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Inter:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
 <style>
   * { box-sizing: border-box; }
-  html { background: #dcdcdc; }
+  /* Le lecteur est une SURFACE posée au-dessus du site, pas le fond de page :
+     il prend donc le ton "surface" (un cran plus clair que les marges du
+     site). Avec le ton "paper", il paraissait simplement noir. */
+  html { background: ${surface}; }
   body {
     margin: 0;
     padding: 40px 28px 70px;
-    font-family: Georgia, "Times New Roman", serif;
-    color: #1a1a1a;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background-color: ${surface};
+    color: ${ink};
     line-height: 1.7;
     font-size: 15px;
-    /* Papier gris : même grain de bruit + vignette que le reste du site,
-       pour que la page proxifiée fasse illusion de vieux papier journal. */
-    background-color: #f0f0f0;
-    background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E"),
-      radial-gradient(ellipse at center, #f5f5f5 0%, #ececec 70%, #dcdcdc 100%);
-    /* Pas de "background-attachment: fixed" ici : dans un iframe, ça fait
-       défiler le texte tout seul au-dessus d'un fond qui semble figé/vide.
-       Le fond doit défiler avec le contenu, comme une vraie page de papier. */
   }
   .page {
     max-width: 660px;
@@ -384,28 +318,27 @@ function renderPage(opts: {
     font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.2em;
-    color: #5c5c5c;
+    color: ${sepia};
     padding-bottom: 6px;
-    border-bottom: 1px solid rgba(26, 26, 26, 0.6);
+    border-bottom: 1px solid ${rule};
     margin-bottom: 4px;
   }
-  .meta-top a { color: #8b1a1a; text-decoration: none; }
+  .meta-top a { color: ${journal}; text-decoration: none; }
   .meta-top a:hover { text-decoration: underline; }
   .meta-left { text-align: left; }
   .meta-center { text-align: center; }
   .meta-right { text-align: right; }
-  .double-rule { border-top: 3px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; height: 6px; margin: 2px 0 22px; }
+  .double-rule { border-top: 1px solid ${rule}; height: 6px; margin: 2px 0 22px; }
   .kicker {
     text-align: center;
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.3em;
-    color: #8b1a1a;
+    color: ${journal};
     margin: 22px 0 6px;
   }
   h1 {
-    font-family: "Playfair Display", Georgia, serif;
-    font-weight: 900;
+    font-weight: 800;
     font-size: 2.15rem;
     line-height: 1.15;
     text-align: center;
@@ -415,7 +348,7 @@ function renderPage(opts: {
     text-align: center;
     font-size: 0.78rem;
     font-style: italic;
-    color: #5c5c5c;
+    color: ${sepia};
     margin-bottom: 28px;
   }
   .fav-star {
@@ -426,39 +359,30 @@ function renderPage(opts: {
     border: none;
     background: none;
     cursor: pointer;
-    color: #5c5c5c;
+    color: ${sepia};
   }
   .fav-star svg path { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
-  .fav-star.is-fav { color: #8a0303; }
+  .fav-star.is-fav { color: ${journal}; }
   .fav-star.is-fav svg path { fill: currentColor; }
   .source-bottom {
     text-align: center;
     font-size: 0.8rem;
     font-style: italic;
-    color: #5c5c5c;
+    color: ${sepia};
     margin-top: 2.6em;
   }
-  .article-body { text-align: justify; hyphens: auto; }
-  .article-body > p:first-of-type::first-letter {
-    float: left;
-    font-family: "Playfair Display", Georgia, serif;
-    font-weight: 900;
-    font-size: 3.6em;
-    line-height: 0.82;
-    padding-right: 0.09em;
-    padding-top: 0.04em;
-    color: #1a1a1a;
-  }
+  /* Texte au fil de l'eau, ni justifié ni coupé : la justification creuse des
+     rivières blanches et des espaces irréguliers, très visibles à l'écran. */
+  .article-body { text-align: left; hyphens: none; }
   .article-body p { margin: 1.05em 0; }
   .article-body img, .article-body picture {
     max-width: 100%;
     height: auto;
     display: block;
     margin: 1.4em auto;
-    /* Contrairement aux vignettes de la liste (volontairement en noir et
-       blanc), la photo dans l'article ouvert reste en couleur. */
-    border: 1px solid #1a1a1a;
-    box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.15);
+    /* Contrairement aux vignettes de la liste (en noir et blanc par défaut),
+       la photo dans l'article ouvert reste toujours en couleur. */
+    border: 1px solid ${rule};
     cursor: zoom-in;
   }
   /* Popup zoom plein écran au clic sur une image de l'article — overlay
@@ -468,7 +392,7 @@ function renderPage(opts: {
     position: fixed;
     inset: 0;
     z-index: 999;
-    background: rgba(26, 26, 26, 0.92);
+    background: rgba(0, 0, 0, 0.92);
     cursor: zoom-out;
     align-items: center;
     justify-content: center;
@@ -483,69 +407,55 @@ function renderPage(opts: {
     margin: 0;
   }
   .article-body figure { margin: 1.4em 0; }
-  .article-body figcaption { font-size: 0.75rem; color: #5c5c5c; font-style: italic; text-align: center; margin-top: 0.4em; }
-  .article-body a { color: #8b1a1a; }
+  .article-body figcaption { font-size: 0.75rem; color: ${sepia}; font-style: italic; text-align: center; margin-top: 0.4em; }
+  .article-body a { color: ${journal}; }
   .article-body blockquote {
-    border-left: 3px solid #1a1a1a;
+    border-left: 3px solid ${rule};
     margin: 1.2em 0;
     padding: 0.2em 0 0.2em 1.1em;
-    color: #3a3a3a;
+    color: ${sepia};
     font-style: italic;
   }
   .article-body h2, .article-body h3 {
-    font-family: "Playfair Display", Georgia, serif;
-    font-weight: 800;
+    font-weight: 700;
     margin: 1.4em 0 0.5em;
   }
   /* Encadré d'avertissement (repli texte Reddit/extraction échouée) — même
-     esprit que les cases d'article de l'appli React (bordure pleine + fond
-     gris clair), placé APRÈS le texte récupéré plutôt qu'avant, sur toute
-     la largeur de la zone de texte. */
+     esprit que les cartes d'article de l'appli React, placé APRÈS le texte
+     récupéré plutôt qu'avant, sur toute la largeur de la zone de texte. */
   .notice-box {
     margin-top: 2.4em;
-    border: 2px solid #1a1a1a;
-    background: rgba(26, 26, 26, 0.07);
+    border: 1px solid ${rule};
+    background: ${paper};
     padding: 1em 1.2em;
     font-size: 0.85rem;
     line-height: 1.6;
-    color: #3a3a3a;
+    color: ${sepia};
   }
-  /* Bouton "timbre" — même fond de timbre-poste que côté app React (voir
-     public/stamps/stamp-md.png, globals.css .stamp-bg-md). Ratio RÉEL de
-     l'image imposé via "aspect-ratio" (700/270, dimensions exactes du
-     fichier) plutôt qu'étiré aux dimensions du bouton — sinon les
-     perforations rondes de l'image se déforment en ovales. La largeur
-     (texte + padding horizontal) pilote donc la hauteur, jamais l'inverse.
-     Répliqué en CSS pur ici puisque cette page est servie hors du bundle
-     Tailwind (rendu HTML brut pour l'iframe de lecture) — même chemin
-     /stamps/ (dossier public, servi tel quel). */
+  /* Bouton "lire l'article d'origine" — même silhouette que les boutons
+     d'action de l'application (voir .stamp-button dans globals.css),
+     répliquée en CSS pur puisque cette page est servie hors du bundle
+     Tailwind. */
   .stamp-link {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-image: url("/stamps/stamp-md.png");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: contain;
-    aspect-ratio: 700 / 270;
-    color: #f0f0f0;
-    padding: 0 1.6em;
-    font-family: Georgia, serif;
+    padding: 0.5rem 1rem;
+    border: 1px solid ${rule};
+    border-radius: 0.25rem;
+    background-color: ${paper};
+    color: ${ink};
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.2em;
     text-decoration: none;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-    transform: rotate(-1.5deg);
-    filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
-    transition: transform 0.15s ease, filter 0.15s ease;
+    transition: border-color 0.15s ease;
   }
-  .stamp-link:hover {
-    transform: rotate(0deg) scale(1.03);
-    filter: drop-shadow(3px 5px 10px rgba(26, 26, 26, 0.32));
-  }
+  .stamp-link:hover { border-color: ${journal}; }
   .stamp-wrap { text-align: center; margin-top: 2.6em; }
-  .colophon { text-align: center; margin-top: 3.2em; color: #5c5c5c; }
+  /* Cul-de-lampe en cuillères : dans la couleur d'accent, seul ornement
+     conservé de l'application. */
+  .colophon { text-align: center; margin-top: 3.2em; color: ${journal}; }
   .colophon svg { display: inline-block; vertical-align: middle; margin: 0 9px; fill: currentColor; }
   /* Repli iframe (fetch serveur bloqué) : occupe la hauteur visible de la
      fenêtre plutôt qu'une hauteur fixe arbitraire, pour rester utilisable
@@ -555,15 +465,13 @@ function renderPage(opts: {
     width: 100%;
     height: 78vh;
     min-height: 420px;
-    border: 1px solid #1a1a1a;
-    box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.15);
+    border: 1px solid ${rule};
     background: #fff;
   }
-  .embed-note { text-align: center; font-size: 0.75rem; font-style: italic; color: #5c5c5c; margin: 0.8em 0 1.6em; }
-  /* Barre de progression noire en haut de page, affichée le temps du
-     rechargement complet déclenché par le lien "Traduire en français" — la
-     traduction (jusqu'à 60 blocs, appels séquentiels à l'API Google
-     Translate côté serveur, voir translateContentHtml) peut prendre
+  .embed-note { text-align: center; font-size: 0.75rem; font-style: italic; color: ${sepia}; margin: 0.8em 0 1.6em; }
+  /* Barre de progression en haut de page, affichée le temps du rechargement
+     complet déclenché par le lien "Traduire en français" — la traduction
+     (appels séquentiels côté serveur, voir translateContentHtml) peut prendre
      plusieurs secondes, pendant lesquelles cette page ne montre autrement
      aucun signe de chargement (navigation classique d'un lien <a>, pas une
      requête fetch qu'on pourrait suivre) — surtout visible ici puisque la
@@ -576,7 +484,7 @@ function renderPage(opts: {
     left: 0;
     height: 3px;
     width: 40%;
-    background: #1a1a1a;
+    background: ${ink};
     z-index: 1000;
     opacity: 0;
     pointer-events: none;
@@ -589,7 +497,6 @@ function renderPage(opts: {
     0% { margin-left: -40%; }
     100% { margin-left: 100%; }
   }
-${theme === "material" ? materialReaderCss(accent) : ""}
 </style>
 </head>
 <body>
@@ -925,9 +832,7 @@ export async function GET(req: NextRequest) {
   // autonome servi en iframe, elle n'hérite de rien et doit s'habiller
   // elle-même. Best-effort — en cas de souci de base, on sert l'habillage
   // d'origine plutôt que de refuser d'afficher l'article.
-  const themeSettings = await getSettings().catch(() => null);
-  const theme: ThemeName = themeSettings?.theme ?? "material";
-  const accent = themeSettings?.materialAccent ?? null;
+  const accent = (await getSettings().catch(() => null))?.materialAccent ?? null;
 
   let parsed: URL;
   try {
@@ -999,7 +904,6 @@ export async function GET(req: NextRequest) {
   if (isRedditImageHostname(parsed.hostname)) {
     return htmlResponse(
       renderPage({
-        theme,
         accent,
         title: "Image Reddit",
         siteName: "reddit.com",
@@ -1023,7 +927,7 @@ export async function GET(req: NextRequest) {
     const candidates = ["1080", "720", "480", "360", "240"].map((res) => proxyVideoUrl(`${base}/DASH_${res}.mp4`));
     const bodyHtml = `
       <p style="text-align:center;">
-        <video id="reddit-video" controls preload="metadata" style="max-width:100%;border:1px solid #1a1a1a;box-shadow:3px 3px 0 rgba(26,26,26,0.15);"></video>
+        <video id="reddit-video" controls preload="metadata" style="max-width:100%;"></video>
       </p>
       <p style="text-align:center;font-size:0.8em;font-style:italic;">Vidéo Reddit sans son (limitation technique de ce serveur) — pour la version complète avec le son, utilise « Voir l'original » en haut de page.</p>
       <script>
@@ -1042,7 +946,6 @@ export async function GET(req: NextRequest) {
     `;
     return htmlResponse(
       renderPage({
-        theme,
         accent,
         title: "Vidéo Reddit",
         siteName: "reddit.com",
@@ -1068,7 +971,6 @@ export async function GET(req: NextRequest) {
     if (fallbackExcerpt) {
       return htmlResponse(
         renderPage({
-          theme,
           accent,
           title: fallbackTitle || "Post Reddit",
           siteName: "reddit.com",
@@ -1105,7 +1007,6 @@ export async function GET(req: NextRequest) {
 
         return htmlResponse(
           renderPage({
-            theme,
             accent,
             title: finalTitle,
             byline: redlibArticle.byline,
@@ -1140,7 +1041,6 @@ export async function GET(req: NextRequest) {
 
       return htmlResponse(
         renderPage({
-          theme,
           accent,
           title: finalTitle,
           byline: `Posté par u/${redditPost.author}`,
@@ -1160,7 +1060,6 @@ export async function GET(req: NextRequest) {
     // tronqué, contrairement à la vignette limitée à 10 lignes.
     return htmlResponse(
       renderPage({
-        theme,
         accent,
         title: fallbackTitle || "Reddit indisponible depuis ce serveur",
         bodyHtml: excerptFallbackBodyHtml(
@@ -1190,7 +1089,6 @@ export async function GET(req: NextRequest) {
       if (fallbackExcerpt) {
         return htmlResponse(
           renderPage({
-            theme,
             accent,
             title: fallbackTitle || new URL(originalUrl).hostname.replace(/^www\./, ""),
             bodyHtml: excerptFallbackBodyHtml(
@@ -1214,7 +1112,6 @@ export async function GET(req: NextRequest) {
       // seul recours.
       return htmlResponse(
         renderPage({
-          theme,
           accent,
           title: new URL(originalUrl).hostname.replace(/^www\./, ""),
           bodyHtml: "",
@@ -1237,7 +1134,6 @@ export async function GET(req: NextRequest) {
     if (!article || !article.content) {
       return htmlResponse(
         renderPage({
-          theme,
           accent,
           title: fallbackTitle || "Article non extrait",
           bodyHtml: excerptFallbackBodyHtml(
@@ -1282,7 +1178,6 @@ export async function GET(req: NextRequest) {
 
     return htmlResponse(
       renderPage({
-        theme,
         accent,
         title: finalTitle,
         byline: article.byline,
@@ -1298,7 +1193,6 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     return htmlResponse(
       renderPage({
-        theme,
         accent,
         title: "Erreur",
         bodyHtml: `<p>Erreur lors de la récupération de l'article : ${escapeHtml(

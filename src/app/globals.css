@@ -1,95 +1,66 @@
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Rye&family=Inter:ital,wght@0,300..800;1,300..800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300..800;1,300..800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ===================================================================
-   THÈMES
+   APPARENCE
    -------------------------------------------------------------------
-   Toute l'apparence de l'application tient dans les variables ci-dessous,
-   consommées par tailwind.config.ts. Changer de thème = changer l'attribut
-   data-theme sur <html> (posé côté serveur dans layout.tsx à partir de
-   Settings.theme), jamais une classe dans un composant.
+   L'application n'a plus qu'un seul habillage : sombre, minimaliste,
+   sans ornement de presse papier. L'ancien thème "journal" (papier clair,
+   texture froissée, timbres-poste, lettrines, surligneurs peints, polices
+   à empattements) a été entièrement supprimé — code, règles CSS et images.
 
-   Les composantes de couleur sont écrites SANS "rgb()" (juste "240 240 240")
+   Seul reste RÉGLABLE dans /admin/settings :
+   - la DÉCLINAISON DE COULEUR (six palettes sombres, voir src/lib/theme.ts).
+     Elle est injectée en variables CSS inline sur <html> par le layout, ce
+     qui écrase les valeurs par défaut ci-dessous ;
+   - les vignettes en couleur plutôt qu'en noir et blanc (attribut
+     data-images sur <html>, voir plus bas).
+
+   Les composantes de couleur sont écrites SANS "rgb()" (juste "10 10 10")
    parce que Tailwind les enveloppe lui-même dans rgb(... / opacité) — c'est
    ce qui garde fonctionnels les bg-ink/[0.07], text-sepia/70 et autres
    modificateurs d'opacité employés partout dans le projet.
    =================================================================== */
 
-/* Thème "dailyspoon" — celui d'origine, valeurs strictement identiques à ce
-   qui était écrit en dur auparavant. C'est le défaut : sans attribut
-   data-theme, ou avec data-theme="dailyspoon", rien ne change. */
 :root {
-  --color-paper: 240 240 240; /* #f0f0f0 — fond de page, marges comprises */
-  /* Fond du bloc de contenu (<main>, .paper-panel). Identique au fond de page
-     ici : dans le thème journal, c'est la TEXTURE papier qui distingue le
-     bloc de ses marges, pas une différence de couleur. */
-  --color-surface: 240 240 240;
-  --color-ink: 26 26 26; /* #1a1a1a */
-  --color-rule: 26 26 26;
-  --color-sepia: 92 92 92; /* #5c5c5c */
-  --color-journal: 139 26 26; /* #8b1a1a */
+  /* Valeurs de la déclinaison "Ardoise" (le défaut). Elles sont dupliquées
+     ici ET dans src/lib/theme.ts : ces variables servent de repli au cas où
+     le layout ne parviendrait pas à lire les réglages en base (démarrage,
+     migration en cours) — la page reste alors sombre et lisible au lieu de
+     s'afficher sans aucune couleur. Toute autre déclinaison est posée en
+     style inline sur <html> et l'emporte donc sur ce bloc. */
 
-  --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-display: "Playfair Display", Georgia, serif;
-  --font-masthead: "Rye", Georgia, serif;
-  --font-sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-
-  /* Ornements propres au thème journal, éteints en Material (voir plus bas).
-     Passer par une variable plutôt que par des règles séparées permet de
-     neutraliser d'un coup texture, filets épais et traces de surligneur. */
-  --paper-texture: url("/textures/journal.jpg");
-  --ornament-display: block; /* traces de surligneur, cul-de-lampe décoratif */
-  --rule-top-width: 3px; /* filet double des bandeaux */
-  --rule-bottom-width: 1px;
-}
-
-/* Thème "material" — sombre, minimaliste, sans aucun ornement de journal.
-   On garde volontairement : les vignettes en noir et blanc (traitées côté
-   composant, pas ici) et les petites cuillères, seule signature visuelle
-   conservée. Tout le reste — texture papier, timbres-poste, lettrines,
-   surligneurs, doubles filets, polices à empattements — disparaît. */
-[data-theme="material"] {
-  /* Marges de la page, volontairement PLUS SOMBRES que le bloc de contenu
-     (#0a0a0a) : c'est ce contraste qui détache la colonne de lecture. */
+  /* Marges de la page, volontairement PLUS SOMBRES que le bloc de contenu :
+     c'est ce contraste qui détache la colonne de lecture. */
   --color-paper: 10 10 10;
-  /* Le bloc de contenu est LÉGÈREMENT plus clair que la page qui l'entoure
-     (#1e1e1e contre #121212). Sans texture papier pour l'en distinguer, il
-     se fondait sinon exactement dans ses marges et la colonne de lecture
-     n'avait plus aucune limite visible. C'est la convention Material : une
-     surface posée au-dessus d'une autre s'éclaircit légèrement plutôt que de
-     se border d'un trait. */
+  /* Le bloc de contenu est LÉGÈREMENT plus clair que la page qui l'entoure.
+     Convention Material : une surface posée au-dessus d'une autre
+     s'éclaircit légèrement plutôt que de se border d'un trait. */
   --color-surface: 30 30 30;
   --color-ink: 226 226 226; /* texte principal, gris très clair et non blanc pur */
   --color-rule: 60 60 60; /* séparateurs discrets, jamais francs */
   --color-sepia: 150 150 150; /* texte secondaire */
-  /* UN SEUL rouge pour tout ce qui est rouge dans ce thème (#d64040) :
-     entrée de menu active, intitulés d'accent, étoile favori, tampon-date sur
-     les photos. Choisi pour tenir dans les deux contextes à la fois — assez
-     clair pour ressortir sur le fond quasi noir de la page, assez saturé pour
-     rester franchement rouge par-dessus une photo en noir et blanc.
-     Le #8b1a1a du thème journal y est trop sombre, et un rouge simplement
-     éclairci (premier essai à 239/131/131) virait au rose. */
+  /* UN SEUL rouge pour tout ce qui est rouge : entrée de menu active,
+     intitulés d'accent, étoile favori, tampon-date sur les photos. Assez
+     clair pour ressortir sur le fond quasi noir, assez saturé pour rester
+     franchement rouge par-dessus une photo en noir et blanc. */
   --color-journal: 214 64 64;
 
-  /* Une seule police pour tout. Inter et non plus une chasse fixe : sur des
-     paragraphes entiers, la monospace donnait une impression de texte mal
+  /* Une seule police pour tout. Inter et non une chasse fixe : sur des
+     paragraphes entiers, la monospace donne une impression de texte mal
      aligné — toutes les lettres occupant la même largeur, les mots ne
      forment plus de silhouettes reconnaissables et l'œil accroche. Inter est
      dessinée pour les écrans, très neutre, et lit proprement en petit corps
      comme en titre. Les quatre familles pointent dessus : les composants
-     continuent d'écrire font-display ou font-masthead sans le savoir. */
+     continuent d'écrire font-display ou font-masthead sans le savoir (voir
+     tailwind.config.ts). */
   --font-serif: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-display: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-masthead: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-
-  --paper-texture: none;
-  --ornament-display: none;
-  --rule-top-width: 1px;
-  --rule-bottom-width: 0px;
 }
 
 body {
@@ -104,382 +75,166 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  /* La bande tout en haut (sous l'encoche/la barre de statut, hauteur =
-     safe-area-inset-top) doit être noire plutôt que dans le gris clair du
-     reste des marges — peint par-dessus le fond uni via un dégradé calé
-     sur exactement cette hauteur, sans toucher au reste du fond. */
-  /* Volontairement en dur et NON via une variable de thème : cette bande
-     est celle de l'encoche/barre de statut en PWA, elle doit rester noire
-     dans les deux thèmes. En Material, --color-ink est clair — la passer en
-     variable produirait une bande blanche en haut de l'écran. */
-  background-image: linear-gradient(#1a1a1a, #1a1a1a);
-  background-repeat: no-repeat;
-  background-size: 100% env(safe-area-inset-top);
-  background-position: top;
-  /* Pas de texture ici : uniquement sur le bloc de contenu lui-même
-     (.paper-panel, utilisé par tous les <main>) — les marges de part et
-     d'autre restent unies, comme avant. */
 }
 
-/* Texture papier froissé fournie par l'utilisateur (déjà rétrécie/pensée
-   pour se répéter sans raccord visible) — appliquée uniquement sur le bloc
-   de contenu principal (<main>), pas sur les marges du site. Couleur
-   d'origine de l'image, sans opacité/filtre qui l'éclaircirait (d'où
-   "bg-paper/70" remplacé par cette classe plutôt que gardé en plus). */
+/* Bloc de contenu principal (<main> de chaque page). Il se détache de ses
+   marges par un ton légèrement plus clair ET par une ombre dense et large,
+   qui creuse un dégradé sombre autour de lui. Le liseré blanc à 4 % tient
+   lieu de bord : sur fond noir, un vrai trait de bordure serait trop dur.
+
+   "!important" : chaque page pose aussi une ombre en utilitaire Tailwind
+   arbitraire (shadow-[...]) pensée pour du papier clair, invisible ici —
+   impossible à neutraliser autrement sans repasser sur toutes ces pages. */
 .paper-panel {
   background-color: rgb(var(--color-surface));
-  /* Image telle quelle, sans voile ni filtre — l'utilisateur ajuste la
-     couleur/le contraste directement dans le fichier image lui-même.
-     Variable plutôt qu'URL en dur : le thème Material la met à "none". */
-  background-image: var(--paper-texture);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 24px 70px -20px rgb(0 0 0 / 0.9) !important;
 }
 
-/* Lettrine de une, comme dans les vieux quotidiens */
-.drop-cap::first-letter {
-  float: left;
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 3.4em;
-  line-height: 0.85;
-  padding-right: 0.08em;
-  padding-top: 0.05em;
-}
-
-/* Double filet horizontal typique des mastheads — devient un filet simple et
-   discret en Material (voir --rule-*-width). */
+/* Filet horizontal des bandeaux (masthead, pages d'admin). Hérité du double
+   filet des mastheads de presse, réduit ici à un trait simple et discret ;
+   la hauteur de 6 px est conservée pour ne décaler aucun espacement. */
 .double-rule {
-  border-top: var(--rule-top-width) solid rgb(var(--color-rule));
-  border-bottom: var(--rule-bottom-width) solid rgb(var(--color-rule));
+  border-top: 1px solid rgb(var(--color-rule));
   height: 6px;
 }
 
-.rule-thin {
-  border-top: 1px solid rgb(var(--color-rule));
+/* Titre "DAILYSPOON" : blanc pur, quelle que soit la déclinaison de couleur.
+   Il hérite sinon de --color-ink, qui est légèrement TEINTÉ dans chaque
+   variante (bleuté en Bleu nuit, verdâtre en Vert profond…) — le logotype
+   prenait donc la couleur du thème au lieu de rester la constante visuelle de
+   l'application. */
+.masthead-title {
+  color: #ffffff;
 }
 
-/* En Material, la lettrine de une n'a plus lieu d'être : c'est un ornement
-   de presse papier, et en monospace elle ressort comme une erreur de mise en
-   page plutôt que comme un effet. */
-[data-theme="material"] .drop-cap::first-letter {
-  float: none;
-  font-size: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  padding: 0;
+/* Cuillères (cul-de-lampe de bas de page et de bas d'article) : elles
+   prennent la couleur d'accent, seul ornement conservé de l'application.
+   Dans le gris "sepia" du texte secondaire, elles se remarquaient à peine. */
+.spoon-divider {
+  color: rgb(var(--color-journal));
 }
 
-/* Texte justifié avec césure pour l'effet colonne de presse */
-.newsprint {
-  text-align: justify;
-  hyphens: auto;
+/* Étoile "favori" : écrite en dur avec un rouge très sombre (#8a0303) pensé
+   pour du papier clair, trop éteint sur fond sombre — elle prend l'accent,
+   qui suit donc la déclinaison choisie.
+
+   Le TAMPON-DATE et la MÉDAILLE des photos, eux, gardent volontairement leur
+   rouge d'origine dans TOUTES les déclinaisons : ce sont des marquages posés
+   sur une photo en noir et blanc, pas des éléments d'interface. Leur rouge
+   d'encre fait partie de l'identité de l'objet, et le voir virer au bleu ou
+   au vert selon la déclinaison n'aurait aucun sens. C'est pour ça qu'ils ne
+   figurent pas dans cette règle. */
+.favorite-star {
+  color: rgb(var(--color-journal));
 }
 
-/* Bouton "timbre" : vrai fond de timbre-poste vierge (illustration fournie
-   par l'utilisateur, voir public/stamps/), plutôt que l'ancien contour
-   pointillé dessiné en CSS — le bord perforé/festonné fait maintenant partie
-   de l'image elle-même. Rotation légère et ombre portée conservées, qui se
-   redressent légèrement au survol comme si on décollait le timbre. Trois
-   fonds (stamp-sm/md/lg, voir .stamp-bg-*) selon la longueur du texte du
-   bouton — attribué au cas par cas côté JSX. */
-/* "filter: drop-shadow(...)" plutôt que "box-shadow" : box-shadow suit
-   TOUJOURS le rectangle de la boîte, pas la vraie silhouette (transparente,
-   perforée) de l'image de fond — ça laissait voir un halo rectangulaire
-   derrière le timbre, à travers ses propres perforations. drop-shadow suit
-   le canal alpha réel du contenu (donc de l'image), silhouette comprise. */
-/* TOUS les timbres cliquables ("En direct", "Lancer l'impression",
-   "Télégraphier les nouvelles") partagent exactement le même comportement —
-   c'est le but de cette règle commune. Auparavant chacun avait le sien, et
-   le résultat était incohérent à l'écran : le timbre d'action était penché
-   au repos puis se REDRESSAIT au survol, pendant que le timbre "En direct"
-   restait droit mais avec son texte incliné de 9° à l'intérieur. Deux
-   logiques opposées côte à côte sur la même ligne.
-
-   Règle retenue : DROIT au repos (posé bien à plat, texte compris), et
-   c'est le SURVOL qui décolle légèrement le timbre — l'inclinaison devient
-   une réaction, pas un état permanent.
-
-   drop-shadow et non box-shadow : cette dernière suit TOUJOURS le rectangle
-   de la boîte, pas la vraie silhouette (transparente, perforée) de l'image
-   de fond — ça laissait voir un halo rectangulaire derrière le timbre, à
-   travers ses propres perforations. drop-shadow suit le canal alpha réel du
-   contenu, silhouette comprise. */
-.stamp-button,
-.stamp-live {
-  position: relative;
-  transform: rotate(0deg);
-  filter: drop-shadow(2px 4px 8px rgba(26, 26, 26, 0.28));
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-.stamp-button:hover,
-.stamp-live:hover {
-  transform: rotate(-2deg) scale(1.03);
-  filter: drop-shadow(3px 5px 10px rgba(26, 26, 26, 0.32));
-}
-
-.stamp-button:active,
-.stamp-live:active {
-  transform: rotate(0deg) scale(0.97);
-  filter: drop-shadow(1px 2px 4px rgba(26, 26, 26, 0.28));
-}
-
-/* Texte "En direct" : plus aucune rotation propre. Elle existait pour
-   compenser un fond volontairement droit ; les deux timbres étant désormais
-   droits au repos et inclinés ensemble au survol (voir la règle commune
-   ci-dessus), un texte penché dans une boîte droite n'aurait plus aucun
-   sens. Le <span> reste (Masthead.tsx) pour porter le "whitespace-nowrap".
-   Note : les deux classes peuvent maintenant cohabiter sans conflit de
-   "transform" — l'ancienne mise en garde à ce sujet ne vaut plus, le
-   centrage vertical ne passant plus par un positionnement absolu. */
-.stamp-live-text {
-  display: inline-block;
-}
-
-/* Fonds de timbre — 3 tailles/ratios (voir public/stamps/). Le ratio RÉEL de
-   chaque image est imposé au bouton via "aspect-ratio" (plutôt que
-   d'étirer l'image aux dimensions du bouton, ce qui déformait les
-   perforations rondes en ovales — moche, et une vraie déformation du visuel
-   fourni) : c'est donc la largeur du bouton (texte + padding horizontal)
-   qui pilote sa hauteur, jamais l'inverse. "background-size: contain" en
-   filet de sécurité, au cas où le contenu forcerait une largeur qui ne
-   respecte plus exactement le ratio. PAS de "display" ici volontairement :
-   une règle CSS non "layered" comme celle-ci passe TOUJOURS devant les
-   classes Tailwind (même avec des utilitaires responsives type
-   hidden/md:flex) — y toucher casserait l'affichage conditionnel
-   mobile/desktop du timbre "En direct" (voir Masthead.tsx). Le
-   flex/items-center/justify-center se pose donc côté JSX, en utilitaires
-   Tailwind classiques.
-   sm = le plus "carré" pour les libellés courts (En direct), md =
-   intermédiaire pour la plupart des boutons, lg = le plus large/plat pour
-   le texte le plus long (Lancer l'impression). Ratios = dimensions réelles
-   des fichiers dans public/stamps/. */
-.stamp-bg-sm,
-.stamp-bg-md,
-.stamp-bg-lg {
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-}
-.stamp-bg-sm { background-image: url("/stamps/stamp-sm.png"); aspect-ratio: 600 / 406; }
-.stamp-bg-md { background-image: url("/stamps/stamp-md.png"); aspect-ratio: 700 / 270; }
-.stamp-bg-lg { background-image: url("/stamps/stamp-lg.png"); aspect-ratio: 900 / 205; }
-
-/* ---- Thème Material : les timbres deviennent de vrais boutons ----------
-   L'image de timbre-poste, l'ombre portée découpée et l'inclinaison au
-   survol disparaissent au profit d'un rectangle plein aux angles adoucis.
-   Les dimensions posées côté JSX (hauteurs et largeurs calculées sur le
-   ratio des images) sont neutralisées ici : sans ça, un bouton plat
-   garderait la silhouette très allongée d'un timbre, avec un texte minuscule
-   perdu au milieu. On repasse donc à une taille dictée par le contenu, comme
-   n'importe quel bouton d'interface. */
-[data-theme="material"] .stamp-bg-sm,
-[data-theme="material"] .stamp-bg-md,
-[data-theme="material"] .stamp-bg-lg {
-  background-image: none;
-  aspect-ratio: auto;
-  width: auto;
-  /* Hauteur FIXE et identique pour tous les boutons, quel que soit le fond
-     de timbre d'origine et quel que soit leur libellé : c'est ce qui les
-     aligne proprement côte à côte dans le bandeau. Sans elle, "En direct"
-     (une ligne) et "Lancer l'impression du journal" (deux lignes côté JSX)
-     ne faisaient pas la même hauteur. */
+/* ---- Boutons d'action ("Télégraphier les nouvelles", "Lancer
+   l'impression") -------------------------------------------------------
+   Rectangle plein aux angles adoucis. Hauteur FIXE et identique pour tous,
+   quel que soit le libellé : c'est ce qui les aligne proprement côte à côte
+   dans le bandeau, y compris quand l'un tient sur deux lignes. */
+.stamp-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 2.5rem;
   padding: 0 1rem;
   border-radius: 0.25rem;
   background-color: rgb(var(--color-ink) / 0.1);
   border: 1px solid rgb(var(--color-rule));
   color: rgb(var(--color-ink));
-  /* Le texte des timbres est en très petit corps et fortement espacé pour
-     tenir dans l'image ; rendu à taille normale ici. */
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   line-height: 1.35;
-}
-
-[data-theme="material"] .stamp-button,
-[data-theme="material"] .stamp-live {
-  transform: none;
-  filter: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-  /* Les libellés longs sont découpés en deux <span> et empilés par un
-     "flex-col" posé côté JSX, pour tenir dans la silhouette très plate du
-     timbre-poste. Sur un bouton d'interface, ils se lisent sur une seule
-     ligne : on repasse donc en rangée, avec une espace entre les deux
-     morceaux (le texte ne contient aucun espace à la jonction). */
-  flex-direction: row;
   gap: 0.35em;
   white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-/* En compact (PWA), les timbres occupent une ligne à eux : ils s'y partagent
-   toute la largeur à parts égales plutôt que de rester tassés à gauche.
-   "min-width: 0" indispensable — sans lui, un élément flex refuse de
+.stamp-button:hover {
+  background-color: rgb(var(--color-ink) / 0.18);
+}
+
+.stamp-button:active {
+  background-color: rgb(var(--color-ink) / 0.24);
+}
+
+/* En compact (PWA), les boutons d'action occupent une ligne à eux : ils s'y
+   partagent toute la largeur à parts égales plutôt que de rester tassés à
+   gauche. "min-width: 0" indispensable — sans lui, un élément flex refuse de
    rétrécir en dessous de la largeur de son contenu et le dernier bouton
-   déborderait de l'écran. Réservé au thème Material : dans le thème journal,
-   les timbres sont des IMAGES à ratio fixe, les étirer les entourerait de
-   vide. */
-[data-theme="material"] .stamp-row.w-full > * {
+   déborderait de l'écran. */
+.stamp-row.w-full > * {
   flex: 1 1 0;
   min-width: 0;
 }
-[data-theme="material"] .stamp-row.w-full .stamp-button,
-[data-theme="material"] .stamp-row.w-full .stamp-live {
-  width: 100%;
-}
 
-/* En compact (PWA), le libellé du timbre d'action reprend ses DEUX lignes
-   ("Lancer l'impression" / "du journal"), telles que découpées côté JSX. La
-   règle générale du thème les remet sur une seule ligne, ce qui convient à un
-   bandeau desktop large mais oblige ici à un texte minuscule pour tenir dans
-   la largeur d'un téléphone. La hauteur du bouton ne bouge pas : deux lignes
-   de ce corps tiennent sans forcer dans les 2,5 rem imposés plus haut. */
-[data-theme="material"] .stamp-row.w-full .stamp-button {
+/* Le libellé le plus long reprend ici ses DEUX lignes, telles que découpées
+   côté JSX : sur une seule ligne, il faudrait un texte minuscule pour tenir
+   dans la largeur d'un téléphone. La hauteur du bouton ne bouge pas — deux
+   lignes de ce corps tiennent sans forcer dans les 2,5 rem imposés. */
+.stamp-row.w-full .stamp-button {
+  width: 100%;
   flex-direction: column;
   gap: 0;
   white-space: normal;
   line-height: 1.15;
 }
 
-[data-theme="material"] .stamp-button:hover,
-[data-theme="material"] .stamp-live:hover {
-  transform: none;
-  filter: none;
-  background-color: rgb(var(--color-ink) / 0.18);
-}
-
-[data-theme="material"] .stamp-button:active,
-[data-theme="material"] .stamp-live:active {
-  transform: none;
-  filter: none;
-  background-color: rgb(var(--color-ink) / 0.24);
-}
-
-/* Les libellés de timbre sont volontairement coupés en deux lignes côté JSX
-   ("Lancer l'impression" / "du journal") pour tenir dans l'image. Sur un
-   bouton plat, ils se relisent naturellement sur une seule ligne. */
-[data-theme="material"] .stamp-button > span,
-[data-theme="material"] .stamp-live-text {
-  display: inline;
-}
-
-/* ---- Thème Material : détachement du bloc de contenu ------------------
-   L'ombre portée posée côté JSX sur chaque <main> est noire
-   (rgba(26,26,26,.35)) : pensée pour du papier clair, elle est rigoureusement
-   invisible sur des marges noires. On la remplace par une ombre PLUS DENSE
-   ET PLUS LARGE, qui creuse un dégradé sombre autour du bloc — combinée au
-   fond légèrement plus clair, c'est ce qui fait décoller la colonne de
-   lecture de son fond.
-
-   "!important" : l'ombre vient d'un utilitaire Tailwind arbitraire
-   (shadow-[...]) écrit directement dans le JSX de chaque page, impossible à
-   surcharger autrement sans repasser sur toutes ces pages une par une. */
-[data-theme="material"] .paper-panel {
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 24px 70px -20px rgb(0 0 0 / 0.9) !important;
-}
-
-/* Cuillères (cul-de-lampe de bas de page et de bas d'article) : elles
-   prennent la couleur d'accent du thème. Elles héritaient jusqu'ici du gris
-   "sepia" du texte secondaire, où elles se remarquaient à peine sur fond
-   sombre — alors que c'est le seul ornement conservé du thème journal. */
-[data-theme="material"] .spoon-divider {
-  color: rgb(var(--color-journal));
-}
-
-/* ---- Thème Material : vignettes en couleur ----------------------------
+/* ---- Vignettes en couleur --------------------------------------------
    Les vignettes sont désaturées côté composant (classe Tailwind "grayscale",
-   voir ArticleImage) — c'est l'identité du thème journal. En Material, ce
-   choix devient un réglage : "data-images=color" sur <html> rend la couleur
+   voir ArticleImage). "data-images=color" sur <html> rend la couleur
    d'origine. Le contraste renforcé qui accompagne le noir et blanc part avec,
    il n'a de sens que sur une image désaturée. */
-[data-theme="material"][data-images="color"] .grayscale {
+[data-images="color"] .grayscale {
   filter: none;
 }
 
-/* ---- Thème Material : texte au fil de l'eau ---------------------------
-   La classe .newsprint justifie le texte et active les césures, pour imiter
-   une colonne de presse imprimée. C'est très bien sur du papier ; dans une
-   interface sombre c'est le principal responsable de l'impression que "tout
-   est décalé" : pour aligner les deux bords, le navigateur étire les espaces
-   entre les mots ligne par ligne, ce qui creuse des trous irréguliers et des
-   rivières blanches verticales, et coupe les mots en fin de ligne
-   ("ré-clamer", "évidem-ment").
-
-   On repasse donc en drapeau (bord droit libre), sans césure : les espaces
-   redeviennent tous identiques et le bloc se lit d'un trait. */
-[data-theme="material"] .newsprint {
-  text-align: left;
-  hyphens: none;
-}
-
-/* ---- Thème Material : textes à gris fixe ------------------------------
+/* ---- Textes à gris fixe ----------------------------------------------
    Le corps des articles, les libellés de formulaire et diverses mentions
    secondaires utilisent des gris FIXES de la palette Tailwind
-   (text-neutral-500 à 800) plutôt que les couleurs du thème. Sur le papier
-   clair d'origine c'est parfaitement lisible ; sur fond sombre, ce sont des
-   gris foncés sur du noir — le texte devenait quasiment invisible.
+   (text-neutral-500 à 800) plutôt que les couleurs de l'application : sur
+   fond sombre, ce sont des gris foncés sur du noir, quasiment invisibles.
 
    On surcharge ici ces utilitaires plutôt que de les remplacer un par un
-   dans une trentaine d'endroits : le thème journal reste ainsi rigoureusement
-   inchangé (aucune de ses valeurs n'est touchée), et rien ne peut être
-   oublié en route. Une règle CSS non "layered" comme celle-ci passe devant
-   les utilitaires Tailwind, qui vivent eux dans un layer.
+   dans une trentaine d'endroits : rien ne peut être oublié en route. Une
+   règle CSS non "layered" comme celle-ci passe devant les utilitaires
+   Tailwind, qui vivent eux dans un layer.
 
-   Deux niveaux conservés, comme dans l'original : texte courant bien lisible,
-   mentions secondaires volontairement en retrait. */
-[data-theme="material"] .text-neutral-700,
-[data-theme="material"] .text-neutral-800 {
+   Deux niveaux : texte courant bien lisible, mentions secondaires
+   volontairement en retrait. */
+.text-neutral-700,
+.text-neutral-800 {
   color: rgb(var(--color-ink) / 0.88);
 }
 
-[data-theme="material"] .text-neutral-500,
-[data-theme="material"] .text-neutral-600 {
+.text-neutral-500,
+.text-neutral-600 {
   color: rgb(var(--color-sepia));
 }
 
-/* Étoile "favori" : écrite en dur avec un rouge très sombre (#8a0303) pensé
-   pour du papier clair, trop éteint sur fond sombre — elle prend l'accent du
-   thème, qui suit donc la déclinaison choisie.
-
-   Le TAMPON-DATE et la MÉDAILLE des photos, eux, gardent volontairement leur
-   rouge d'origine dans TOUTES les déclinaisons : ce sont des marquages posés
-   sur une photo en noir et blanc, pas des éléments d'interface. Leur rouge
-   d'encre fait partie de l'identité de l'objet, et le voir virer au bleu ou
-   au vert selon le thème n'aurait aucun sens. C'est pour ça qu'ils ne
-   figurent plus dans cette règle. */
-[data-theme="material"] .favorite-star {
-  color: rgb(var(--color-journal));
-}
-
-/* ---- Thème Material : ornements et cadres -----------------------------
-   Les ornements peints (traces de surligneur derrière les titres de
-   rubrique) disparaissent : ce sont des images d'encre sur papier, sans
-   équivalent dans une interface sombre. */
-[data-theme="material"] .ornament {
-  display: var(--ornament-display);
-}
-
-/* Les cadres (cartes d'article, bandeaux de rubrique) sont CONSERVÉS, mais
+/* ---- Cadres ----------------------------------------------------------
+   Les cadres (cartes d'article, bandeaux de rubrique) sont CONSERVÉS, mais
    sans leur trait de contour : c'est le fond, légèrement plus clair que la
-   page, qui délimite désormais le bloc. On neutralise la couleur de bordure
-   plutôt que son épaisseur, pour ne décaler aucun alignement — le trait
-   devient simplement invisible et son espace reste. */
-[data-theme="material"] .article-card,
-[data-theme="material"] .category-band {
+   page, qui délimite le bloc. On neutralise la couleur de bordure plutôt que
+   son épaisseur, pour ne décaler aucun alignement — le trait devient
+   simplement invisible et son espace reste. */
+.article-card,
+.category-band {
   border-color: transparent;
 }
 
-/* Le bandeau de rubrique tirait tout son contraste du surligneur peint
-   derrière son texte. Sans lui, il lui faut un fond propre, sinon le titre
-   flotte sans repère au-dessus de la colonne. */
-[data-theme="material"] .category-band {
+/* Le bandeau de rubrique a besoin d'un fond propre, sinon le titre flotte
+   sans repère au-dessus de la colonne. */
+.category-band {
   background-color: rgb(var(--color-ink) / 0.1);
   border-radius: 0.25rem;
   color: rgb(var(--color-ink));
 }
 
 /* Ouverture du lecteur d'article interne : la page pivote depuis sa
-   tranche gauche pour s'ouvrir face à l'écran, comme une page de journal
-   qu'on tourne, plutôt qu'un simple fondu/zoom de fenêtre. */
+   tranche gauche pour s'ouvrir face à l'écran, plutôt qu'un simple
+   fondu/zoom de fenêtre. */
 @keyframes page-turn {
   from {
     transform: perspective(1600px) rotateY(-85deg);

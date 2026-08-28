@@ -53,36 +53,17 @@ export function PrintStampButton({ provider }: { provider?: string }) {
   }
 
   return (
-    // Timbre compact, calé à droite du titre dans le bandeau (voir Masthead,
-    // prop "action") — plus l'ancien gros bloc centré pleine largeur posé
-    // au-dessus du bandeau, qui repoussait le début des articles très bas,
-    // surtout en mobile où ce bandeau est dupliqué à chaque colonne.
-    //
-    // Largeur fixe : le fond de timbre (stamp-bg-lg) tire sa HAUTEUR de la
-    // largeur via aspect-ratio (voir globals.css), donc c'est la largeur
-    // qu'on pilote, jamais la hauteur. Texte sur 2 lignes volontaires
-    // ("Lancer l'impression" / "du journal") pour rester lisible une fois
-    // réduit à cette taille.
+    // Bouton compact, calé à droite du titre dans le bandeau (voir Masthead,
+    // prop "action"). Sa taille est entièrement dictée par .stamp-button
+    // (globals.css) : hauteur fixe commune à tous les boutons d'action, pour
+    // qu'ils s'alignent proprement sur la ligne du titre. Le libellé reste
+    // découpé en deux <span> — remis sur une seule ligne en desktop, empilés
+    // en PWA compacte (voir .stamp-row dans globals.css).
     <span className="inline-flex flex-col items-center">
       <button
         onClick={print}
         disabled={printing}
-        // Hauteurs identiques à celles du timbre "En direct" voisin (voir
-        // Masthead) à chaque palier, et largeurs déduites du ratio EXACT de
-        // l'image de fond (stamp-bg-lg = 900/205) : c'est ce qui aligne
-        // proprement les deux timbres sur la ligne du titre, malgré des
-        // proportions d'image très différentes.
-        //
-        // px-* et tailles de police prudentes pour la même raison que le
-        // timbre "En direct" : l'image a un cadre perforé décoratif sur tout
-        // son pourtour, sur lequel le texte ne doit jamais mordre. On laisse
-        // donc une marge large plutôt que de viser au plus juste.
-        //
-        // Taille de base (mobile, sans préfixe) agrandie de 25% le
-        // 2026-08-24, en parité avec TelegraphButton (voir son commentaire —
-        // même titre de Masthead compact partagé par les deux pages, donc
-        // même agrandissement pour rester alignés).
-        className="stamp-button stamp-bg-lg flex h-[2.5rem] w-[11rem] flex-col items-center justify-center px-[0.9375rem] font-display text-[0.525rem] uppercase leading-none tracking-[0.08em] text-paper disabled:opacity-50 sm:h-[2.75rem] sm:w-[12.1rem] sm:px-4 sm:text-[0.55rem] sm:tracking-[0.1em] md:h-[3.25rem] md:w-[14.25rem] md:px-5 md:text-[0.65rem] md:tracking-[0.1em]"
+        className="stamp-button font-display uppercase disabled:opacity-50"
       >
         {printing ? (
           <>
@@ -99,7 +80,7 @@ export function PrintStampButton({ provider }: { provider?: string }) {
       {/* Avertissement conso de tokens : conservé (c'est la règle n°1 du
           projet de rester conscient du coût IA) mais réduit sous le timbre
           plutôt qu'en paragraphe centré pleine largeur. */}
-      <span className="mt-1 max-w-[9.5rem] text-center text-[0.55rem] italic leading-tight text-sepia sm:max-w-[13rem] sm:text-[0.6rem]">
+      <span className="mt-1 max-w-[13rem] text-center text-[0.6rem] italic leading-tight text-sepia">
         ⚠ Consomme des tokens {providerLabel}
       </span>
       {message && (

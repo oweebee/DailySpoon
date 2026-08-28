@@ -3,7 +3,7 @@ import "./globals.css";
 import { ArticleModalProvider } from "@/components/ArticleModalContext";
 import { PwaRegister } from "@/components/PwaRegister";
 import { getSettings } from "@/lib/settings";
-import { themeCssVars } from "@/lib/theme";
+import { accentCssVars } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "DailySpoon — le journal du jour",
@@ -37,7 +37,9 @@ export const metadata: Metadata = {
 // Séparé de "metadata" (exigé par Next 14 pour themeColor/viewport, plus
 // accepté dans l'export "metadata" classique).
 export const viewport: Viewport = {
-  themeColor: "#1a1a1a",
+  // Aligné sur le fond de la déclinaison Ardoise (la valeur par défaut) —
+  // c'est la couleur de la barre système en PWA.
+  themeColor: "#0a0a0a",
   width: "device-width",
   initialScale: 1,
   // Autorise le contenu à s'étendre sous l'encoche/la barre de statut en
@@ -46,40 +48,37 @@ export const viewport: Viewport = {
   viewportFit: "cover"
 };
 
-// Le thème est lu en base à chaque rendu : sans ça, changer de thème dans
-// l'admin n'aurait d'effet qu'au prochain redéploiement (Next met en cache
-// les layouts statiques).
+// La déclinaison de couleur est lue en base à chaque rendu : sans ça, en
+// changer dans l'admin n'aurait d'effet qu'au prochain redéploiement (Next
+// met en cache les layouts statiques).
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Lecture CÔTÉ SERVEUR, posée directement sur <html> : le thème est donc
-  // déjà correct au tout premier pixel affiché. Une bascule côté navigateur
-  // (script au chargement, classe ajoutée après coup) ferait apparaître un
-  // éclair de page claire avant de basculer en sombre à chaque navigation —
-  // le fameux "flash of unstyled content", particulièrement voyant sur un
-  // thème sombre.
+  // Lecture CÔTÉ SERVEUR, posée directement sur <html> : les couleurs sont
+  // donc déjà correctes au tout premier pixel affiché. Une bascule côté
+  // navigateur (script au chargement, classe ajoutée après coup) ferait
+  // apparaître un éclair de page claire avant de basculer en sombre à chaque
+  // navigation — le fameux "flash of unstyled content".
   //
   // Best-effort : si la base est injoignable au moment du rendu (démarrage,
-  // migration en cours), on retombe sur le thème par défaut plutôt que de
-  // faire échouer TOUTE l'application pour une question d'apparence.
+  // migration en cours), on retombe sur les valeurs de repli inscrites dans
+  // globals.css (:root) plutôt que de faire échouer TOUTE l'application pour
+  // une question d'apparence.
   const settings = await getSettings().catch(() => null);
-  const theme = settings?.theme ?? "material";
 
   // Palette de la déclinaison choisie, posée en variables CSS INLINE sur
   // <html> : un style inline l'emporte sur les règles de globals.css sans
   // avoir à jouer sur la spécificité ni sur l'ordre d'injection des feuilles
   // par Next. Les couleurs n'ont ainsi qu'une seule source (src/lib/theme.ts),
   // partagée avec le lecteur d'article qui, lui, ne peut lire aucune variable
-  // de l'application. Objet vide en thème journal : ses couleurs restent
-  // celles de :root.
-  const themeVars = themeCssVars(theme, settings?.materialAccent);
+  // de l'application.
+  const themeVars = accentCssVars(settings?.materialAccent);
 
   return (
     <html
       lang="fr"
-      data-theme={theme}
       // "data-images" : lu par globals.css pour rendre les vignettes en
-      // couleur plutôt qu'en noir et blanc (thème Material uniquement).
+      // couleur plutôt qu'en noir et blanc.
       data-images={settings?.materialColorImages ? "color" : "bw"}
       // Double cast : le type CSSProperties de React ne connaît pas les
       // propriétés personnalisées (--color-*), et une conversion directe
@@ -87,10 +86,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       // recouvrement suffisant entre les deux types.
       style={themeVars as unknown as React.CSSProperties}
     >
-      {/* Le fond (texture papier) est entièrement géré par la règle "body"
-          dans globals.css, pas ici — ne pas dupliquer/surcharger avec un
-          style inline, ça avait écrasé ce fond par-dessus la règle CSS
-          (spécificité du style inline) au lieu de la modifier proprement. */}
       <body className="min-h-screen bg-paper text-ink font-serif">
         <ArticleModalProvider>{children}</ArticleModalProvider>
         <PwaRegister />

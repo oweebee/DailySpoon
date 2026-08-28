@@ -3,19 +3,27 @@
 Ton journal personnel quotidien, généré automatiquement à partir des flux que tu suis déjà dans
 FreshRSS.
 
-Chaque jour, DailySpoon récupère les articles des catégories FreshRSS que tu as choisies, fait
-réécrire/résumer/classer/prioriser les articles par une IA, et publie une édition (façon une de
-journal). Autour de cette une : **En direct** (`/direct`, tous les articles récents groupés par
-catégorie, avec recherche dans tout l'historique et bouton « Télégraphier les news » sans IA), les
-**favoris** (`/favoris`, étoile shérif), et les **archives** (`/archive`, chaque impression figée
-telle quelle, consultable par date).
+La page d'accueil (`/`) est **En direct** : tous les articles récents groupés par catégorie, sans
+aucune IA — titres et extraits bruts des flux, avec recherche dans tout l'historique et bouton
+« Télégraphier les nouvelles ». C'est la page consultée au quotidien.
+
+À côté, le **Journal IA** (`/journal`) : une fois par jour, DailySpoon récupère les articles des
+catégories choisies, les fait réécrire/résumer/classer/prioriser par une IA, et publie une édition
+figée façon une de journal. Complètent le tout les **favoris** (`/favoris`, étoile shérif, avec
+filtre par mot-clé) et les **archives** (`/archive`, chaque impression figée telle quelle,
+consultable par date).
 
 Les articles s'ouvrent **directement dans l'appli** (fenêtre de lecture propre, extraction façon
 Reader View, avec repli morss pour les sites qui bloquent), sans quitter DailySpoon. Deux
 intégrations optionnelles complètent le tout : **notifications Telegram** (photo + légende poussée
 pour chaque nouvel article des flux cochés « notification ») et **Wallabag** (mettre un article en
 favori l'envoie à ton instance Wallabag pour archivage, avec un tag `DailySpoon`). L'appli est aussi
-**installable en PWA** sur mobile et bureau (icône sur l'écran d'accueil).
+**installable en PWA** sur mobile et bureau (icône sur l'écran d'accueil), et peut traduire
+automatiquement en français les vignettes des flux étrangers via une instance **LibreTranslate**
+auto-hébergée (voir plus bas).
+
+L'apparence est sombre et minimaliste, avec six déclinaisons de couleur au choix dans
+`/admin/settings` et des vignettes en noir et blanc ou en couleur.
 
 ## Stack
 
@@ -35,16 +43,21 @@ favori l'envoie à ton instance Wallabag pour archivage, avec un tag `DailySpoon
   anti-bot). Reconstruit à chaque déploiement (cloné depuis GitHub, toujours à jour tout seul).
   Tunnel OpenVPN optionnel pour que morss sorte par une autre IP, réglable et testable depuis
   `/admin/settings` (voir la section dédiée plus bas)
+- **LibreTranslate** (optionnel) — instance auto-hébergée, déployée **séparément** (voir
+  `libretranslate/docker-compose.yml`) et raccordée par une simple URL dans `/admin/settings` :
+  traduction en français des flux cochés « traduction », sans quota et sans qu'aucune donnée ne
+  sorte du serveur
 - Docker + docker-compose — pensé pour un déploiement Coolify sur ton propre serveur
 
 ## Structure
 
 ```
-src/app/            pages (édition du jour, archives, admin)
+src/app/            pages (accueil « En direct », journal IA, archives, favoris, admin)
 src/lib/            logique métier (client FreshRSS, IA, génération d'édition, auth)
 worker/             scheduler quotidien (cron) + script one-shot
 prisma/             schéma + migrations
 morss/              Dockerfile + entrypoint.sh du service morss (scraping de repli + VPN optionnel)
+libretranslate/     docker-compose du service de traduction, déployé SÉPARÉMENT (ressource à part)
 Dockerfile           image unique (web + worker via CMD)
 docker-compose.yml   services db / web / worker / morss
 ```
@@ -78,12 +91,14 @@ renseigner dans l'onglet **Environment Variables** de Coolify fonctionne réelle
 
 En revanche, les autres réglages applicatifs — fournisseur IA (Anthropic/Gemini) et modèle Gemini,
 style d'écriture, rétention, activation du planning, intervalle des flux perso, notifications
-Telegram, intégration Wallabag, mot de passe du lecteur RSS externe (`GREADER_API_PASSWORD`)... —
+Telegram, intégration Wallabag, traduction LibreTranslate, apparence (couleur dominante, vignettes
+couleur ou noir et blanc), mot de passe du lecteur RSS externe (`GREADER_API_PASSWORD`)... —
 se configurent uniquement dans `/admin/settings`, sans redéploiement. Le code lit bien ces valeurs
 avec un repli sur des variables d'environnement (`AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`,
 `RETENTION_DAYS`, `EDITION_SCHEDULE_ENABLED`, `WRITING_STYLE`, `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_CHAT_ID`, `WALLABAG_BASE_URL`, `WALLABAG_CLIENT_ID`, `WALLABAG_CLIENT_SECRET`,
-`WALLABAG_USERNAME`, `WALLABAG_PASSWORD`, `GREADER_API_PASSWORD`), mais **`docker-compose.yml` ne
+`TELEGRAM_CHAT_ID`, `LIBRETRANSLATE_URL`, `LIBRETRANSLATE_API_KEY`, `WALLABAG_BASE_URL`,
+`WALLABAG_CLIENT_ID`, `WALLABAG_CLIENT_SECRET`, `WALLABAG_USERNAME`, `WALLABAG_PASSWORD`,
+`GREADER_API_PASSWORD`), mais **`docker-compose.yml` ne
 les transmet pas** aux conteneurs `web`/`worker` en déploiement Coolify — les définir dans l'onglet
 Environment Variables de Coolify n'a donc aucun effet pour ces réglages-là ; seul `/admin/settings`
 fonctionne en pratique une fois déployé (ce repli par variable d'env ne joue que si tu lances le
@@ -152,9 +167,10 @@ Une fois déployé :
    depuis FreshRSS), règle indépendamment « En direct » et « Impression IA » par catégorie, et
    ajoute si tu veux des flux RSS personnalisés (avec leurs catégories personnalisées) et des
    flux « médaillés » (mis en avant à la une d'En direct).
-4. Lance une première impression sans attendre le lendemain : bouton de génération sur l'accueil
-   (si le planning auto est désactivé) ou « Télégraphier les news » sur `/direct` pour un premier
-   remplissage sans IA.
+4. Lance un premier remplissage sans attendre le lendemain : « Télégraphier les nouvelles » sur
+   l'accueil (aucune IA, aucun token consommé). Pour une vraie une générée par IA, va sur
+   `/journal` et clique « Lancer l'impression du journal » (le bouton n'apparaît que si le planning
+   auto est désactivé).
 5. Le worker prend ensuite le relais tout seul : édition quotidienne à l'heure réglée (si le
    planning est actif) et balayage des flux personnalisés à l'intervalle choisi.
 
@@ -173,7 +189,7 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
 
 - Sans clé IA (Anthropic ou Gemini), les articles sont quand même récupérés et publiés, mais sans
   réécriture/résumé/priorisation par IA (mode dégradé, texte brut des flux). Le bouton
-  « Télégraphier les news » de `/direct` ne consomme JAMAIS de tokens IA, même si une clé est
+  « Télégraphier les nouvelles » de l'accueil ne consomme JAMAIS de tokens IA, même si une clé est
   configurée.
 - Chaque génération crée sa propre édition, figée telle quelle dans `/archive` (avec le modèle, le
   style et les tokens consommés de cette impression précise) — régénérer le même jour n'écrase
@@ -185,6 +201,17 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
   configurer) est tenté, et en dernier recours l'aperçu déjà récupéré depuis le flux est affiché.
   **En direct** reste toujours 100 % sans IA : sa fenêtre de lecture et ses vignettes montrent le
   texte brut du flux, jamais un résumé réécrit par l'IA (même après une impression IA).
+- **Traduction** (optionnel) : coche « traduction » sur un flux dans `/admin/categories` pour que
+  ses vignettes s'affichent directement en français dans « En direct ». Seuls les 20 articles les
+  plus récents de chaque flux sont traduits, du plus récent au plus ancien, et jamais deux fois (la
+  traduction est mise en cache en base). Ouvrir l'article le montre toujours dans sa langue
+  d'origine — un bouton dans la fenêtre de lecture le traduit à la demande. Tout passe par ton
+  instance LibreTranslate, renseignée dans `/admin/settings` (URL + clé si elle est protégée) ;
+  sans URL, rien n'est traduit et les articles restent tels quels.
+- **Apparence** : un seul habillage, sombre et minimaliste. Dans `/admin/settings` tu choisis la
+  **couleur dominante** parmi six déclinaisons (Ardoise par défaut, puis bleu nuit, vert profond,
+  violet, ambre, rose poudré) et si les vignettes s'affichent en **noir et blanc** (défaut) ou en
+  couleur. Le changement s'applique à tout le site, admin comprise, dès l'enregistrement.
 - **VPN morss** (optionnel) : dans `/admin/settings`, un champ permet de coller un fichier `.ovpn`
   pour que le service `morss` sorte par un tunnel OpenVPN plutôt que par l'IP directe du serveur —
   utile si un site source bloque spécifiquement l'IP du VPS. Un indicateur coloré affiche l'état
@@ -223,3 +250,10 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
 - Les données Postgres vivent dans le volume Docker `dailyspoon_db_data` : elles survivent aux
   redéploiements, mais si tu supprimes le volume (ou la ressource entière dans Coolify), elles sont
   perdues — pense à un backup si le contenu devient précieux.
+
+## Versions
+
+L'application est en **V1**. Les versions suivantes s'appellent V1.01, V1.02, etc., jusqu'à un
+passage explicite en V2. Le numéro affiché est celui de `src/lib/version.ts`, repris en bas de
+`/admin/settings` ; sa correspondance avec le champ `version` de `package.json` (contraint au
+format semver) est donnée par la table du `CHANGELOG.md`, qui fait foi.

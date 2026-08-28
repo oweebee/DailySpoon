@@ -5,7 +5,6 @@ import type { ArticleLike } from "./EditionView";
 import { SourceLine, formatStamp, directTitle, directText, directHref } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
-import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
 
 const INITIAL_COUNT = 5;
 const STEP = 5;
@@ -23,8 +22,7 @@ export function CategoryColumn({
   showDateStamp = true,
   showFavorite = true,
   scrollExpand = false,
-  autoInfinite = false,
-  highlightIndex = 0
+  autoInfinite = false
 }: {
   label: string;
   articles: ArticleLike[];
@@ -64,11 +62,6 @@ export function CategoryColumn({
    *  conteneur à hauteur fixe. Mutuellement exclusif avec scrollExpand
    *  (desktop). */
   autoInfinite?: boolean;
-  /** Cyclé % 3 pour choisir une des 3 traces de surligneur (voir
-   *  CATEGORY_HIGHLIGHTS) affichée en fond du titre — index stable calculé
-   *  par CategoryGrid à partir de la position de la catégorie, pour ne
-   *  jamais répéter deux fois la même trace d'affilée. */
-  highlightIndex?: number;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
   const [expanded, setExpanded] = useState(false);
@@ -136,30 +129,10 @@ export function CategoryColumn({
         draggable={draggable}
         onDragStart={draggable ? onDragStart : undefined}
         onDragEnd={draggable ? onDragEnd : undefined}
-        // Titre dans la couleur exacte du fond de l'image du site
-        // (moyenne échantillonnée sur public/textures/journal.jpg, #e5e3df —
-        // plus chaude que le gris plat "paper" du thème), partout, web
-        // comme mobile (plus de distinction responsive ici).
-        className={`category-band relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] text-[#e5e3df] ${
+        className={`category-band relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] ${
           draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
         }`}
       >
-        {/* Trace de surligneur en fond, sous le titre — hauteur fixe (le
-            ratio d'origine, très large et plat, n'est jamais déformé : seule
-            la hauteur est contrainte, la largeur suit), calée pour occuper
-            exactement l'espace intérieur du bandeau (py-1.5 + hauteur de
-            ligne du texte = 2rem) : son pixel le plus haut/bas touche
-            pile le filet du haut/bas, sans déborder dessus (overflow-hidden
-            sur le <h2>). */}
-        <img
-          src={CATEGORY_HIGHLIGHTS[highlightIndex % CATEGORY_HIGHLIGHTS.length]}
-          alt=""
-          aria-hidden="true"
-          // "ornament" : masqué par le thème Material (voir globals.css,
-          // variable --ornament-display) — une trace de surligneur peinte
-          // n'a aucun sens dans une interface sombre minimaliste.
-          className="ornament pointer-events-none absolute left-1/2 top-1/2 h-8 w-auto -translate-x-1/2 -translate-y-1/2 select-none"
-        />
         <span className="relative">{label}</span>
       </h2>
       <div
@@ -193,7 +166,7 @@ export function CategoryColumn({
             )}
             <h3 className="font-display text-sm font-bold leading-snug">{directTitle(article)}</h3>
             <p
-              className={`newsprint mt-1 text-sm leading-snug text-neutral-700 ${
+              className={`mt-1 text-sm leading-snug text-neutral-700 ${
                 clampSummary ? "line-clamp-[10]" : ""
               }`}
             >
@@ -210,26 +183,33 @@ export function CategoryColumn({
       </div>
 
       {!expanded && !autoInfinite && remaining > 0 && (
-        <button
-          onClick={handleShowMore}
-          // Vrai bouton encadré, sur TOUTE la largeur de la colonne — donc
-          // exactement la largeur d'une carte d'article, qu'il vient
-          // prolonger en bas de pile. Remplace l'ancien libellé souligné en
-          // pointillés, qui ne se lisait pas comme un élément cliquable.
-          //
-          // Bordure en "rule" et non en "ink" : dans le thème journal les
-          // deux sont identiques (le cadre se confond donc avec celui des
-          // cartes), tandis qu'en Material "ink" est CLAIR — un cadre de
-          // 2 px en texte clair aurait hurlé au milieu de la colonne, alors
-          // que "rule" y est le gris discret des séparateurs.
-          //
-          // py-2 : hauteur calée sur le texte, sans marge superflue.
-          className="mt-3 w-full border-2 border-rule bg-ink/[0.05] px-4 py-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:bg-ink/[0.1] hover:text-ink"
-        >
-          {scrollExpand
-            ? "Afficher plus d'articles"
-            : `Suite — encore ${Math.min(STEP, remaining)} de plus (${remaining} au total)`}
-        </button>
+        // Le filet pointillé revient SOUS le bouton (bordure basse du
+        // conteneur) : le bouton clôt sa rubrique, le trait la referme avant
+        // la suivante. Il est porté par ce bloc et non par le bouton
+        // lui-même, qui est désormais encadré — un trait collé à son propre
+        // cadre se lirait comme un défaut d'alignement.
+        <div className="mt-3 border-b border-dashed border-ink/40 pb-3">
+          <button
+            onClick={handleShowMore}
+            // Vrai bouton encadré, sur TOUTE la largeur de la colonne — donc
+            // exactement la largeur d'une carte d'article, qu'il vient
+            // prolonger en bas de pile. Remplace l'ancien libellé souligné en
+            // pointillés, qui ne se lisait pas comme un élément cliquable.
+            //
+            // Bordure en "rule" et non en "ink" : dans le thème journal les
+            // deux sont identiques (le cadre se confond donc avec celui des
+            // cartes), tandis qu'en Material "ink" est CLAIR — un cadre de
+            // 2 px en texte clair aurait hurlé au milieu de la colonne, alors
+            // que "rule" y est le gris discret des séparateurs.
+            //
+            // py-2 : hauteur calée sur le texte, sans marge superflue.
+            className="w-full border-2 border-rule bg-ink/[0.05] px-4 py-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:bg-ink/[0.1] hover:text-ink"
+          >
+            {scrollExpand
+              ? "Afficher plus d'articles"
+              : `Suite — encore ${Math.min(STEP, remaining)} de plus (${remaining} au total)`}
+          </button>
+        </div>
       )}
     </section>
   );

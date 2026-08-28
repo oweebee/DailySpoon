@@ -5,34 +5,22 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        // Les quatre familles pointent toutes sur la même police (Inter, voir
+        // globals.css) : l'application n'a plus qu'un seul habillage. Elles
+        // restent distinctes pour que les composants continuent d'écrire
+        // font-display ou font-masthead sans avoir à changer de classe, et
+        // pour pouvoir les redifférencier un jour sans rien toucher ailleurs.
         serif: "var(--font-serif)",
-        // Rye et Anton (essayés d'après des mockups) étaient jugés trop
-        // massifs/gras à l'usage sur les titres courants (font-display,
-        // utilisée partout : rubriques, article, nav...) — reste sur
-        // Playfair Display pour ceux-là. Le masthead ("DailySpoon" en
-        // très grand en haut de chaque page) est un cas à part : un seul
-        // gros logotype, pas du texte courant — Rye (western/far-west,
-        // façon affiche de saloon) y est repris ici sans ce problème de
-        // lisibilité.
-        // Mêmes familles qu'avant, mais passées par des variables CSS pour
-        // que le thème Material puisse toutes les remplacer par une seule
-        // police (voir globals.css) sans qu'aucun composant n'ait à changer
-        // de classe. Les valeurs par défaut de ces variables reproduisent
-        // exactement les piles ci-dessous.
         display: "var(--font-display)",
         masthead: "var(--font-masthead)",
         sans: "var(--font-sans)"
       },
       colors: {
-        // Thème en niveaux de gris : seul le rouge ("journal") reste en
-        // couleur, comme accent unique (menu, tampon, étoile favori,
-        // ruban de médaille...). Le reste (papier, filets, texte discret)
-        // est du gris neutre pur (R=G=B), plus de teinte sépia/beige.
-        //
-        // Les valeurs ne sont plus écrites en dur ici mais lues dans des
-        // variables CSS (définies dans globals.css), pour qu'un simple
-        // attribut data-theme sur <html> puisse repeindre toute
-        // l'application sans toucher à une seule classe dans les composants.
+        // Palette en niveaux de gris sombres ; seul "journal" reste en
+        // couleur, comme accent unique (menu, tampon, étoile favori, ruban de
+        // médaille...). Les valeurs vivent dans des variables CSS posées sur
+        // <html> par le layout à partir de la déclinaison choisie en admin
+        // (voir src/lib/theme.ts), avec un repli dans globals.css (:root).
         //
         // Écriture "rgb(var(--x) / <alpha-value>)" et non "var(--x)" tout
         // court : c'est ce qui permet à Tailwind de continuer à gérer les

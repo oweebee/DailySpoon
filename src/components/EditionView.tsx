@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { CategoryGrid } from "./CategoryGrid";
-import { CATEGORY_HIGHLIGHTS } from "../lib/highlights";
 import { ArticleLink } from "./ArticleLink";
 import { ArticleImage } from "./ArticleImage";
 import { FavoriteStar } from "./FavoriteStar";
@@ -93,15 +92,13 @@ export function EditionView({
   clampSummary = false,
   date,
   mastheadAction,
-  navExtra,
-  hideLiveStamp = false
+  navExtra
 }: {
   articles: ArticleLike[];
   /** Simplement relayés jusqu'au Masthead du carrousel mobile — voir
    *  CategoryGrid/MobilePagedSection/Masthead. */
   mastheadAction?: ReactNode;
   navExtra?: ReactNode;
-  hideLiveStamp?: boolean;
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  CategoryGrid/MobilePagedSection. */
   date: Date;
@@ -234,20 +231,7 @@ export function EditionView({
           simple colonne swipable parmi les autres (voir isHero plus bas). */}
       {heroMain && (
         <div className="mb-10 hidden border-2 border-ink bg-ink/[0.07] p-6 md:block md:p-8">
-          {/* Même trace de surligneur que les titres de rubrique (voir
-              CategoryColumn), gardée dans sa couleur rouge d'origine (pas de
-              filtre), plus grande, tirée au hasard à chaque rendu plutôt
-              qu'alternée (un seul bandeau ici, pas une liste de rubriques).
-              Texte dans la même couleur que les titres de rubrique
-              maintenant (#e5e3df, échantillonnée sur le fond du site), un
-              peu plus gros et en gras. */}
-          <p className="relative mb-6 text-center text-sm font-bold uppercase tracking-[0.35em] text-[#e5e3df]">
-            <img
-              src={CATEGORY_HIGHLIGHTS[Math.floor(Math.random() * CATEGORY_HIGHLIGHTS.length)]}
-              alt=""
-              aria-hidden="true"
-              className="ornament pointer-events-none absolute left-1/2 top-1/2 h-[34px] w-auto -translate-x-1/2 -translate-y-1/2 select-none"
-            />
+          <p className="relative mb-6 text-center text-sm font-bold uppercase tracking-[0.35em] text-ink">
             <span className="relative">✦ À la une ✦</span>
           </p>
           <div className={heroGridClass}>
@@ -275,7 +259,6 @@ export function EditionView({
         date={date}
         mastheadAction={mastheadAction}
         navExtra={navExtra}
-        hideLiveStamp={hideLiveStamp}
       />
 
       {/* Cul-de-lampe de fin d'édition — desktop seulement (mobile l'a déjà
@@ -386,7 +369,7 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </ArticleLink>
       )}
-      <p className="newsprint mx-auto max-w-xl line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
+      <p className="mx-auto max-w-xl line-clamp-[10] text-left text-sm leading-snug text-neutral-800">
         {directText(article)}
       </p>
       <SourceLine article={article} center />
@@ -413,7 +396,7 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </ArticleLink>
       )}
-      <p className="newsprint line-clamp-[10] text-sm leading-snug text-neutral-700">{directText(article)}</p>
+      <p className="line-clamp-[10] text-sm leading-snug text-neutral-700">{directText(article)}</p>
       <SourceLine article={article} />
     </article>
   );

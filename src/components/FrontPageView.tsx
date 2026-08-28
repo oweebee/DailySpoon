@@ -223,7 +223,7 @@ function MainHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </div>
       )}
-      <p className="newsprint mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">
+      <p className="mx-auto max-w-xl text-left text-base leading-snug text-neutral-800">
         {frontText(article)}
       </p>
     </article>
@@ -243,7 +243,7 @@ function SideHeroBox({ article, className = "" }: { article: ArticleLike; classN
           />
         </div>
       )}
-      <p className="newsprint text-sm leading-snug text-neutral-700">{frontText(article)}</p>
+      <p className="text-sm leading-snug text-neutral-700">{frontText(article)}</p>
     </article>
   );
 }
@@ -307,7 +307,7 @@ function StaticCategorySection({
         )}
         <div className="min-w-0">
           <h4 className="font-display text-base font-bold leading-snug">{lead.headline}</h4>
-          <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(lead)}</p>
+          <p className="mt-1 text-sm leading-snug text-neutral-700">{frontText(lead)}</p>
         </div>
       </article>
 
@@ -329,7 +329,7 @@ function StaticCategorySection({
                 {/* Même taille que le titre vedette sur desktop (sm:) — la
                     différenciation (plus petit) ne reste que sur mobile. */}
                 <h4 className="font-display text-xs font-bold leading-snug sm:text-base">{a.headline}</h4>
-                <p className="newsprint mt-1 text-sm leading-snug text-neutral-700">{frontText(a)}</p>
+                <p className="mt-1 text-sm leading-snug text-neutral-700">{frontText(a)}</p>
               </div>
             </div>
           ))}

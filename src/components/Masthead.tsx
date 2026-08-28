@@ -29,7 +29,6 @@ export function Masthead({
   action,
   titleAside,
   navExtra,
-  hideLiveStamp = false
 }: {
   date: Date;
   /** Version resserrée verticalement, utilisée uniquement pour la copie
@@ -53,10 +52,6 @@ export function Masthead({
    *  son état vit chez l'appelant, qui en fait quelque chose (filtrer la
    *  liste d'articles). */
   navExtra?: ReactNode;
-  /** Masque le timbre "En direct". Utilisé sur /direct même : y proposer un
-   *  raccourci vers la page où l'on se trouve déjà n'a aucun intérêt, et ça
-   *  libère la place pour le timbre d'action. */
-  hideLiveStamp?: boolean;
 }) {
   // Sert à mettre en évidence l'entrée de menu correspondant à la page
   // courante. usePathname plutôt qu'une propriété à transmettre : ce bandeau
@@ -64,7 +59,9 @@ export function Masthead({
   // serveur, et il aurait fallu faire descendre l'information à travers
   // toute la chaîne du carrousel mobile juste pour colorer un lien.
   const pathname = usePathname();
-  const isDirectPage = pathname === "/direct";
+  // Le Journal IA vit sur /journal depuis la V1 ; l'accueil ("/") est la page
+  // "En direct".
+  const isJournalPage = pathname === "/journal";
 
   const formatted = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
@@ -83,48 +80,18 @@ export function Masthead({
   // plus haut que le timbre "En direct" voisin. Centrés, les deux blocs
   // s'alignaient sur leur milieu — donc des bords hauts décalés, alors que ce
   // sont les BOUTONS eux-mêmes qu'on veut voir alignés.
+  // Groupe du timbre d'action de la page — "Lancer l'impression" sur le
+  // Journal IA, "Télégraphier les nouvelles" sur l'accueil "En direct".
+  // UN SEUL timbre par page : le raccourci "En direct" qui l'accompagnait a
+  // disparu avec la V1, "En direct" étant devenu l'accueil (le titre y ramène
+  // déjà, et le menu propose "Journal IA" pour l'autre sens).
+  //
+  // Extrait en variable parce qu'il se place à DEUX endroits selon la
+  // largeur : à droite du titre en desktop, sur une ligne à lui en compact.
   const stamps = (
     <div className={`stamp-row flex items-start gap-2 sm:gap-3 ${compact ? "w-full" : "shrink-0"}`}>
-            {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
-                globals.css), qui NE se combine PAS avec ".stamp-button" :
-                les deux se disputaient la propriété "transform" (rotation vs
-                centrage), et la rotation ne s'affichait alors jamais. Le
-                fond reste droit ; seul le texte, enveloppé dans
-                .stamp-live-text, garde l'inclinaison. */}
-            {!hideLiveStamp && (
-              <Link
-                href="/direct"
-                // Timbre "md" (700/270) et non plus "sm" (600/406) : ce
-                // dernier est presque carré, donc très étroit une fois sa
-                // hauteur alignée sur celle du timbre d'action — "EN DIRECT"
-                // n'y tenait pas et débordait sur le cadre perforé de
-                // l'image. Le "md" est nettement plus large à hauteur égale,
-                // ce qui correspond bien mieux à un texte court et large.
-                //
-                // Hauteur ET largeur fixées, dans le ratio EXACT de l'image
-                // (700/270) : c'est ce qui aligne ce timbre sur son voisin
-                // (même hauteur à chaque palier) sans jamais le déformer. En
-                // ne fixant que la hauteur, la largeur d'un élément flex se
-                // calculerait sur son contenu, pas sur le ratio.
-                //
-                // px-* INDISPENSABLE : l'image de timbre a un cadre perforé
-                // décoratif sur son pourtour, le texte ne doit donc jamais
-                // occuper toute la largeur de la boîte. Les tailles de police
-                // ci-dessous laissent volontairement une grosse marge (le
-                // texte occupe environ la moitié de la place disponible) :
-                // une police se mesure mal à l'estimation, et un débordement
-                // est bien plus laid qu'un texte un peu petit.
-                className={`stamp-live stamp-bg-md flex shrink-0 items-center justify-center font-display uppercase leading-none text-white ${
-                  compact
-                    ? "h-[2rem] w-[5.2rem] px-2 text-[0.42rem] tracking-[0.05em]"
-                    : "h-[2.75rem] w-[7.15rem] px-3 text-[0.5rem] tracking-[0.05em] md:h-[3.25rem] md:w-[8.45rem] md:px-4 md:text-[0.6rem] md:tracking-[0.06em]"
-                }`}
-              >
-                <span className="stamp-live-text whitespace-nowrap">En direct</span>
-              </Link>
-            )}
-            {action}
-          </div>
+      {action}
+    </div>
   );
 
   return (
@@ -141,20 +108,11 @@ export function Masthead({
             ferme le haut de la tête de journal. */}
         <div className="border-b border-ink" />
 
-        {/* Ligne du titre : nom du journal calé à GAUCHE, timbres calés à
-            DROITE (le "En direct" puis, s'il y en a un, le timbre d'action de
-            la page). Une seule et même disposition en mobile comme en
-            desktop — d'où la disparition des deux variantes de timbre "En
-            direct" qui coexistaient ici (une centrée sous le titre en
-            mobile, une en position absolue à droite en desktop) : dans une
-            ligne flex, le timbre se place naturellement à droite aux deux
-            tailles, seule sa hauteur change.
-
-            Les timbres tirent leur LARGEUR de leur hauteur via aspect-ratio
-            (voir .stamp-bg-* dans globals.css) : on ne fixe donc jamais que
-            la hauteur, et l'image n'est jamais déformée. "shrink-0" sur le
-            groupe de droite pour que ce soit le titre qui cède de la place
-            si l'écran est vraiment étroit, jamais les timbres. */}
+        {/* Ligne du titre : nom du journal calé à GAUCHE, bouton d'action de
+            la page calé à DROITE. Une seule et même disposition en mobile
+            comme en desktop. "shrink-0" sur le groupe de droite pour que ce
+            soit le titre qui cède de la place si l'écran est vraiment
+            étroit, jamais le bouton. */}
         <div className={`flex items-center justify-between gap-3 ${compact ? "py-2" : "py-5"}`}>
           <Link
             href="/"
@@ -163,7 +121,7 @@ export function Masthead({
             // "En direct" de DirectView (elles ne partagent plus cette ligne
             // avec le titre, donc la place laissée par ce resserrement
             // profite au titre et au bouton d'action).
-            className={`font-masthead font-black uppercase leading-none tracking-tight ${
+            className={`masthead-title font-masthead font-black uppercase leading-none tracking-tight ${
               compact ? "text-[1.5625rem]" : "text-4xl md:text-6xl"
             }`}
           >
@@ -209,12 +167,13 @@ export function Masthead({
             compact ? "gap-x-3 gap-y-0.5 sm:gap-x-4" : "gap-x-5 gap-y-1 sm:gap-x-6"
           }`}
         >
-          {/* "En direct" ne s'affiche en rouge que lorsqu'on EST sur cette
+          {/* "Journal IA" ne s'affiche en couleur que lorsqu'on EST sur cette
               page — c'est un repère de position, pas une décoration
               permanente. Ailleurs il se fond dans le menu comme les autres
-              entrées. */}
-          <Link href="/direct" className={`${isDirectPage ? "text-journal" : ""} hover:underline`}>
-            En direct
+              entrées. Pas d'entrée "En direct" : c'est l'accueil, et le titre
+              DailySpoon y ramène déjà. */}
+          <Link href="/journal" className={`${isJournalPage ? "text-journal" : ""} hover:underline`}>
+            Journal IA
           </Link>
           <Link href="/archive" className="hover:underline">
             Archives

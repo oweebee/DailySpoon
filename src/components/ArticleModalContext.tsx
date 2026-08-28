@@ -115,23 +115,22 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
                   // même sujet. Repli sur le nom de domaine si jamais aucun
                   // titre n'a été transmis (ArticleLink, title optionnel).
                 }
-                {/* Mêmes timbres que partout ailleurs (stamp-button +
-                    stamp-bg-md, voir globals.css) plutôt que de simples liens
-                    soulignés : ce sont des actions, elles doivent se
-                    reconnaître comme telles et suivre le thème — en Material,
-                    ces classes deviennent automatiquement des boutons plats. */}
+                {/* Mêmes boutons que partout ailleurs (.stamp-button, voir
+                    globals.css) plutôt que de simples liens soulignés : ce
+                    sont des actions, elles doivent se reconnaître comme
+                    telles et suivre la couleur choisie. */}
                 <a
                   href={`https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery(state.url, state.title))}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="stamp-button stamp-bg-md flex h-[2.2rem] w-[5.7rem] items-center justify-center whitespace-nowrap px-2 font-display text-[0.42rem] uppercase tracking-[0.05em] text-paper"
+                  className="stamp-button font-display uppercase"
                 >
                   Google ↗
                 </a>
                 <button
                   onClick={close}
                   aria-label="Fermer"
-                  className="stamp-button stamp-bg-md flex h-[2.2rem] w-[5.7rem] items-center justify-center whitespace-nowrap px-2 font-display text-[0.42rem] uppercase tracking-[0.05em] text-paper"
+                  className="stamp-button font-display uppercase"
                 >
                   ✕ Fermer
                 </button>

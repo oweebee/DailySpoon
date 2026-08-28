@@ -4,7 +4,7 @@ import { useState } from "react";
 
 /**
  * Illustration pulled from the source feed, rendered noir/sépia to match
- * the vintage newsprint look — desaturated and slightly warmed like an old
+ * the vintage look — desaturated and slightly warmed like an old
  * halftone print. Hides itself if the image fails to load instead of
  * showing a broken-image icon.
  *

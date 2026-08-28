@@ -53,8 +53,7 @@ export function CategoryGrid({
   showFavorite = true,
   date,
   mastheadAction,
-  navExtra,
-  hideLiveStamp = false
+  navExtra
 }: {
   initialCategories: CategoryEntry[];
   /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
@@ -69,7 +68,6 @@ export function CategoryGrid({
   /** Simplement relayés au Masthead du carrousel mobile — voir Masthead. */
   mastheadAction?: ReactNode;
   navExtra?: ReactNode;
-  hideLiveStamp?: boolean;
 }) {
   const [categories, setCategories] = useState(initialCategories);
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null);
@@ -114,8 +112,7 @@ export function CategoryGrid({
         className="md:hidden"
         mastheadAction={mastheadAction}
         navExtra={navExtra}
-        hideLiveStamp={hideLiveStamp}
-        pages={categories.map((cat, i) => ({
+        pages={categories.map((cat) => ({
           key: cat.label,
           content: (
             <CategoryColumn
@@ -126,7 +123,6 @@ export function CategoryGrid({
               showDateStamp={showDateStamp}
               showFavorite={showFavorite}
               autoInfinite
-              highlightIndex={i}
             />
           )
         }))}
@@ -144,12 +140,6 @@ export function CategoryGrid({
           exactement la même position par catégorie qu'avant. */}
       {(() => {
         const nonHero = categories.filter((cat) => !cat.isHero);
-        // Index stable par catégorie (position dans nonHero, PAS dans le
-        // bucket qui la contient) — sert uniquement à choisir la trace de
-        // surligneur (highlightIndex % 3 dans CategoryColumn), pour ne
-        // jamais répéter deux fois la même trace d'affilée d'une catégorie
-        // à l'autre.
-        const highlightIndexByLabel = new Map(nonHero.map((cat, i) => [cat.label, i]));
         const renderColumn = (bucket: CategoryEntry[], colIndex: number, lastIndex: number) => (
           <div
             key={colIndex}
@@ -172,7 +162,6 @@ export function CategoryGrid({
                 showDateStamp={showDateStamp}
                 showFavorite={showFavorite}
                 scrollExpand
-                highlightIndex={highlightIndexByLabel.get(cat.label) ?? 0}
               />
             ))}
           </div>

@@ -115,10 +115,22 @@ export async function POST(req: NextRequest) {
     } = body as Record<string, any>;
 
     if (settings && typeof settings === "object") {
+      // Colonnes retirées du schéma depuis : une sauvegarde plus ancienne les
+      // contient encore, et Prisma refuse en bloc un objet comportant un
+      // champ inconnu — la restauration échouerait entièrement à cause d'un
+      // réglage qui n'existe plus. On les écarte silencieusement.
+      //   - "theme" : l'application n'a plus qu'un seul habillage (le choix
+      //     entre "material" et "dailyspoon" a disparu).
+      const REMOVED_SETTINGS_FIELDS = ["theme"];
+      const cleanSettings = Object.fromEntries(
+        Object.entries(settings as Record<string, unknown>).filter(
+          ([key]) => !REMOVED_SETTINGS_FIELDS.includes(key)
+        )
+      );
       await prisma.settings.upsert({
         where: { id: "singleton" },
-        update: settings,
-        create: { id: "singleton", ...settings }
+        update: cleanSettings,
+        create: { id: "singleton", ...cleanSettings }
       });
     }
 

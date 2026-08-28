@@ -1,5 +1,5 @@
 /**
- * Définition des thèmes visuels et de leurs déclinaisons de couleur.
+ * Déclinaisons de couleur de l'application et palette associée.
  *
  * Ce module ne dépend de RIEN (ni Prisma, ni React) : il est importé aussi
  * bien par le layout (composant serveur), que par le lecteur d'article
@@ -7,27 +7,14 @@
  * (composant client). Y mettre le moindre import de base de données rendrait
  * impossible son usage côté navigateur.
  *
- * Les couleurs vivent ICI et nulle part ailleurs. Elles étaient auparavant
- * écrites en dur dans globals.css ET recopiées dans le lecteur d'article, qui
- * ne peut pas lire les variables CSS de l'application (HTML autonome servi en
- * iframe) — deux endroits à maintenir en parallèle, donc deux occasions de
- * diverger. Le layout injecte désormais ces valeurs en variables CSS sur
- * <html>, et le lecteur les lit dans le même objet.
+ * Les couleurs vivent ICI et nulle part ailleurs. Le layout les injecte en
+ * variables CSS sur <html>, et le lecteur d'article — qui ne peut pas lire
+ * les variables CSS de l'application, étant du HTML autonome servi en
+ * iframe — les lit dans le même objet.
  */
 
-export const THEMES = ["dailyspoon", "material"] as const;
-export type ThemeName = (typeof THEMES)[number];
-
-/** Ramène n'importe quelle valeur stockée à un thème connu. Le défaut est
- *  "material" : c'est l'habillage retenu pour l'application, et une valeur
- *  absente (colonne jamais renseignée) doit donc y mener, pas à l'ancien
- *  habillage journal — lequel reste disponible en choix explicite. */
-export function normalizeTheme(value: string | null | undefined): ThemeName {
-  return THEMES.includes(value as ThemeName) ? (value as ThemeName) : "material";
-}
-
 /**
- * Palette d'une déclinaison du thème Material. Composantes RVB séparées par
+ * Palette d'une déclinaison de couleur. Composantes RVB séparées par
  * des espaces (et non "#rrggbb") : c'est la forme qu'attend Tailwind pour
  * pouvoir appliquer ses modificateurs d'opacité (bg-ink/[0.07],
  * text-sepia/70…). Voir tailwind.config.ts.
@@ -53,9 +40,9 @@ export type Palette = {
 
 /**
  * Six déclinaisons, toutes sur base sombre. Les niveaux (fond très sombre,
- * surface un cran au-dessus, texte clair désaturé) suivent les conventions du
- * Material sombre d'origine ; seule la teinte change. "ardoise" est le défaut
- * et correspond exactement au gris quasi noir d'avant l'ajout de ce réglage.
+ * surface un cran au-dessus, texte clair désaturé) sont identiques d'une
+ * déclinaison à l'autre ; seule la teinte change. "ardoise" est le défaut et
+ * reprend les valeurs inscrites en repli dans globals.css (:root).
  */
 export const MATERIAL_ACCENTS: Record<string, { label: string; palette: Palette }> = {
   ardoise: {
@@ -142,12 +129,8 @@ export function paletteFor(accent: string | null | undefined): Palette {
  * déclinaison choisie. Style INLINE et non feuille de style : il l'emporte
  * sur les règles de globals.css sans avoir à jouer sur la spécificité ni
  * l'ordre d'injection des feuilles par Next.
- *
- * Renvoie un objet vide pour le thème journal : ses couleurs restent
- * définies dans :root (globals.css), rien à surcharger.
  */
-export function themeCssVars(theme: ThemeName, accent: string | null | undefined): Record<string, string> {
-  if (theme !== "material") return {};
+export function accentCssVars(accent: string | null | undefined): Record<string, string> {
   const p = paletteFor(accent);
   return {
     "--color-paper": p.paper,
