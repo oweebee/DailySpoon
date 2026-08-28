@@ -377,6 +377,16 @@ body {
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 24px 70px -20px rgb(0 0 0 / 0.9) !important;
 }
 
+/* ---- Thème Material : vignettes en couleur ----------------------------
+   Les vignettes sont désaturées côté composant (classe Tailwind "grayscale",
+   voir ArticleImage) — c'est l'identité du thème journal. En Material, ce
+   choix devient un réglage : "data-images=color" sur <html> rend la couleur
+   d'origine. Le contraste renforcé qui accompagne le noir et blanc part avec,
+   il n'a de sens que sur une image désaturée. */
+[data-theme="material"][data-images="color"] .grayscale {
+  filter: none;
+}
+
 /* ---- Thème Material : texte au fil de l'eau ---------------------------
    La classe .newsprint justifie le texte et active les césures, pour imiter
    une colonne de presse imprimée. C'est très bien sur du papier ; dans une

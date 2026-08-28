@@ -442,12 +442,21 @@ model Settings {
   // les articles restent dans leur langue d'origine.
   // Ex. "http://libretranslate:5000" (réseau interne) ou une URL https si le
   // service a reçu un domaine.
-  // Thème visuel de toute l'application, admin comprise : "dailyspoon"
-  // (défaut — l'habillage journal papier d'origine) ou "material" (sombre,
-  // minimaliste, monospace). Posé côté serveur sur <html data-theme> dans
+  // Thème visuel de toute l'application, admin comprise : "material"
+  // (défaut — sombre et minimaliste) ou "dailyspoon" (l'habillage journal
+  // papier d'origine). NULL vaut "material". Posé côté serveur sur <html data-theme> dans
   // layout.tsx, d'où tout découle via des variables CSS (voir globals.css) —
   // aucun composant ne connaît le thème actif.
   theme               String?
+
+  // Déclinaison de couleur du thème Material (six variantes sur base sombre,
+  // voir MATERIAL_ACCENTS dans src/lib/theme.ts). NULL = "ardoise", le gris
+  // quasi noir d'origine. Sans effet sur le thème journal.
+  materialAccent      String?
+
+  // Vignettes en couleur plutôt qu'en noir et blanc, dans le thème Material
+  // uniquement. NULL/false = noir et blanc, comme le thème journal.
+  materialColorImages Boolean?
 
   libretranslateUrl   String?
 

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { normalizeTheme, normalizeAccent, type ThemeName, type AccentName } from "./theme";
 
 const SINGLETON_ID = "singleton";
 
@@ -10,16 +11,12 @@ const SINGLETON_ID = "singleton";
  */
 export const MORSS_BASE_URL = "http://morss:8000";
 
-/** Thèmes visuels disponibles (voir globals.css et Settings.theme). */
-export const THEMES = ["dailyspoon", "material"] as const;
-export type ThemeName = (typeof THEMES)[number];
-
-/** Ramène n'importe quelle valeur stockée à un thème connu — une valeur
- *  absente, vide ou devenue invalide (thème retiré du code) doit redonner
- *  l'habillage d'origine, jamais une page sans style. */
-export function normalizeTheme(value: string | null | undefined): ThemeName {
-  return THEMES.includes(value as ThemeName) ? (value as ThemeName) : "dailyspoon";
-}
+// Définition des thèmes et de leurs palettes : voir src/lib/theme.ts, module
+// volontairement sans dépendance (ni Prisma ni React) pour être importable
+// aussi bien côté serveur que navigateur. Réexporté ici pour que les
+// appelants historiques continuent de trouver ces symboles dans "settings".
+export { THEMES, normalizeTheme, normalizeAccent, MATERIAL_ACCENTS } from "./theme";
+export type { ThemeName, AccentName } from "./theme";
 
 export type AppSettings = {
   freshrssBaseUrl: string;
@@ -69,11 +66,18 @@ export type AppSettings = {
    *  notification, voir NotifyFeed et src/lib/telegramNotify.ts). */
   telegramBotToken: string;
   telegramChatId: string;
-  /** Thème visuel de toute l'application, admin comprise. "dailyspoon" =
-   *  habillage journal papier d'origine (défaut) ; "material" = sombre,
-   *  minimaliste, monospace. Appliqué en posant data-theme sur <html> côté
+  /** Thème visuel de toute l'application, admin comprise. "material" =
+   *  sombre et minimaliste (défaut) ; "dailyspoon" = habillage journal papier
+   *  d'origine. Appliqué en posant data-theme sur <html> côté
    *  serveur (layout.tsx) — tout le reste suit via des variables CSS. */
   theme: ThemeName;
+  /** Déclinaison de couleur du thème Material (voir MATERIAL_ACCENTS dans
+   *  src/lib/theme.ts) — six variantes, toutes sur base sombre. Sans effet
+   *  sur le thème journal. */
+  materialAccent: AccentName;
+  /** Vignettes en noir et blanc (défaut, comme le thème journal) ou en
+   *  couleur. Propre au thème Material. */
+  materialColorImages: boolean;
   /** URL de l'instance LibreTranslate auto-hébergée (conteneur déployé
    *  séparément, voir libretranslate/docker-compose.yml) — SEUL moteur de
    *  traduction des vignettes "En direct" (flux cochés "traduction" dans
@@ -149,6 +153,8 @@ export async function getSettings(): Promise<AppSettings> {
     // "/" final retiré (comme wallabagBaseUrl) pour construire proprement
     // "<url>/translate" ensuite, sans double slash.
     theme: normalizeTheme(row?.theme || process.env.THEME),
+    materialAccent: normalizeAccent(row?.materialAccent),
+    materialColorImages: row?.materialColorImages === true,
     libretranslateUrl: (row?.libretranslateUrl || process.env.LIBRETRANSLATE_URL || "").replace(/\/+$/, ""),
     libretranslateApiKey: row?.libretranslateApiKey || process.env.LIBRETRANSLATE_API_KEY || "",
     // On retire un éventuel "/" final de l'URL de l'instance (comme morssBaseUrl)
@@ -178,6 +184,7 @@ const STRING_FIELDS = [
   "telegramBotToken",
   "telegramChatId",
   "theme",
+  "materialAccent",
   "libretranslateUrl",
   "libretranslateApiKey",
   "wallabagBaseUrl",
@@ -210,6 +217,8 @@ export type SettingsInput = Partial<{
   telegramBotToken: string | null;
   telegramChatId: string | null;
   theme: string | null;
+  materialAccent: string | null;
+  materialColorImages: boolean | null;
   libretranslateUrl: string | null;
   libretranslateApiKey: string | null;
   wallabagBaseUrl: string | null;

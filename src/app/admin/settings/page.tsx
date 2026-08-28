@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ChangeEvent } from "react";
 import { SpoonDivider } from "@/components/SpoonDivider";
+import { MATERIAL_ACCENTS } from "@/lib/theme";
 
 type SettingsForm = {
   freshrssBaseUrl: string;
@@ -23,6 +24,8 @@ type SettingsForm = {
   telegramBotToken: string;
   telegramChatId: string;
   theme: string;
+  materialAccent: string;
+  materialColorImages: boolean;
   libretranslateUrl: string;
   libretranslateApiKey: string;
   wallabagBaseUrl: string;
@@ -54,7 +57,9 @@ const EMPTY: SettingsForm = {
   customFeedsIntervalMinutes: "60",
   telegramBotToken: "",
   telegramChatId: "",
-  theme: "dailyspoon",
+  theme: "material",
+  materialAccent: "ardoise",
+  materialColorImages: false,
   libretranslateUrl: "",
   libretranslateApiKey: "",
   wallabagBaseUrl: "",
@@ -188,7 +193,9 @@ export default function AdminSettingsPage() {
               : "60",
           telegramBotToken: s.telegramBotToken || "",
           telegramChatId: s.telegramChatId || "",
-          theme: s.theme || "dailyspoon",
+          theme: s.theme || "material",
+          materialAccent: s.materialAccent || "ardoise",
+          materialColorImages: s.materialColorImages === true,
           libretranslateUrl: s.libretranslateUrl || "",
           libretranslateApiKey: s.libretranslateApiKey || "",
           wallabagBaseUrl: s.wallabagBaseUrl || "",
@@ -299,6 +306,8 @@ export default function AdminSettingsPage() {
       telegramBotToken: form.telegramBotToken,
       telegramChatId: form.telegramChatId,
       theme: form.theme,
+      materialAccent: form.materialAccent,
+      materialColorImages: form.materialColorImages,
       libretranslateUrl: form.libretranslateUrl,
       libretranslateApiKey: form.libretranslateApiKey,
       wallabagBaseUrl: form.wallabagBaseUrl,
@@ -587,15 +596,52 @@ export default function AdminSettingsPage() {
                 onChange={(e) => set("theme", e.target.value)}
                 className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
               >
+                <option value="material">Material (sombre, minimaliste) — défaut</option>
                 <option value="dailyspoon">DailySpoon (journal papier)</option>
-                <option value="material">Material (sombre, minimaliste)</option>
               </select>
             </label>
+            {/* Réglages propres au thème Material : affichés seulement quand
+                il est sélectionné, ils n'ont aucun effet sur l'autre thème et
+                n'encombrent donc pas la page inutilement. */}
+            {form.theme === "material" && (
+              <>
+                <label className="block">
+                  <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-neutral-600">
+                    Couleur dominante
+                  </span>
+                  <select
+                    value={form.materialAccent}
+                    onChange={(e) => set("materialAccent", e.target.value)}
+                    className="w-full border border-ink/40 bg-paper px-3 py-2 font-serif text-sm focus:outline-none focus:ring-1 focus:ring-ink"
+                  >
+                    {Object.entries(MATERIAL_ACCENTS).map(([value, { label }]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-xs italic text-sepia">
+                  <input
+                    type="checkbox"
+                    checked={form.materialColorImages}
+                    onChange={(e) => set("materialColorImages", e.target.checked)}
+                    className="accent-journal"
+                  />
+                  vignettes en couleur (au lieu du noir et blanc)
+                </label>
+                <p className="text-xs italic text-sepia">
+                  Six déclinaisons, toutes sur base sombre : seule la teinte du fond, des
+                  séparateurs et de l’accent change, les niveaux de clarté restent ceux du Material
+                  sombre d’origine. « Ardoise » est le gris quasi noir par défaut.
+                </p>
+              </>
+            )}
             <p className="text-xs italic text-sepia">
-              « DailySpoon » est l’habillage d’origine : papier texturé, polices de presse,
-              timbres-poste, traces de surligneur. « Material » retire tout cet habillage au profit
-              d’une interface sombre et sobre en monospace — les timbres redeviennent de simples
-              boutons, les cadres gardent leur fond mais perdent leur contour. Les vignettes en noir
+              « Material » est l’habillage par défaut : interface sombre et sobre, timbres
+              redevenus de simples boutons, cadres conservés mais sans contour. « DailySpoon »
+              restitue l’habillage journal d’origine — papier texturé, polices de presse,
+              timbres-poste, traces de surligneur. Les vignettes en noir
               et blanc et les petites cuillères sont conservées dans les deux cas. Le changement
               s’applique à tout le site, cette page comprise, dès l’enregistrement.
             </p>

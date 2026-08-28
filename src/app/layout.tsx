@@ -3,6 +3,7 @@ import "./globals.css";
 import { ArticleModalProvider } from "@/components/ArticleModalContext";
 import { PwaRegister } from "@/components/PwaRegister";
 import { getSettings } from "@/lib/settings";
+import { themeCssVars } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "DailySpoon — le journal du jour",
@@ -59,14 +60,33 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // thème sombre.
   //
   // Best-effort : si la base est injoignable au moment du rendu (démarrage,
-  // migration en cours), on retombe sur le thème d'origine plutôt que de
+  // migration en cours), on retombe sur le thème par défaut plutôt que de
   // faire échouer TOUTE l'application pour une question d'apparence.
-  const theme = await getSettings()
-    .then((s) => s.theme)
-    .catch(() => "dailyspoon" as const);
+  const settings = await getSettings().catch(() => null);
+  const theme = settings?.theme ?? "material";
+
+  // Palette de la déclinaison choisie, posée en variables CSS INLINE sur
+  // <html> : un style inline l'emporte sur les règles de globals.css sans
+  // avoir à jouer sur la spécificité ni sur l'ordre d'injection des feuilles
+  // par Next. Les couleurs n'ont ainsi qu'une seule source (src/lib/theme.ts),
+  // partagée avec le lecteur d'article qui, lui, ne peut lire aucune variable
+  // de l'application. Objet vide en thème journal : ses couleurs restent
+  // celles de :root.
+  const themeVars = themeCssVars(theme, settings?.materialAccent);
 
   return (
-    <html lang="fr" data-theme={theme}>
+    <html
+      lang="fr"
+      data-theme={theme}
+      // "data-images" : lu par globals.css pour rendre les vignettes en
+      // couleur plutôt qu'en noir et blanc (thème Material uniquement).
+      data-images={settings?.materialColorImages ? "color" : "bw"}
+      // Double cast : le type CSSProperties de React ne connaît pas les
+      // propriétés personnalisées (--color-*), et une conversion directe
+      // depuis Record<string, string> est refusée par TypeScript faute de
+      // recouvrement suffisant entre les deux types.
+      style={themeVars as unknown as React.CSSProperties}
+    >
       {/* Le fond (texture papier) est entièrement géré par la règle "body"
           dans globals.css, pas ici — ne pas dupliquer/surcharger avec un
           style inline, ça avait écrasé ce fond par-dessus la règle CSS

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/prisma";
-import { MORSS_BASE_URL, getSettings, type ThemeName } from "@/lib/settings";
+import { MORSS_BASE_URL, getSettings } from "@/lib/settings";
+import { paletteFor, rgb, type ThemeName } from "@/lib/theme";
 import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVideoHostname } from "@/lib/reddit";
 import { isAlreadyMorssUrl, splitIntoReadableParagraphs, BROWSER_USER_AGENT } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
@@ -228,52 +229,56 @@ function spoonSvg(rotateDeg: number): string {
  * l'illusion "vieux papier" (grain, vignette, empattements, lettrine) est
  * retirée.
  */
-const MATERIAL_READER_CSS = `
-  html { background: #121212; }
+function materialReaderCss(accent: string | null | undefined): string {
+  const p = paletteFor(accent);
+  const paper = rgb(p.paper);
+  const surface = rgb(p.surface);
+  const ink = rgb(p.ink);
+  const rule = rgb(p.rule);
+  const sepia = rgb(p.sepia);
+  const journal = rgb(p.journal);
+  return `
+  html { background: ${paper}; }
   body {
-    background-color: #121212;
+    background-color: ${paper};
     background-image: none;
-    color: #e2e2e2;
+    color: ${ink};
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   }
   h1, .kicker, .article-body h2, .article-body h3 {
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   }
-  /* Même rouge unique que le reste de l'application en thème Material (voir
-     --color-journal dans globals.css) : cette page étant du HTML autonome,
-     la valeur doit y être recopiée en dur — elle n'a accès à aucune variable
-     de l'app. À garder synchronisée si le rouge du thème change. */
-  .kicker, .meta-top a, .article-body a, .fav-star.is-fav { color: #d64040; }
-  .meta-top { color: #969696; border-bottom-color: #3c3c3c; }
-  .byline, .source-bottom, .fav-star, .embed-note, .article-body figcaption { color: #969696; }
-  .double-rule { border-top: 1px solid #3c3c3c; border-bottom: none; }
-  /* Lettrine retirée : ornement de presse papier, incongru en monospace. */
+  .kicker, .meta-top a, .article-body a, .fav-star.is-fav { color: ${journal}; }
+  .meta-top { color: ${sepia}; border-bottom-color: ${rule}; }
+  .byline, .source-bottom, .fav-star, .embed-note, .article-body figcaption { color: ${sepia}; }
+  .double-rule { border-top: 1px solid ${rule}; border-bottom: none; }
+  /* Lettrine retirée : ornement de presse papier, incongru ici. */
   .article-body > p:first-of-type::first-letter {
     float: none; font-size: inherit; font-weight: inherit; line-height: inherit; padding: 0; color: inherit;
   }
   /* Texte au fil de l'eau plutôt que justifié avec césures : la justification
-     sert à imiter une colonne de presse, elle creuse des rivières blanches
-     dans une monospace. */
+     sert à imiter une colonne de presse, elle creuse des rivières blanches. */
   .article-body { text-align: left; hyphens: none; }
-  .article-body img, .article-body picture { border-color: #3c3c3c; box-shadow: none; }
-  .article-body blockquote { border-left-color: #3c3c3c; color: #c8c8c8; }
-  .notice-box { border-color: #3c3c3c; background: rgba(255, 255, 255, 0.06); color: #c8c8c8; }
+  .article-body img, .article-body picture { border-color: ${rule}; box-shadow: none; }
+  .article-body blockquote { border-left-color: ${rule}; color: ${sepia}; }
+  .notice-box { border-color: ${rule}; background: ${surface}; color: ${sepia}; }
   /* Le timbre-poste redevient un bouton, comme dans le reste de l'app. */
   .stamp-link {
     background-image: none;
     aspect-ratio: auto;
     padding: 0.5rem 1rem;
-    border: 1px solid #3c3c3c;
+    border: 1px solid ${rule};
     border-radius: 0.25rem;
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #e2e2e2;
+    background-color: ${surface};
+    color: ${ink};
     transform: none;
     filter: none;
     text-shadow: none;
   }
-  .stamp-link:hover { transform: none; filter: none; background-color: rgba(255, 255, 255, 0.14); }
-  .translate-progress { background: #e2e2e2; }
+  .stamp-link:hover { transform: none; filter: none; border-color: ${journal}; }
+  .translate-progress { background: ${ink}; }
 `;
+}
 
 function renderPage(opts: {
   title: string;
@@ -306,8 +311,10 @@ function renderPage(opts: {
    *  propre habillage. Sans ça, ouvrir un article en thème sombre projetait
    *  une page blanche en pleine figure. */
   theme?: ThemeName;
+  /** Déclinaison de couleur du thème Material (voir src/lib/theme.ts). */
+  accent?: string | null;
 }): string {
-  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite, embedFallback, theme } =
+  const { title, byline, siteName, bodyHtml, originalUrl, showTranslateLink, translated, articleId, favorite, embedFallback, theme, accent } =
     opts;
   const kickerRaw = siteName || new URL(originalUrl).hostname.replace(/^www\./, "");
   const kicker = escapeHtml(kickerRaw);
@@ -576,7 +583,7 @@ function renderPage(opts: {
     0% { margin-left: -40%; }
     100% { margin-left: 100%; }
   }
-${theme === "material" ? MATERIAL_READER_CSS : ""}
+${theme === "material" ? materialReaderCss(accent) : ""}
 </style>
 </head>
 <body>
@@ -912,9 +919,9 @@ export async function GET(req: NextRequest) {
   // autonome servi en iframe, elle n'hérite de rien et doit s'habiller
   // elle-même. Best-effort — en cas de souci de base, on sert l'habillage
   // d'origine plutôt que de refuser d'afficher l'article.
-  const theme: ThemeName = await getSettings()
-    .then((s) => s.theme)
-    .catch(() => "dailyspoon" as const);
+  const themeSettings = await getSettings().catch(() => null);
+  const theme: ThemeName = themeSettings?.theme ?? "material";
+  const accent = themeSettings?.materialAccent ?? null;
 
   let parsed: URL;
   try {
@@ -987,6 +994,7 @@ export async function GET(req: NextRequest) {
     return htmlResponse(
       renderPage({
         theme,
+        accent,
         title: "Image Reddit",
         siteName: "reddit.com",
         bodyHtml: `<p style="text-align:center;"><img src="${proxyImageUrl(originalUrl)}" alt="" /></p>`,
@@ -1029,6 +1037,7 @@ export async function GET(req: NextRequest) {
     return htmlResponse(
       renderPage({
         theme,
+        accent,
         title: "Vidéo Reddit",
         siteName: "reddit.com",
         bodyHtml,
@@ -1054,6 +1063,7 @@ export async function GET(req: NextRequest) {
       return htmlResponse(
         renderPage({
           theme,
+          accent,
           title: fallbackTitle || "Post Reddit",
           siteName: "reddit.com",
           bodyHtml: `${excerptToParagraphsHtml(fallbackExcerpt)}<div class="notice-box">Texte tel que récupéré depuis le flux (même texte qu'en vignette). Pour le texte original et les commentaires, utilise « Voir l'original » en haut de page.</div>`,
@@ -1090,6 +1100,7 @@ export async function GET(req: NextRequest) {
         return htmlResponse(
           renderPage({
             theme,
+            accent,
             title: finalTitle,
             byline: redlibArticle.byline,
             siteName: "reddit.com",
@@ -1124,6 +1135,7 @@ export async function GET(req: NextRequest) {
       return htmlResponse(
         renderPage({
           theme,
+          accent,
           title: finalTitle,
           byline: `Posté par u/${redditPost.author}`,
           siteName: redditPost.subreddit,
@@ -1143,6 +1155,7 @@ export async function GET(req: NextRequest) {
     return htmlResponse(
       renderPage({
         theme,
+        accent,
         title: fallbackTitle || "Reddit indisponible depuis ce serveur",
         bodyHtml: excerptFallbackBodyHtml(
           "Reddit bloque les requêtes venant de ce serveur (IP d'hébergeur), y compris via son API publique et les miroirs de secours essayés. Utilise « Ouvrir dans un nouvel onglet » pour lire ce post directement" +
@@ -1172,6 +1185,7 @@ export async function GET(req: NextRequest) {
         return htmlResponse(
           renderPage({
             theme,
+            accent,
             title: fallbackTitle || new URL(originalUrl).hostname.replace(/^www\./, ""),
             bodyHtml: excerptFallbackBodyHtml(
               "Lecture directe indisponible sur ce serveur (site bloquant, y compris via le repli morss) — voici l'aperçu récupéré depuis le flux. Utilise « Ouvrir dans un nouvel onglet » pour lire l'article complet."
@@ -1195,6 +1209,7 @@ export async function GET(req: NextRequest) {
       return htmlResponse(
         renderPage({
           theme,
+          accent,
           title: new URL(originalUrl).hostname.replace(/^www\./, ""),
           bodyHtml: "",
           originalUrl,
@@ -1217,6 +1232,7 @@ export async function GET(req: NextRequest) {
       return htmlResponse(
         renderPage({
           theme,
+          accent,
           title: fallbackTitle || "Article non extrait",
           bodyHtml: excerptFallbackBodyHtml(
             "Impossible d'extraire proprement le contenu de cet article. Utilise « Ouvrir dans un nouvel onglet » pour le lire directement sur le site source" +
@@ -1261,6 +1277,7 @@ export async function GET(req: NextRequest) {
     return htmlResponse(
       renderPage({
         theme,
+        accent,
         title: finalTitle,
         byline: article.byline,
         siteName: article.siteName,
@@ -1276,6 +1293,7 @@ export async function GET(req: NextRequest) {
     return htmlResponse(
       renderPage({
         theme,
+        accent,
         title: "Erreur",
         bodyHtml: `<p>Erreur lors de la récupération de l'article : ${escapeHtml(
           err?.message || "inconnue"
