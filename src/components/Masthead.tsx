@@ -84,13 +84,6 @@ export function Masthead({
   // s'alignaient sur leur milieu — donc des bords hauts décalés, alors que ce
   // sont les BOUTONS eux-mêmes qu'on veut voir alignés.
   const stamps = (
-          {/* "items-start" et non "items-center" : le timbre d'impression
-              emporte sous lui une mention d'avertissement (conso de tokens),
-              ce qui rend son bloc plus haut que le timbre "En direct" voisin.
-              Centrés, les deux blocs s'alignaient sur leur milieu — donc des
-              bords hauts décalés, alors que ce sont les BOUTONS eux-mêmes
-              qu'on veut voir alignés. Calés en haut, leurs bords supérieurs
-              coïncident et l'avertissement pend simplement en dessous. */}
     <div className={`stamp-row flex items-start gap-2 sm:gap-3 ${compact ? "w-full" : "shrink-0"}`}>
             {/* Timbre "EN DIRECT" — classe ".stamp-live" autonome (voir
                 globals.css), qui NE se combine PAS avec ".stamp-button" :
