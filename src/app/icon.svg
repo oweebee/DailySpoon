@@ -6,32 +6,43 @@
   Fond TRANSPARENT : aucun rectangle de fond, l'icône se pose donc directement
   sur le fond d'écran ou la barre d'onglets.
 
-  "DS" occupe le maximum de place en hauteur comme en largeur, dans la même
-  police que le thème Material (Inter). Note importante : cette pile de
-  polices n'est PAS chargée depuis l'application — un SVG d'icône est rendu
-  isolément, sans le CSS du site, donc sans le @font-face de Google Fonts.
-  Sur une machine sans Inter installée, le rendu retombe sur la grotesque
-  système (Segoe UI, Roboto, Helvetica…), très proche pour deux lettres. Les
-  PNG de public/icons, eux, sont rendus une fois pour toutes et ne dépendent
-  d'aucune police installée.
+  Le dessin occupe le MAXIMUM de la surface : ~97 % de la largeur (les deux
+  lettres) et ~91 % de la hauteur (la cuillère, en diagonale). Il ne reste
+  qu'une marge de sécurité de quelques pixels, pour que rien ne soit rogné par
+  les coins arrondis que certains systèmes appliquent. Dans une barre de
+  favoris, où l'icône est réduite à ~16 px, tout pixel de marge en trop se voit
+  immédiatement : le dessin paraissait riquiqui à côté des autres favicons.
+
+  "DS" dans la même police que l'application (Inter). Note importante : cette
+  pile de polices n'est PAS chargée depuis l'application — un SVG d'icône est
+  rendu isolément, sans le CSS du site, donc sans le @font-face de Google
+  Fonts. D'où "textLength" + "lengthAdjust=spacingAndGlyphs" : la largeur du
+  mot est IMPOSÉE à 496 px quelle que soit la police réellement utilisée par la
+  machine (Inter si installée, sinon la grotesque système). Sans ça, une police
+  de repli plus large déborderait du cadre, et une plus étroite laisserait du
+  vide — c'est exactement ce qu'on cherche à éviter ici.
+
+  Les PNG de public/icons, eux, sont rendus une fois pour toutes (mêmes
+  proportions que ce fichier) et ne dépendent d'aucune police installée.
 
   La cuillère passe PAR-DESSUS les lettres, en rouge profond (#8a0303) — le
   même rouge d'encre que les tampons-dates posés sur les photos, volontairement
-  identique dans toutes les déclinaisons du thème.
+  identique dans toutes les déclinaisons de couleur.
 -->
 <text
   x="256"
   y="256"
   text-anchor="middle"
   dominant-baseline="central"
+  textLength="496"
+  lengthAdjust="spacingAndGlyphs"
   font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
   font-weight="800"
-  font-size="330"
-  letter-spacing="-12"
+  font-size="370"
   fill="#e2e2e2"
 >DS</text>
 <g transform="rotate(25 256 256)">
-  <ellipse cx="256" cy="170" rx="68" ry="112" fill="#8a0303"/>
-  <rect x="231" y="260" width="50" height="194" rx="25" fill="#8a0303"/>
+  <ellipse cx="256" cy="149" rx="84" ry="139" fill="#8a0303"/>
+  <rect x="225" y="261" width="62" height="241" rx="31" fill="#8a0303"/>
 </g>
 </svg>

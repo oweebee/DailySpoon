@@ -11,6 +11,7 @@ export function DirectView({
   initialArticles,
   categoryOrder = [],
   date,
+  syncedAt,
   mastheadAction
 }: {
   initialArticles: ArticleLike[];
@@ -18,6 +19,9 @@ export function DirectView({
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  EditionView/CategoryGrid/MobilePagedSection. */
   date: Date;
+  /** Heure de la dernière récupération de flux, affichée à côté de la date —
+   *  voir Masthead. */
+  syncedAt?: Date | string | null;
   /** Timbre "Télégraphier les nouvelles" — SEUL timbre d'action de cette
    *  page (le Journal IA a le sien, "Lancer l'impression"). Relayé jusqu'au
    *  Masthead du carrousel mobile. */
@@ -64,7 +68,7 @@ export function DirectView({
   // état reste ici : c'est DirectView qui s'en sert pour remplacer la liste
   // d'articles par les résultats. Le Masthead ne fait que l'afficher.
   const searchField = (
-    <label className="ml-auto flex items-center gap-2 border-b border-ink/40 pb-0.5 focus-within:border-journal">
+    <label className="ml-auto flex shrink-0 items-center gap-2 border-b border-ink/40 pb-0.5 focus-within:border-journal">
       <WesternMagnifier className="h-3.5 w-3.5 shrink-0 text-ink/70" />
       <input
         type="search"
@@ -86,31 +90,25 @@ export function DirectView({
           composant client. Le laisser dans la page (composant serveur)
           rendait impossible de l'y faire descendre. */}
       <div className="hidden md:block">
-        <Masthead date={date} action={mastheadAction} navExtra={searchField} />
+        <Masthead date={date} syncedAt={syncedAt} action={mastheadAction} navExtra={searchField} />
       </div>
-      {/* Bandeau mobile de secours, affiché UNIQUEMENT pendant une recherche.
-          Hors recherche, c'est le carrousel qui fournit le bandeau (une copie
-          par colonne) ; mais il disparaît avec les colonnes dès qu'on tape,
-          et on se retrouvait alors sans titre ni menu — donc sans moyen de
-          quitter la page. Il ne contient pas le champ de recherche : celui-ci
-          est juste en dessous, hors de toute condition, pour ne jamais perdre
-          le focus (voir ci-après). */}
-      {isSearching && (
-        <div className="md:hidden">
-          <Masthead date={date} compact action={mastheadAction} />
-        </div>
-      )}
 
-      {/* Champ de recherche MOBILE, rendu ici et non dans le bandeau.
-          En desktop il vit bien dans le menu (voir le Masthead ci-dessus),
-          parce que ce bandeau-là est permanent. En mobile, le seul bandeau
-          est celui que le carrousel duplique à chaque colonne — or dès la
-          première lettre tapée, le carrousel est remplacé par les résultats
-          de recherche : le champ disparaissait donc du DOM au moment même où
-          on écrivait dedans, emportant le focus et le clavier, et la page
-          semblait se vider. Rendu ICI, hors de la condition, il reste monté
-          quoi qu'il arrive. */}
-      <div className="mb-3 flex justify-end md:hidden">{searchField}</div>
+      {/* Bandeau MOBILE, rendu ici et une seule fois — le carrousel n'en pose
+          plus par colonne sur cette page (showMasthead={false} plus bas).
+          C'est indispensable pour la recherche : le champ vit dans ce bandeau
+          (calé à droite du titre, voir titleAside), or dès la première lettre
+          tapée les résultats remplacent le carrousel. Une copie par colonne
+          disparaîtrait donc du DOM au moment précis où on écrit dedans,
+          emportant le focus et le clavier — et la page semblait se vider. */}
+      <div className="md:hidden">
+        <Masthead
+          date={date}
+          syncedAt={syncedAt}
+          compact
+          action={mastheadAction}
+          titleAside={searchField}
+        />
+      </div>
 
       {isSearching ? (
         <SearchResults results={searchResults} searching={searching} />
@@ -126,6 +124,7 @@ export function DirectView({
           clampSummary
           date={date}
           mastheadAction={mastheadAction}
+          showMasthead={false}
         />
       )}
     </div>

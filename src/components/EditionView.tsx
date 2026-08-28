@@ -92,13 +92,16 @@ export function EditionView({
   clampSummary = false,
   date,
   mastheadAction,
-  navExtra
+  navExtra,
+  showMasthead = true
 }: {
   articles: ArticleLike[];
   /** Simplement relayés jusqu'au Masthead du carrousel mobile — voir
    *  CategoryGrid/MobilePagedSection/Masthead. */
   mastheadAction?: ReactNode;
   navExtra?: ReactNode;
+  /** Relayé tel quel — voir MobilePagedSection. */
+  showMasthead?: boolean;
   /** Dupliquée en haut de chaque page du carrousel mobile — voir
    *  CategoryGrid/MobilePagedSection. */
   date: Date;
@@ -259,6 +262,7 @@ export function EditionView({
         date={date}
         mastheadAction={mastheadAction}
         navExtra={navExtra}
+        showMasthead={showMasthead}
       />
 
       {/* Cul-de-lampe de fin d'édition — desktop seulement (mobile l'a déjà

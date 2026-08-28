@@ -76,6 +76,13 @@ export default async function HomePage() {
   const articles = perCategory.flat();
   const categoryOrder = selectedCategories.map((c) => ({ freshrssId: c.freshrssId, label: c.label }));
   const editionDate = latestEdition?.date ?? new Date();
+  // "Dernière synchro" affichée à côté de la date : l'instant où la dernière
+  // édition a été produite. Toute récupération de flux en crée une, y compris
+  // « Télégraphier les nouvelles » (sans IA) — c'est donc bien la date du
+  // dernier rapatriement d'articles, et pas seulement celle d'une impression
+  // IA. null tant qu'aucune édition n'existe : la mention ne s'affiche alors
+  // pas du tout.
+  const syncedAt = latestEdition?.generatedAt ?? null;
 
   return (
     <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
@@ -86,6 +93,7 @@ export default async function HomePage() {
         initialArticles={articles}
         categoryOrder={categoryOrder}
         date={editionDate}
+        syncedAt={syncedAt}
         mastheadAction={<TelegraphButton />}
       />
     </main>

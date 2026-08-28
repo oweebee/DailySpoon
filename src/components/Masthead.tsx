@@ -29,6 +29,7 @@ export function Masthead({
   action,
   titleAside,
   navExtra,
+  syncedAt
 }: {
   date: Date;
   /** Version resserrée verticalement, utilisée uniquement pour la copie
@@ -52,6 +53,12 @@ export function Masthead({
    *  son état vit chez l'appelant, qui en fait quelque chose (filtrer la
    *  liste d'articles). */
   navExtra?: ReactNode;
+  /** Horodatage de la dernière récupération de flux (Edition.generatedAt de
+   *  la dernière édition), affiché à côté de la date. Sans lui, rien ne dit
+   *  si ce qu'on lit date de dix minutes ou d'hier soir — la date affichée
+   *  est celle de l'ÉDITION, pas celle de la dernière synchro. Omis (ou
+   *  null) : la mention n'apparaît pas du tout. */
+  syncedAt?: Date | string | null;
 }) {
   // Sert à mettre en évidence l'entrée de menu correspondant à la page
   // courante. usePathname plutôt qu'une propriété à transmettre : ce bandeau
@@ -69,6 +76,17 @@ export function Masthead({
     month: "long",
     year: "numeric"
   }).format(date);
+
+  // Heure seule (la date, elle, est déjà juste à côté) — en fuseau du
+  // navigateur, comme le reste de l'interface. Construit un Date à partir
+  // d'une chaîne le cas échéant : une prop traversant un composant serveur
+  // peut arriver sérialisée. Une valeur invalide est ignorée plutôt que
+  // d'afficher "Invalid Date".
+  const syncedDate = syncedAt ? new Date(syncedAt) : null;
+  const syncedLabel =
+    syncedDate && !Number.isNaN(syncedDate.getTime())
+      ? new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(syncedDate)
+      : null;
 
   // Groupe des timbres (raccourci "En direct" + timbre d'action de la page),
   // extrait en variable parce qu'il se place à DEUX endroits différents selon
@@ -121,7 +139,10 @@ export function Masthead({
             // "En direct" de DirectView (elles ne partagent plus cette ligne
             // avec le titre, donc la place laissée par ce resserrement
             // profite au titre et au bouton d'action).
-            className={`masthead-title font-masthead font-black uppercase leading-none tracking-tight ${
+            // Casse naturelle ("DailySpoon"), et non "uppercase" : le nom se
+            // lit par ses deux capitales internes, que le tout-majuscules
+            // écrasait en un seul bloc.
+            className={`masthead-title font-masthead font-black leading-none tracking-tight ${
               compact ? "text-[1.5625rem]" : "text-4xl md:text-6xl"
             }`}
           >
@@ -161,7 +182,15 @@ export function Masthead({
           compact ? "gap-0.5 py-0.5 text-[0.6rem] tracking-[0.15em]" : "gap-1.5 py-1.5 text-xs tracking-[0.2em]"
         }`}
       >
-        <span className="capitalize">{formatted}</span>
+        <span className="capitalize">
+          {formatted}
+          {syncedLabel && (
+            // Volontairement dans le MÊME <span> que la date, et non sur une
+            // ligne à part : en compact (PWA), chaque ligne gagnée sur le
+            // bandeau est de la place prise aux articles.
+            <span className="normal-case text-sepia"> · synchro {syncedLabel}</span>
+          )}
+        </span>
         <nav
           className={`flex flex-wrap items-center justify-center sm:flex-nowrap sm:gap-y-0 ${
             compact ? "gap-x-3 gap-y-0.5 sm:gap-x-4" : "gap-x-5 gap-y-1 sm:gap-x-6"

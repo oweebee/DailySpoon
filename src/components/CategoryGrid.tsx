@@ -53,7 +53,8 @@ export function CategoryGrid({
   showFavorite = true,
   date,
   mastheadAction,
-  navExtra
+  navExtra,
+  showMasthead = true
 }: {
   initialCategories: CategoryEntry[];
   /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
@@ -68,6 +69,8 @@ export function CategoryGrid({
   /** Simplement relayés au Masthead du carrousel mobile — voir Masthead. */
   mastheadAction?: ReactNode;
   navExtra?: ReactNode;
+  /** Relayé tel quel — voir MobilePagedSection. */
+  showMasthead?: boolean;
 }) {
   const [categories, setCategories] = useState(initialCategories);
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null);
@@ -112,6 +115,7 @@ export function CategoryGrid({
         className="md:hidden"
         mastheadAction={mastheadAction}
         navExtra={navExtra}
+        showMasthead={showMasthead}
         pages={categories.map((cat) => ({
           key: cat.label,
           content: (

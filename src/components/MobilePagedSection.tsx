@@ -111,7 +111,8 @@ export function MobilePagedSection({
   className = "",
   mastheadAction,
   titleAside,
-  navExtra
+  navExtra,
+  showMasthead = true
 }: {
   date: Date;
   pages: { key: string; content: ReactNode }[];
@@ -125,6 +126,13 @@ export function MobilePagedSection({
   titleAside?: ReactNode;
   /** Élément posé à droite du menu (recherche) — voir Masthead. */
   navExtra?: ReactNode;
+  /** Duplique le bandeau en haut de CHAQUE page du carrousel (défaut). La
+   *  page d'accueil le met à false : son bandeau contient le champ de
+   *  recherche, qui doit rester monté en permanence — une copie par page
+   *  disparaîtrait avec le carrousel dès la première lettre tapée (les
+   *  résultats remplacent alors les colonnes), emportant le focus et le
+   *  clavier. DirectView rend donc un bandeau unique, au-dessus. */
+  showMasthead?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -143,6 +151,11 @@ export function MobilePagedSection({
   // un state) : lu de façon synchrone dans des handlers d'événements DOM,
   // pas besoin de re-render.
   const isTransitioningRef = useRef(false);
+  // Lu depuis un handler de défilement enregistré une seule fois au montage :
+  // une ref, pas la prop directement, pour ne pas avoir à réenregistrer
+  // l'écouteur à chaque rendu.
+  const showMastheadRef = useRef(showMasthead);
+  showMastheadRef.current = showMasthead;
 
   // Synchro AVANT peinture (voir plus bas pourquoi) : sans ça, l'effet qui
   // enregistre la position de défilement pourrait encore lire l'ancien index
@@ -225,7 +238,14 @@ export function MobilePagedSection({
       if (isTransitioningRef.current) return;
       const container = containerRef.current;
       if (!container) return;
-      scrollOffsets.current[activeIndexRef.current] = Math.max(0, window.scrollY - container.offsetTop);
+      // Origine des positions mémorisées : le haut du carrousel quand il
+      // porte lui-même les bandeaux, le haut du DOCUMENT sinon — le bandeau
+      // unique rendu au-dessus fait alors partie de ce qu'on veut revoir en
+      // changeant de colonne. Doit rester identique à celle utilisée pour la
+      // restauration, plus bas, sinon on atterrit systématiquement décalé de
+      // la hauteur du bandeau.
+      const baseTop = showMastheadRef.current ? container.offsetTop : 0;
+      scrollOffsets.current[activeIndexRef.current] = Math.max(0, window.scrollY - baseTop);
     }
     window.addEventListener("scroll", onWindowScroll, { passive: true });
     return () => window.removeEventListener("scroll", onWindowScroll);
@@ -270,10 +290,12 @@ export function MobilePagedSection({
     const container = containerRef.current;
     if (!container) return;
     const offset = scrollOffsets.current[activeIndex] ?? 0;
-    animateScrollTo(container.offsetTop + offset, scrollAnimRef, () => {
+    // Même origine qu'à l'enregistrement (voir plus haut).
+    const baseTop = showMasthead ? container.offsetTop : 0;
+    animateScrollTo(baseTop + offset, scrollAnimRef, () => {
       isTransitioningRef.current = false;
     });
-  }, [activeIndex]);
+  }, [activeIndex, showMasthead]);
 
   useEffect(() => {
     return () => {
@@ -294,7 +316,9 @@ export function MobilePagedSection({
           }}
           className="w-full shrink-0 snap-center px-6"
         >
-          <Masthead date={date} compact action={mastheadAction} titleAside={titleAside} navExtra={navExtra} />
+          {showMasthead && (
+            <Masthead date={date} compact action={mastheadAction} titleAside={titleAside} navExtra={navExtra} />
+          )}
           {page.content}
         </div>
       ))}
