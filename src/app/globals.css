@@ -107,6 +107,16 @@ body {
   color: #ffffff;
 }
 
+/* Cuillères des deux "o" de "DailySpoon" : rouge profond FIXE, le même que
+   les tampons-dates posés sur les photos (#8a0303), dans toutes les
+   déclinaisons de couleur. Elles héritaient sinon du blanc du titre.
+   Volontairement en dur et non via --color-journal : c'est une constante du
+   logotype, elle ne doit pas virer au bleu ou au vert avec la déclinaison —
+   même raisonnement que pour les tampons-dates. */
+.masthead-spoon {
+  color: #8a0303;
+}
+
 /* Cuillères (cul-de-lampe de bas de page et de bas d'article) : elles
    prennent la couleur d'accent, seul ornement conservé de l'application.
    Dans le gris "sepia" du texte secondaire, elles se remarquaient à peine. */

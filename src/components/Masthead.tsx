@@ -7,18 +7,35 @@ import type { ReactNode } from "react";
 /** Remplace les "o" de "Sp[o][o]n" dans le masthead par la même silhouette
  *  de cuillère (bol + manche) que le cul-de-lampe SpoonDivider en bas de
  *  page, plutôt qu'un simple ovale — dimensionnée en unités "em" pour
- *  suivre la taille de la police du titre (text-5xl / md:text-7xl) et
- *  rester à la même hauteur que les autres lettres. */
+ *  suivre la taille de la police du titre et rester à la même hauteur que
+ *  les autres lettres.
+ *
+ *  Silhouette reprise EXACTEMENT de l'icône de l'application
+ *  (src/app/icon.svg) : bol nettement plus arrondi et manche un peu plus
+ *  épais que le cul-de-lampe de bas de page. Les valeurs ci-dessous sont
+ *  celles du fichier d'icône, ramenées à une origine en (0,0) — bol de
+ *  168 x 278 dans une hauteur totale de 492.
+ *
+ *  Plus de preserveAspectRatio="none" ici, contrairement au cul-de-lampe :
+ *  le viewBox a exactement le rapport du dessin (168/492 = 0.342) et la
+ *  boîte aussi, donc le dessin n'est ni écrasé ni étiré, et il est
+ *  rigoureusement identique à l'icône quelle que soit la taille du titre.
+ *  Marge horizontale POSITIVE (et non plus négative) : cette silhouette est
+ *  plus étroite que l'ovale qu'elle remplaçait, elle a besoin d'air autour
+ *  pour ne pas se coller aux lettres voisines.
+ *
+ *  "masthead-spoon" : la couleur est fixée en CSS (voir globals.css) et non
+ *  héritée du titre — ces cuillères restent dans le même rouge profond que
+ *  les tampons-dates et l'icône, quelle que soit la déclinaison choisie. */
 function SpoonO() {
   return (
     <svg
-      viewBox="0 0 24 24"
-      preserveAspectRatio="none"
+      viewBox="0 0 168 492"
       aria-hidden="true"
-      className="-mx-[0.04em] inline-block h-[1em] w-[0.48em] align-[-0.2em]"
+      className="masthead-spoon mx-[0.05em] inline-block h-[1em] w-[0.342em] align-[-0.2em]"
     >
-      <ellipse cx="12" cy="6.2" rx="5.1" ry="6.2" fill="currentColor" />
-      <rect x="10.6" y="11.4" width="2.8" height="11.2" rx="1.4" fill="currentColor" />
+      <ellipse cx="84" cy="139" rx="84" ry="139" fill="currentColor" />
+      <rect x="53" y="251" width="62" height="241" rx="31" fill="currentColor" />
     </svg>
   );
 }

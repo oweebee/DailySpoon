@@ -66,9 +66,11 @@ sessions Claude. Ce montage a deux limites connues :
 2. **Suppression de fichiers impossible** (`Operation not permitted`, y compris via `git rm`, et
    github.com est inaccessible depuis la session). Un `git rm` qui échoue laisse en plus un
    `.git/index.lock` vide qui bloquera le prochain `push.bat` — le supprimer. Quand une session
-   doit faire disparaître des fichiers, écrire un `.bat` à la racine que l'utilisateur lance
-   lui-même côté Windows (modèle : `cleanup.bat`, écrit en V1 pour retirer les images du thème
-   journal), plutôt que de prétendre les avoir supprimés.
+   doit faire disparaître des fichiers, écrire un `.bat` jetable à la racine que l'utilisateur
+   lance lui-même côté Windows (`git rm -f --ignore-unmatch`, puis `del`/`rmdir` pour les restes
+   hors index, et un balayage des `.lock` du dossier `.git`), plutôt que de prétendre les avoir
+   supprimés. Ce script est à usage unique : une fois lancé et le ménage poussé, il se supprime
+   lui aussi.
 
 ## Vérification avant de rendre la main
 
