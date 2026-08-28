@@ -327,6 +327,19 @@ body {
   width: 100%;
 }
 
+/* En compact (PWA), le libellé du timbre d'action reprend ses DEUX lignes
+   ("Lancer l'impression" / "du journal"), telles que découpées côté JSX. La
+   règle générale du thème les remet sur une seule ligne, ce qui convient à un
+   bandeau desktop large mais oblige ici à un texte minuscule pour tenir dans
+   la largeur d'un téléphone. La hauteur du bouton ne bouge pas : deux lignes
+   de ce corps tiennent sans forcer dans les 2,5 rem imposés plus haut. */
+[data-theme="material"] .stamp-row.w-full .stamp-button {
+  flex-direction: column;
+  gap: 0;
+  white-space: normal;
+  line-height: 1.15;
+}
+
 [data-theme="material"] .stamp-button:hover,
 [data-theme="material"] .stamp-live:hover {
   transform: none;
