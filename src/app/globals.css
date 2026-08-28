@@ -224,22 +224,13 @@ body {
 }
 
 /* ---- Cadres ----------------------------------------------------------
-   Les cadres (cartes d'article, bandeaux de rubrique) sont CONSERVÉS, mais
-   sans leur trait de contour : c'est le fond, légèrement plus clair que la
-   page, qui délimite le bloc. On neutralise la couleur de bordure plutôt que
-   son épaisseur, pour ne décaler aucun alignement — le trait devient
-   simplement invisible et son espace reste. */
-.article-card,
-.category-band {
+   Les cartes d'article sont CONSERVÉES, mais sans leur trait de contour :
+   c'est le fond, légèrement plus clair que la page, qui délimite le bloc. On
+   neutralise la couleur de bordure plutôt que son épaisseur, pour ne décaler
+   aucun alignement — le trait devient simplement invisible et son espace
+   reste. */
+.article-card {
   border-color: transparent;
-}
-
-/* Le bandeau de rubrique a besoin d'un fond propre, sinon le titre flotte
-   sans repère au-dessus de la colonne. */
-.category-band {
-  background-color: rgb(var(--color-ink) / 0.1);
-  border-radius: 0.25rem;
-  color: rgb(var(--color-ink));
 }
 
 /* Ouverture du lecteur d'article interne : la page pivote depuis sa

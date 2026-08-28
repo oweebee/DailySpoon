@@ -125,15 +125,29 @@ export function CategoryColumn({
       }
       className={isDragging ? "opacity-40" : ""}
     >
+      {/* Titre de rubrique : un court trait d'accent, le nom, puis un filet
+          qui s'efface vers la droite. Remplace l'ancien bandeau plein aux
+          angles arrondis, qui posait un gros pavé opaque en travers de la
+          colonne à chaque rubrique — beaucoup de poids visuel pour deux mots.
+          Ici le nom se lit d'abord, le trait de couleur sert de repère, et le
+          filet dégradé prolonge la ligne sans la fermer. */}
       <h2
         draggable={draggable}
         onDragStart={draggable ? onDragStart : undefined}
         onDragEnd={draggable ? onDragEnd : undefined}
-        className={`category-band relative mb-4 overflow-hidden border-y-2 border-ink py-1.5 text-center font-display text-sm font-bold uppercase tracking-[0.3em] ${
+        className={`mb-4 flex items-center gap-3 ${
           draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
         }`}
       >
-        <span className="relative">{label}</span>
+        <span aria-hidden="true" className="h-4 w-[3px] shrink-0 rounded-full bg-journal" />
+        <span className="whitespace-nowrap font-display text-sm font-bold uppercase tracking-[0.3em] text-ink">
+          {label}
+        </span>
+        {/* Filet dégradé plutôt qu'un trait net : il s'éteint avant le bord de
+            la colonne, donc il accompagne le titre au lieu de le souligner
+            d'un bout à l'autre. "min-w-0" pour qu'il cède la place au nom
+            quand la colonne est étroite (mobile), jamais l'inverse. */}
+        <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-gradient-to-r from-ink/30 to-transparent" />
       </h2>
       <div
         ref={listRef}
@@ -183,12 +197,12 @@ export function CategoryColumn({
       </div>
 
       {!expanded && !autoInfinite && remaining > 0 && (
-        // Le filet pointillé revient SOUS le bouton (bordure basse du
-        // conteneur) : le bouton clôt sa rubrique, le trait la referme avant
-        // la suivante. Il est porté par ce bloc et non par le bouton
-        // lui-même, qui est désormais encadré — un trait collé à son propre
-        // cadre se lirait comme un défaut d'alignement.
-        <div className="mt-3 border-b border-dashed border-ink/40 pb-3">
+        // Le bouton clôt sa rubrique, un filet la referme avant la suivante.
+        // Ce filet s'éteint à ses deux extrémités (dégradé) au lieu d'être un
+        // pointillé net d'un bord à l'autre : le pointillé faisait "bordure de
+        // tableau" juste sous un bouton lui-même encadré, deux traits durs
+        // empilés à 12 px d'intervalle.
+        <div className="mt-3">
           <button
             onClick={handleShowMore}
             // Vrai bouton encadré, sur TOUTE la largeur de la colonne — donc
@@ -209,6 +223,10 @@ export function CategoryColumn({
               ? "Afficher plus d'articles"
               : `Suite — encore ${Math.min(STEP, remaining)} de plus (${remaining} au total)`}
           </button>
+          <div
+            aria-hidden="true"
+            className="mt-3 h-px bg-gradient-to-r from-transparent via-ink/25 to-transparent"
+          />
         </div>
       )}
     </section>

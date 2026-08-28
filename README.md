@@ -77,8 +77,12 @@ Copie `.env.example` vers `.env` (en local) ou renseigne-les directement dans Co
 - `FRESHRSS_USERNAME` / `FRESHRSS_API_PASSWORD` — identifiants API FreshRSS (étape 1)
 - `ANTHROPIC_API_KEY` — clé API Claude (laisse vide pour tourner en mode dégradé sans réécriture IA)
 - `ANTHROPIC_MODEL` — modèle Claude utilisé (par défaut `claude-sonnet-4-5`)
-- `ADMIN_PASSWORD` — le seul mot de passe protégeant tout le site (pas de compte utilisateur, juste
-  ce mot de passe, définissable dans les variables Coolify/Docker)
+- `ADMIN_PASSWORD` — **obligatoire**. Le seul mot de passe protégeant tout le site (pas de compte
+  utilisateur, juste ce mot de passe, définissable dans les variables Coolify/Docker). En
+  production, tant qu'il n'est pas renseigné, l'application refuse TOUTE connexion plutôt que de
+  s'ouvrir : un déploiement où on l'aurait oublié est inaccessible, pas grand ouvert. En
+  développement local (`npm run dev`), l'absence de mot de passe laisse au contraire le site
+  ouvert, par confort.
 - `ADMIN_SECRET` — chaîne aléatoire pour signer la session admin
 - `CRON_SECRET` — secret partagé pour appeler `/api/cron/generate` depuis l'extérieur du worker,
   et utilisé en interne par le service `morss` pour s'authentifier auprès de `web` (config VPN,
@@ -246,7 +250,10 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
 - DailySpoon ne modifie jamais l'état lu/non-lu de tes articles dans FreshRSS — il se contente de
   lire.
 - Pas de compte utilisateur : un seul mot de passe (`ADMIN_PASSWORD`) protège tout le site (lecture
-  et admin, même session).
+  et admin, même session). Il est **obligatoire en production** : sans lui, l'application se ferme
+  au lieu de s'ouvrir, et l'écran de connexion indique explicitement que la variable manque côté
+  serveur. Cela vaut aussi pour l'API Google Reader (`/api/greader.php`), qui contourne le
+  middleware et applique la même règle de son côté.
 - Les données Postgres vivent dans le volume Docker `dailyspoon_db_data` : elles survivent aux
   redéploiements, mais si tu supprimes le volume (ou la ressource entière dans Coolify), elles sont
   perdues — pense à un backup si le contenu devient précieux.

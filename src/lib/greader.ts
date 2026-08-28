@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { getSettings } from "./settings";
-import { isCorrectPassword, sessionTokenForPassword } from "./auth";
+import { allowWithoutPassword, isCorrectPassword, sessionTokenForPassword } from "./auth";
 import { sendFavoriteToWallabag } from "./wallabagSend";
 import { cleanArticleUrl } from "./text";
 import type { Prisma } from "@prisma/client";
@@ -49,10 +49,13 @@ export async function buildAuthToken(): Promise<string> {
 }
 
 /** Vérifie l'en-tête Authorization d'une requête /reader/*. Si aucun mot de
- *  passe admin n'est configuré, on laisse passer (même convention "dev ouvert"
- *  que isValidSessionToken dans auth.ts). */
+ *  passe admin n'est configuré : ouvert en développement, FERMÉ en production
+ *  — exactement la même règle que la session web, et pour la même raison (voir
+ *  allowWithoutPassword dans auth.ts). Cette route contourne le middleware
+ *  (elle est dans PUBLIC_PATHS), c'est donc ici, et seulement ici, que la
+ *  décision se prend pour elle. */
 export async function isAuthorized(authHeader: string | null): Promise<boolean> {
-  if (!process.env.ADMIN_PASSWORD) return true;
+  if (!process.env.ADMIN_PASSWORD) return allowWithoutPassword();
   if (!authHeader) return false;
   const m = /GoogleLogin\s+auth=(.+)/.exec(authHeader);
   if (!m) return false;

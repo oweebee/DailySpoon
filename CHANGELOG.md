@@ -49,7 +49,9 @@ version. Ce fichier repart donc de zéro à partir d'ici.
 
 ### Apparence
 
-Un seul habillage : sombre et minimaliste. L'habillage « journal papier »
+Un seul habillage : sombre et minimaliste. Titres de rubrique en filet
+d'accent plutôt qu'en bandeau plein, séparateurs dégradés, boutons d'action
+plats, cuillères du logotype dans le rouge profond de l'icône. L'habillage « journal papier »
 d'origine (texture froissée, timbres-poste, lettrines, surligneurs peints,
 polices de presse) a été entièrement retiré — code, règles CSS et images.
 
@@ -75,6 +77,18 @@ Deux réglages restent disponibles dans `/admin/settings` :
 - **Lecteur RSS externe** : API Google Reader exposée sur `/api/greader.php`,
   compatible avec n'importe quel client FreshRSS.
 - **PWA** installable sur mobile et bureau.
+
+### Sécurité
+
+- Un seul mot de passe (`ADMIN_PASSWORD`) protège tout le site, lecture
+  comprise : un visiteur sans session ne voit que l'écran de connexion.
+- Ce mot de passe est **obligatoire en production**. S'il n'est pas
+  renseigné, l'application refuse tout accès au lieu de s'ouvrir, et l'écran
+  de connexion indique que la variable manque côté serveur. La même règle
+  s'applique à l'API Google Reader, qui contourne le middleware et fait sa
+  propre vérification.
+- En développement local, l'absence de mot de passe laisse au contraire le
+  site ouvert — confort assumé, sans effet sur une instance déployée.
 
 ### Administration
 
