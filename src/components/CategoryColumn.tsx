@@ -212,11 +212,19 @@ export function CategoryColumn({
       {!expanded && !autoInfinite && remaining > 0 && (
         <button
           onClick={handleShowMore}
-          // Filet pointillé en bordure BASSE (et non haute) : ce bouton
-          // appartient à la rubrique qui le précède, il doit donc rester du
-          // même côté qu'elle. En bordure haute, le trait passait avant le
-          // bouton, qui semblait alors annoncer la rubrique SUIVANTE.
-          className="mt-3 w-full border-b border-dashed border-ink/40 pb-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:text-ink hover:underline"
+          // Vrai bouton encadré, sur TOUTE la largeur de la colonne — donc
+          // exactement la largeur d'une carte d'article, qu'il vient
+          // prolonger en bas de pile. Remplace l'ancien libellé souligné en
+          // pointillés, qui ne se lisait pas comme un élément cliquable.
+          //
+          // Bordure en "rule" et non en "ink" : dans le thème journal les
+          // deux sont identiques (le cadre se confond donc avec celui des
+          // cartes), tandis qu'en Material "ink" est CLAIR — un cadre de
+          // 2 px en texte clair aurait hurlé au milieu de la colonne, alors
+          // que "rule" y est le gris discret des séparateurs.
+          //
+          // py-2 : hauteur calée sur le texte, sans marge superflue.
+          className="mt-3 w-full border-2 border-rule bg-ink/[0.05] px-4 py-2 text-center text-[0.65rem] italic uppercase tracking-[0.2em] text-sepia hover:bg-ink/[0.1] hover:text-ink"
         >
           {scrollExpand
             ? "Afficher plus d'articles"

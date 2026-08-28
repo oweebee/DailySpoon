@@ -238,9 +238,12 @@ function materialReaderCss(accent: string | null | undefined): string {
   const sepia = rgb(p.sepia);
   const journal = rgb(p.journal);
   return `
-  html { background: ${paper}; }
+  /* Le lecteur est une SURFACE posée au-dessus du site, pas le fond de page :
+     il prend donc le ton "surface" (un cran plus clair), comme le bloc de
+     contenu. Avec le ton "paper", il paraissait simplement noir. */
+  html { background: ${surface}; }
   body {
-    background-color: ${paper};
+    background-color: ${surface};
     background-image: none;
     color: ${ink};
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -251,6 +254,9 @@ function materialReaderCss(accent: string | null | undefined): string {
   .kicker, .meta-top a, .article-body a, .fav-star.is-fav { color: ${journal}; }
   .meta-top { color: ${sepia}; border-bottom-color: ${rule}; }
   .byline, .source-bottom, .fav-star, .embed-note, .article-body figcaption { color: ${sepia}; }
+  /* Cul-de-lampe en cuillères : prend la couleur d'accent du thème plutôt
+     que le gris fixe du thème journal, où il devenait invisible. */
+  .colophon { color: ${journal}; }
   .double-rule { border-top: 1px solid ${rule}; border-bottom: none; }
   /* Lettrine retirée : ornement de presse papier, incongru ici. */
   .article-body > p:first-of-type::first-letter {
@@ -261,7 +267,7 @@ function materialReaderCss(accent: string | null | undefined): string {
   .article-body { text-align: left; hyphens: none; }
   .article-body img, .article-body picture { border-color: ${rule}; box-shadow: none; }
   .article-body blockquote { border-left-color: ${rule}; color: ${sepia}; }
-  .notice-box { border-color: ${rule}; background: ${surface}; color: ${sepia}; }
+  .notice-box { border-color: ${rule}; background: ${paper}; color: ${sepia}; }
   /* Le timbre-poste redevient un bouton, comme dans le reste de l'app. */
   .stamp-link {
     background-image: none;
@@ -269,7 +275,7 @@ function materialReaderCss(accent: string | null | undefined): string {
     padding: 0.5rem 1rem;
     border: 1px solid ${rule};
     border-radius: 0.25rem;
-    background-color: ${surface};
+    background-color: ${paper};
     color: ${ink};
     transform: none;
     filter: none;

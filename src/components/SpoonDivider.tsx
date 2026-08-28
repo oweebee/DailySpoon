@@ -26,7 +26,11 @@ function Spoon({ rotate }: { rotate: number }) {
 
 export function SpoonDivider({ className = "mt-14 text-center text-sepia" }: { className?: string }) {
   return (
-    <p className={className}>
+    // "spoon-divider" : point d'accroche pour le thème (voir globals.css). En
+    // Material, ces cuillères prennent la couleur d'accent — c'est la seule
+    // signature visuelle conservée du thème journal, autant qu'elle porte
+    // l'identité du thème actif plutôt qu'un gris qui la laisse disparaître.
+    <p className={`spoon-divider ${className}`}>
       <span className="inline-flex items-center gap-4">
         <Spoon rotate={-18} />
         <Spoon rotate={14} />

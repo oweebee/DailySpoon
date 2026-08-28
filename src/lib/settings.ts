@@ -276,6 +276,14 @@ export async function updateSettings(input: SettingsInput): Promise<void> {
     const v = input.customFeedsIntervalMinutes;
     data.customFeedsIntervalMinutes = v === null || v === undefined || Number.isNaN(v) ? null : v;
   }
+  if ("materialColorImages" in input) {
+    // Booléen à traiter EXPLICITEMENT, comme les autres : la boucle
+    // ci-dessus ne recopie que les champs listés dans STRING_FIELDS, et
+    // rien d'autre n'atteint la base. Sans ce bloc, la case était bien
+    // envoyée par le formulaire, acceptée par l'API… puis silencieusement
+    // jetée ici — d'où un réglage qui semblait ne rien faire.
+    data.materialColorImages = input.materialColorImages === true;
+  }
   if ("vpnEnabled" in input) {
     // Même logique que freshrssEnabled : "true" est la valeur volontaire
     // explicite, tout le reste (false/null/undefined) reste/redevient

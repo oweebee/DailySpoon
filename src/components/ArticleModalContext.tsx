@@ -89,17 +89,25 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
     <ArticleModalContext.Provider value={{ openArticle }}>
       {children}
       {state && (
+        // Aucune marge sous md : sur un téléphone (et donc en PWA), la
+        // fenêtre de lecture occupe TOUT l'écran. Les marges et le cadre
+        // n'ont de sens qu'en desktop, où la fenêtre se détache du site
+        // derrière elle ; sur un écran de 6 pouces, elles ne faisaient que
+        // rogner la surface de lecture.
         <div
-          className="modal-backdrop-fade fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4 md:p-8"
+          className="modal-backdrop-fade fixed inset-0 z-50 flex items-center justify-center bg-ink/70 md:p-8"
           onClick={close}
         >
           <div
             key={state.url}
-            className="page-turn flex h-full w-full max-w-4xl flex-col border-2 border-ink bg-paper shadow-[0_20px_80px_-20px_rgba(0,0,0,0.6)]"
+            className="page-turn flex h-full w-full flex-col bg-paper md:max-w-4xl md:border-2 md:border-ink md:shadow-[0_20px_80px_-20px_rgba(0,0,0,0.6)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-end gap-4 border-b-2 border-ink px-4 py-2.5">
-              <div className="flex shrink-0 items-center gap-4 text-xs uppercase tracking-[0.2em]">
+            {/* "pt-[calc(...)]" : en PWA plein écran, cette barre passe sous
+                l'encoche/la barre de statut. On lui ajoute la hauteur de
+                cette zone réservée, qui vaut 0 partout ailleurs. */}
+            <div className="flex items-center justify-end gap-3 border-b border-ink/30 px-3 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] md:pt-2">
+              <div className="flex shrink-0 items-center gap-3 text-xs uppercase tracking-[0.2em]">
                 {
                   // Recherche Google sur le TITRE de la news (pas l'URL) —
                   // utile quand l'extraction de l'article a échoué (voir
@@ -107,15 +115,24 @@ export function ArticleModalProvider({ children }: { children: ReactNode }) {
                   // même sujet. Repli sur le nom de domaine si jamais aucun
                   // titre n'a été transmis (ArticleLink, title optionnel).
                 }
+                {/* Mêmes timbres que partout ailleurs (stamp-button +
+                    stamp-bg-md, voir globals.css) plutôt que de simples liens
+                    soulignés : ce sont des actions, elles doivent se
+                    reconnaître comme telles et suivre le thème — en Material,
+                    ces classes deviennent automatiquement des boutons plats. */}
                 <a
                   href={`https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery(state.url, state.title))}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:underline"
+                  className="stamp-button stamp-bg-md flex h-[2.2rem] w-[5.7rem] items-center justify-center whitespace-nowrap px-2 font-display text-[0.42rem] uppercase tracking-[0.05em] text-paper"
                 >
-                  Chercher sur Google ↗
+                  Google ↗
                 </a>
-                <button onClick={close} className="font-bold hover:underline" aria-label="Fermer">
+                <button
+                  onClick={close}
+                  aria-label="Fermer"
+                  className="stamp-button stamp-bg-md flex h-[2.2rem] w-[5.7rem] items-center justify-center whitespace-nowrap px-2 font-display text-[0.42rem] uppercase tracking-[0.05em] text-paper"
+                >
                   ✕ Fermer
                 </button>
               </div>
