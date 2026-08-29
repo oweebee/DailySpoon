@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { CategoryGrid } from "./CategoryGrid";
+import { preferredExcerpt, preferredTitle } from "../lib/articleText";
 import { ArticleLink } from "./ArticleLink";
 import { ArticleImage } from "./ArticleImage";
 import { FavoriteStar } from "./FavoriteStar";
@@ -64,18 +65,15 @@ export type CategoryOrderEntry = { freshrssId: string; label: string };
 // L'article ouvert (article-proxy) n'y touche jamais : il sert toujours
 // sourceTitle/sourceExcerpt en langue d'origine, traduits uniquement à la
 // demande via son propre bouton "Traduire".
+// La règle "traduction si disponible, texte brut sinon" vit dans
+// src/lib/articleText.ts : elle s'applique aussi aux notifications Telegram
+// et à l'API Google Reader, qui ne peuvent pas importer ce composant.
 export function directTitle(a: ArticleLike): string {
-  return (
-    (a.translatedTitle && a.translatedTitle.trim()) ||
-    (a.sourceTitle && a.sourceTitle.trim()) ||
-    a.headline ||
-    "(sans titre)"
-  );
+  return preferredTitle(a) || a.headline || "(sans titre)";
 }
 export function directText(a: ArticleLike): string {
   return (
-    (a.translatedExcerpt && a.translatedExcerpt.trim()) ||
-    (a.sourceExcerpt && a.sourceExcerpt.trim()) ||
+    preferredExcerpt(a) ||
     "Aucun aperçu fourni par le flux — consulte la source pour lire l'article complet."
   );
 }
@@ -221,7 +219,9 @@ export function EditionView({
   }`;
 
   return (
-    <div>
+    // "shell-fill" : maillon de la chaîne de hauteur menant au carrousel
+    // mobile (voir globals.css).
+    <div className="shell-fill">
       {/* ——— Mobile : les cuillères qui marquaient la transition avec
           l'en-tête ont déménagé sur la ligne "En direct" de DirectView (même
           ligne que le titre "✦ En direct ✦", en haut à gauche) — ça évitait

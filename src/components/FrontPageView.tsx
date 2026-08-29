@@ -145,7 +145,9 @@ export function FrontPageView({
   ];
 
   return (
-    <div>
+    // "shell-fill" : maillon de la chaîne de hauteur menant au carrousel
+    // mobile (voir globals.css).
+    <div className="shell-fill">
       {/* ——— Desktop/tablette : "à la une" en bloc fixe au-dessus des
           rubriques. Sur mobile, ce même contenu réapparaît en premier bloc
           de la pile ci-dessous (marqué "sm:hidden" ici, "hidden sm:block"

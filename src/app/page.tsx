@@ -85,7 +85,12 @@ export default async function HomePage() {
   const syncedAt = latestEdition?.generatedAt ?? null;
 
   return (
-    <main className="paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
+    <main
+      // "shell-md" : coquille plein écran SOUS 768 px, seuil auquel le carrousel
+      // mobile remplace la grille (voir globals.css et MobilePagedSection). Le
+      // carrousel a besoin d'une hauteur bornée pour que ses colonnes défilent
+      // chacune de leur côté ; au-delà du seuil, cette classe n'a aucun effet.
+      className="shell-md paper-panel mx-auto w-full lg:w-3/4 rounded-sm px-4 py-4 shadow-[0_10px_60px_-15px_rgba(26,26,26,0.35)] ring-1 ring-ink/10 sm:px-6 sm:py-10 md:px-10 md:py-14">
       {/* Le bandeau desktop est rendu par DirectView lui-même (et non ici) :
           il doit recevoir le champ de recherche, dont l'état vit dans ce
           composant client. Voir DirectView. */}

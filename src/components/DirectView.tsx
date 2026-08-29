@@ -84,7 +84,10 @@ export function DirectView({
   );
 
   return (
-    <div>
+    // "shell-fill" : maillon de la chaîne de hauteur qui descend du <main>
+    // jusqu'au carrousel (voir globals.css). Un maillon manquant et le
+    // carrousel se retrouve sans hauteur.
+    <div className="shell-fill">
       {/* Bandeau desktop rendu ICI et non dans la page : le champ de
           recherche ci-dessus doit y être injecté, or son état vit dans ce
           composant client. Le laisser dans la page (composant serveur)
@@ -100,7 +103,10 @@ export function DirectView({
           tapée les résultats remplacent le carrousel. Une copie par colonne
           disparaîtrait donc du DOM au moment précis où on écrit dedans,
           emportant le focus et le clavier — et la page semblait se vider. */}
-      <div className="md:hidden">
+      {/* "shrink-0" : dans la coquille plein écran (voir globals.css), ce
+          bandeau garde sa hauteur naturelle — c'est le carrousel en dessous
+          qui absorbe toute la place restante, pas lui qui se comprime. */}
+      <div className="shrink-0 md:hidden">
         <Masthead
           date={date}
           syncedAt={syncedAt}
@@ -111,9 +117,13 @@ export function DirectView({
       </div>
 
       {isSearching ? (
-        <SearchResults results={searchResults} searching={searching} />
+        // Les résultats remplacent le carrousel : ils reprennent donc son
+        // rôle d'élément extensible, et défilent eux-mêmes.
+        <div className="shell-scroll">
+          <SearchResults results={searchResults} searching={searching} />
+        </div>
       ) : initialArticles.length === 0 ? (
-        <p className="py-24 text-center italic text-sepia">
+        <p className="shell-scroll py-24 text-center italic text-sepia">
           Rien pour l’instant — clique sur « Télégraphier les news » pour aller chercher les
           derniers articles.
         </p>

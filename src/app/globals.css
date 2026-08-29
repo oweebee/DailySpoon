@@ -191,6 +191,154 @@ body {
   line-height: 1.15;
 }
 
+/* ===================================================================
+   CARROUSEL MOBILE — une page = une rubrique
+   -------------------------------------------------------------------
+   Voir la note de refonte en tête de src/components/MobilePagedSection.tsx.
+   Le principe tient en une phrase : CHAQUE PAGE EST SA PROPRE ZONE DE
+   DÉFILEMENT. Le navigateur garde alors nativement une position par colonne,
+   au lieu qu'elles se partagent celle de la fenêtre — ce partage était la
+   cause de tous les à-coups, blocages et remontées inexpliquées.
+
+   Conséquence : plus une ligne de JavaScript pour ce carrousel. Pas de
+   mesure de hauteur, pas de mémorisation de position, pas de détection de
+   fin de geste, pas d'animation de rattrapage.
+   =================================================================== */
+
+.carousel-track {
+  /* PAS de "display" ici, volontairement. Cette feuille n'est pas "layered",
+     elle passerait donc DEVANT les utilitaires Tailwind — y compris le
+     "md:hidden"/"sm:hidden" qui masque le carrousel sur grand écran, et la
+     piste réapparaîtrait en bureau. Le "display: flex" est posé uniquement
+     dans les media queries plus bas, là où le carrousel est justement le
+     seul affiché. */
+  /* Défilement horizontal SEUL. "overflow-y: hidden" est indispensable :
+     sans lui, le navigateur transforme l'axe vertical en "auto" dès que
+     l'horizontal ne vaut plus "visible", et on se retrouve avec DEUX zones
+     de défilement vertical imbriquées (la piste et la page) qui se volent
+     le geste. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  /* Au bout du carrousel, le geste ne part pas au navigateur (retour
+     arrière, rebond élastique) : il reste ici. */
+  overscroll-behavior-x: contain;
+  /* La barre horizontale n'apporte rien — on change de rubrique au doigt —
+     et sur les systèmes qui la réservent en permanence elle rognait quelques
+     pixels en bas de chaque colonne. */
+  scrollbar-width: none;
+}
+.carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel-page {
+  /* Exactement une page par écran. "0 0 100%" et non "width: 100%" : dans un
+     conteneur flex, un enfant peut sinon être comprimé par ses voisins. */
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  /* LA ligne qui règle le problème : sa propre zone de défilement vertical,
+     donc sa propre position, conservée par le navigateur. */
+  height: 100%;
+  overflow-y: auto;
+  /* Arrivé en haut ou en bas d'une colonne, le geste ne se propage pas au
+     document (rebond, tiré-pour-rafraîchir) : il s'arrête net, comme dans
+     une application native. */
+  overscroll-behavior-y: contain;
+  /* Barre verticale masquée aussi : elle apparaîtrait sur chaque colonne. */
+  scrollbar-width: none;
+}
+.carousel-page::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===================================================================
+   COQUILLE PLEIN ÉCRAN (mobile uniquement)
+   -------------------------------------------------------------------
+   Le carrousel ci-dessus a besoin d'une HAUTEUR BORNÉE : ses pages sont en
+   "height: 100%", donc sans hauteur à remplir, rien ne défile. On donne
+   cette borne en faisant du <main> une colonne à la hauteur de l'écran, dont
+   le carrousel est l'élément extensible.
+
+   "shell-md" / "shell-sm" : deux variantes parce que les deux pages
+   concernées ne basculent pas en mobile au même seuil — l'accueil masque son
+   carrousel à "md" (768 px), le Journal IA à "sm" (640 px). Chaque page pose
+   la classe qui correspond à SON seuil ; au-delà, ces règles n'existent tout
+   simplement pas et la mise en page bureau est rigoureusement inchangée.
+
+   "shell-fill" : à poser sur CHAQUE conteneur intermédiaire entre le <main>
+   et le carrousel. Un seul oubli dans la chaîne et la hauteur ne descend
+   plus jusqu'en bas — le carrousel se retrouve alors sans hauteur, donc
+   invisible ou non défilable.
+
+   La hauteur retranche les zones sûres (encoche, barre d'accueil iOS) déjà
+   réservées en marge sur <body> : sans ça, 100dvh + ces marges dépasseraient
+   l'écran et remettraient un défilement de document par-dessus le nôtre.
+   =================================================================== */
+
+@media (max-width: 767px) {
+  .shell-md {
+    /* Repli d'abord, unité dynamique ensuite : un navigateur qui ne connaît
+       pas "dvh" ignore la seconde déclaration et garde la première. */
+    height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .shell-md .shell-fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    /* Sans "min-height: 0", un conteneur flex refuse de descendre en dessous
+       de la hauteur de son contenu : la chaîne déborderait au lieu de
+       confiner le défilement dans les colonnes. */
+    min-height: 0;
+  }
+  .shell-md .carousel-track {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 639px) {
+  .shell-sm {
+    /* Repli d'abord, unité dynamique ensuite : un navigateur qui ne connaît
+       pas "dvh" ignore la seconde déclaration et garde la première. */
+    height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .shell-sm .shell-fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .shell-sm .carousel-track {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+/* Zone de contenu qui défile elle-même dans la coquille — les résultats de
+   recherche de l'accueil, qui remplacent le carrousel et doivent donc
+   reprendre son rôle d'élément extensible et défilable. */
+@media (max-width: 767px) {
+  .shell-md .shell-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+}
+
 /* ---- Vignettes en couleur --------------------------------------------
    Les vignettes sont désaturées côté composant (classe Tailwind "grayscale",
    voir ArticleImage). "data-images=color" sur <html> rend la couleur

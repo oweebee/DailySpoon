@@ -199,6 +199,63 @@ function capPerCategory(items: RawItem[], max: number): { aiItems: RawItem[]; ov
  * vraie impression (IA ou pas), qui les rattachera à SA propre édition en
  * les réécrivant.
  */
+/**
+ * Renvoie un prédicat "ce flux est-il coché traduction ?". Une seule requête
+ * pour tout le lot plutôt qu'une par article notifié.
+ *
+ * Deux façons de reconnaître un flux, comme dans syncTranslateFlags : par son
+ * identifiant (cas normal) ou, à défaut, par son titre — certains articles
+ * n'ont pas de feedId en base (origin.streamId manquant à l'ingestion).
+ */
+async function translateFeedMatcher(): Promise<(feedId: string | null, feedTitle: string) => boolean> {
+  const feeds = await prisma.translateFeed.findMany({ select: { freshrssId: true, label: true } });
+  if (feeds.length === 0) return () => false;
+  const ids = new Set(feeds.map((f) => f.freshrssId));
+  const labels = new Set(feeds.map((f) => f.label));
+  return (feedId, feedTitle) => (feedId ? ids.has(feedId) : labels.has(feedTitle));
+}
+
+/**
+ * Traduit le titre et l'extrait d'un article qu'on s'apprête à notifier, et
+ * range le résultat dans le cache de l'article (translatedTitle/
+ * translatedExcerpt) pour que le backfill ne le retraduise pas.
+ *
+ * Best-effort de bout en bout : si l'instance LibreTranslate n'est pas
+ * configurée ou ne répond pas, on renvoie null et la notification part dans la
+ * langue d'origine — jamais d'échec de notification pour un problème de
+ * traduction. Le titre commande : sans lui, on n'écrit rien en cache, pour ne
+ * pas figer un article à moitié traduit (même règle que le backfill).
+ */
+async function translateForTelegram(
+  item: { freshrssItemId: string; sourceTitle: string; sourceExcerpt: string | null },
+  opts: { libretranslateUrl?: string; libretranslateApiKey?: string }
+): Promise<{ title: string; excerpt: string | null } | null> {
+  if (!opts.libretranslateUrl) return null;
+
+  const title = await translateOrNull(item.sourceTitle, opts);
+  if (!title) return null;
+
+  // Extrait tronqué avant envoi (même règle que le backfill) : inutile de
+  // faire traduire des paragraphes entiers pour une légende Telegram, qui est
+  // de toute façon rognée à l'affichage.
+  const excerptSource = item.sourceExcerpt ? shortenForTranslation(item.sourceExcerpt) : "";
+  const excerpt = excerptSource ? await translateOrNull(excerptSource, opts) : null;
+
+  // updateMany et non update : l'article vient d'être inséré par createMany,
+  // on le retrouve par sa clé métier (freshrssItemId) et non par un id qu'on
+  // n'a pas sous la main. Ne fait rien si la ligne n'existe pas — sans erreur.
+  await prisma.article
+    .updateMany({
+      where: { freshrssItemId: item.freshrssItemId },
+      data: { translatedTitle: title, translatedExcerpt: excerpt }
+    })
+    .catch(() => {
+      /* best-effort : le cache est une optimisation, pas une obligation */
+    });
+
+  return { title, excerpt };
+}
+
 export async function ingestRawItems(rawItems: RawItem[], editionId: string | null): Promise<void> {
   if (rawItems.length === 0) return;
 
@@ -296,10 +353,32 @@ export async function ingestRawItems(rawItems: RawItem[], editionId: string | nu
     const toNotify = [...brandNew]
       .sort((a, b) => (b.publishedAt ? new Date(b.publishedAt).getTime() : 0) - (a.publishedAt ? new Date(a.publishedAt).getTime() : 0))
       .slice(0, MAX_TELEGRAM_NOTIFY_PER_RUN);
+    // Flux cochés "traduction" : la notification part en FRANÇAIS, comme la
+    // vignette "En direct" et comme ce que sert l'API Google Reader — recevoir
+    // un article en anglais dans Telegram puis le retrouver en français dans
+    // l'app pour le même flux n'avait aucun sens.
+    //
+    // La traduction se fait ICI et pas plus tard : la notification part au
+    // moment de l'ingestion, bien avant syncTranslateFlags (voir plus bas dans
+    // generateDailyEdition), et ce chemin est aussi emprunté par le balayage
+    // des flux perso, qui ne traduit rien du tout. Attendre voudrait dire ne
+    // jamais rien traduire dans ce cas-là.
+    //
+    // Le résultat est ÉCRIT EN CACHE dans l'article : le backfill le sautera
+    // ensuite (il ignore les articles déjà traduits), donc aucune traduction
+    // n'est payée deux fois. Plafonné par MAX_TELEGRAM_NOTIFY_PER_RUN, soit au
+    // plus 5 articles par passage.
+    const translateForNotify = await translateFeedMatcher();
+    // Réglages lus UNE fois pour tout le lot, pas à chaque article notifié.
+    const { libretranslateUrl, libretranslateApiKey } = await getSettings();
+    const translateOpts = { libretranslateUrl, libretranslateApiKey };
     for (const item of toNotify) {
+      const translated = translateForNotify(item.feedId, item.feedTitle)
+        ? await translateForTelegram(item, translateOpts)
+        : null;
       await sendTelegramNotification({
-        title: item.sourceTitle,
-        excerpt: item.sourceExcerpt,
+        title: translated?.title ?? item.sourceTitle,
+        excerpt: translated?.excerpt ?? item.sourceExcerpt,
         link: item.sourceUrl,
         source: item.feedTitle,
         imageUrl: item.imageUrl

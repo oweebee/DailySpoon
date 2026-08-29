@@ -36,6 +36,11 @@ version. Ce fichier repart donc de zéro à partir d'ici.
   IA à l'impression.
 - Lecteur d'article interne (extraction Readability côté serveur), plein écran
   en PWA, avec traduction à la demande.
+- Navigation au doigt en PWA entièrement refondue : chaque rubrique est
+  désormais sa propre zone de défilement, gérée nativement par le navigateur.
+  Une colonne jamais lue s'ouvre en haut, une colonne déjà parcourue retrouve
+  sa position, et le swipe horizontal ne touche plus au défilement vertical.
+  Le carrousel ne contient plus une seule ligne de JavaScript.
 - Favoris avec filtre par mot-clé, archives et recherche sur tout
   l'historique.
 
@@ -65,6 +70,10 @@ Deux réglages restent disponibles dans `/admin/settings` :
 
 - Instance LibreTranslate auto-hébergée, déployée séparément et raccordée par
   une simple URL. Aucun quota, aucune donnée envoyée à un tiers.
+- Les flux cochés « traduction » sortent en français **partout** : vignettes
+  « En direct », notifications Telegram, et articles servis aux lecteurs RSS
+  externes via l'API Google Reader. Ouvrir l'article reste en langue
+  d'origine, avec un bouton de traduction à la demande.
 
 ### Intégrations (toutes optionnelles)
 

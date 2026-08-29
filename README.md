@@ -206,7 +206,9 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
   **En direct** reste toujours 100 % sans IA : sa fenêtre de lecture et ses vignettes montrent le
   texte brut du flux, jamais un résumé réécrit par l'IA (même après une impression IA).
 - **Traduction** (optionnel) : coche « traduction » sur un flux dans `/admin/categories` pour que
-  ses vignettes s'affichent directement en français dans « En direct ». Seuls les 20 articles les
+  ses articles s'affichent directement en français — vignettes « En direct », notifications
+  Telegram et flux servi aux lecteurs RSS externes (API Google Reader) utilisent tous la même
+  traduction, pour ne pas voir le même article en anglais d'un côté et en français de l'autre. Seuls les 20 articles les
   plus récents de chaque flux sont traduits, du plus récent au plus ancien, et jamais deux fois (la
   traduction est mise en cache en base). Ouvrir l'article le montre toujours dans sa langue
   d'origine — un bouton dans la fenêtre de lecture le traduit à la demande. Tout passe par ton
@@ -242,7 +244,8 @@ npm run generate:edition    # génère une édition manuellement, dans un autre 
   correspond au favori DailySpoon, donc envoyé aussi à Wallabag). Dans le lecteur : compte de type
   FreshRSS, adresse = l'URL de DailySpoon, identifiant `dailyspoon`, mot de passe = le code API
   généré dans `/admin/settings` (un code à 8 chiffres, bouton « Régénérer » ; à défaut le mot de
-  passe admin est aussi accepté). Le texte servi est toujours brut (0 IA), comme « En direct ».
+  passe admin est aussi accepté). Le texte servi est toujours brut (0 IA), comme « En direct » —
+  traduit en français, en revanche, pour les flux cochés « traduction ».
 - La rétention de l'historique (articles ET éditions) se règle dans `/admin/settings` (2 ans par
   défaut, 0 = illimité) ; les articles marqués favoris ne sont jamais purgés.
 - Un journal technique (`/admin/logs`) trace récupérations de flux, générations et appels IA, avec

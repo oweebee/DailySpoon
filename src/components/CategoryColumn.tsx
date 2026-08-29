@@ -100,7 +100,13 @@ export function CategoryColumn({
           setVisibleCount((c) => Math.min(c + STEP, articles.length));
         }
       },
-      { root, rootMargin: "400px" }
+      // 1200 px d'avance et non 400 : une carte d'article fait déjà 400 à
+      // 500 px de haut sur un téléphone (photo 16/9 + une dizaine de lignes),
+      // donc à 400 px le lot suivant ne partait qu'une fois la fin de liste
+      // pratiquement atteinte — on voyait le "Chargement de la suite…" puis
+      // le contenu apparaître d'un bloc. Trois cartes d'avance suffisent à ce
+      // que la suite soit toujours déjà là quand on y arrive.
+      { root, rootMargin: "1200px" }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();

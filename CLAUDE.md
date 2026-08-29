@@ -47,6 +47,28 @@ module** — ne jamais y recopier une valeur à la main.
 composantes seules (`"10 10 10"`, sans `rgb()`) : c'est ce qui garde fonctionnels les modificateurs
 d'opacité (`bg-ink/[0.07]`, `text-sepia/70`) employés partout.
 
+## Carrousel mobile : aucun JavaScript
+
+`MobilePagedSection` (une page = une rubrique, swipe horizontal) est
+**entièrement en CSS**, et doit le rester. Chaque page est sa PROPRE zone de
+défilement vertical (`.carousel-page`, `overflow-y: auto`) : le navigateur
+conserve alors nativement une position par colonne.
+
+La version précédente faisait partager aux colonnes la seule position de la
+fenêtre, puis rattrapait ce défaut en JavaScript — mémorisation manuelle des
+positions, détection de fin de geste, animation de rattrapage, hauteur du
+conteneur imposée et remesurée au `ResizeObserver`. Quatre mécanismes qui
+interagissaient, une dizaine de correctifs successifs, et toujours des
+blocages, des remontées inexpliquées et des colonnes qui ne repartaient pas de
+leur sommet. **Ne pas y revenir** : si le comportement doit changer, ça se
+règle en CSS ou dans la structure, pas en réintroduisant du script.
+
+Contrainte à respecter : le carrousel a besoin d'une **hauteur bornée**. Elle
+descend du `<main>` (classe `shell-md` ou `shell-sm` selon le seuil de bascule
+de la page) jusqu'à lui, via une classe `shell-fill` sur CHAQUE conteneur
+intermédiaire. Un maillon oublié et le carrousel n'a plus de hauteur — donc
+plus rien ne défile. Voir le bloc « CARROUSEL MOBILE » de `globals.css`.
+
 ## Versions
 
 L'application est en **V1**. Les suivantes s'appellent V1.01, V1.02… jusqu'à un passage explicite

@@ -3,6 +3,7 @@ import { getSettings } from "./settings";
 import { allowWithoutPassword, isCorrectPassword, sessionTokenForPassword } from "./auth";
 import { sendFavoriteToWallabag } from "./wallabagSend";
 import { cleanArticleUrl } from "./text";
+import { preferredExcerpt, preferredTitle } from "./articleText";
 import type { Prisma } from "@prisma/client";
 
 // Implémentation SERVEUR de l'API Google Reader, pour connecter DailySpoon à un
@@ -16,8 +17,10 @@ import type { Prisma } from "@prisma/client";
 // (ajout/suppression) reste dans l'admin DailySpoon : les endpoints
 // d'édition d'abonnement répondent OK sans rien faire.
 //
-// Fidèle à l'esprit « En direct = 0 IA » : on sert TOUJOURS le texte brut du
-// flux (sourceTitle/sourceExcerpt), jamais le titre/résumé réécrit par l'IA.
+// Fidèle à l'esprit « En direct = 0 IA » : on ne sert JAMAIS le titre/résumé
+// réécrit par l'IA, toujours le texte du flux. Seule nuance, sans rapport avec
+// l'IA : les flux cochés « traduction » sont servis en français depuis le cache
+// de traduction, comme dans l'application (voir src/lib/articleText.ts).
 
 // ————————————————————————————————————————————————————————————————
 // Constantes de flux (stream ids) standard de l'API Google Reader
@@ -355,6 +358,8 @@ function buildItem(a: {
   greaderId: number;
   sourceTitle: string;
   sourceExcerpt: string | null;
+  translatedTitle: string | null;
+  translatedExcerpt: string | null;
   sourceUrl: string;
   feedId: string | null;
   feedTitle: string;
@@ -383,11 +388,15 @@ function buildItem(a: {
     crawlTimeMsec: String(a.fetchedAt.getTime()),
     timestampUsec: usec(a.publishedAt ?? a.fetchedAt),
     published: publishedSec,
-    // texte BRUT du flux, jamais l'IA. Jamais vide : l'adapter de Readrops
-    // exige un titre non vide (nextNonEmptyString), un titre "" ferait échouer
-    // le parsing de TOUS les items.
-    title: (a.sourceTitle && a.sourceTitle.trim()) || a.feedTitle || "(sans titre)",
-    summary: { content: a.sourceExcerpt || "" },
+    // Texte du flux, jamais l'IA — mais TRADUIT quand le flux est coché
+    // "traduction" dans /admin/categories (voir src/lib/articleText.ts) : un
+    // lecteur externe doit voir la même chose que l'application, sinon le
+    // même article est en français ici et en anglais là.
+    // Jamais vide : l'adapter de Readrops exige un titre non vide
+    // (nextNonEmptyString), un titre "" ferait échouer le parsing de TOUS
+    // les items.
+    title: preferredTitle(a) || a.feedTitle || "(sans titre)",
+    summary: { content: preferredExcerpt(a) },
     // IMPORTANT : n'émettre QUE { href } dans alternate/canonical. Le parseur
     // strict de certains lecteurs (Readrops) lit href puis exige la fin de
     // l'objet ; tout champ derrière (ex. "type") provoque une ParseException
@@ -406,6 +415,10 @@ const ITEM_SELECT = {
   greaderId: true,
   sourceTitle: true,
   sourceExcerpt: true,
+  // Cache de traduction (flux cochés "traduction") — servi en priorité sur
+  // le texte d'origine, voir buildItem.
+  translatedTitle: true,
+  translatedExcerpt: true,
   sourceUrl: true,
   feedId: true,
   feedTitle: true,
