@@ -8,7 +8,7 @@ import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVi
 import { isAlreadyMorssUrl, splitIntoReadableParagraphs, BROWSER_USER_AGENT } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 import { hoistNestedArticleIfClearlyBetter, deepTrimJunk } from "@/lib/articleClean";
-import { translateBestEffort, type TranslateOptions } from "@/lib/translate";
+import { translateBestEffort, translateOrNull, type TranslateOptions } from "@/lib/translate";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -278,6 +278,17 @@ function renderPage(opts: {
   // injoignable, le texte d'origine est réaffiché tel quel).
   const translateHref = `/api/article-proxy?url=${encodeURIComponent(originalUrl)}${translated ? "" : "&translate=1"}`;
   const translateLabel = translated ? "Texte original ↺" : "Traduire en français ⇄";
+  // URL de la version d'origine (sans &translate=1) — sert au retour "Texte
+  // original" après une traduction progressive appliquée en place.
+  const originalHref = `/api/article-proxy?url=${encodeURIComponent(originalUrl)}`;
+  // Traduction PROGRESSIVE possible seulement sur une page en langue d'origine
+  // qui a un vrai contenu d'article (pas un repli iframe, pas une page déjà
+  // traduite côté serveur). Dans ce cas on marque les blocs traduisibles pour
+  // que le script client puisse les cibler et les faire basculer un par un au
+  // fil du flux — voir le POST plus bas. Sinon, comportement d'origine (lien
+  // classique vers &translate=1, rendu serveur complet).
+  const canProgressiveTranslate = Boolean(showTranslateLink && !translated && !embedFallback);
+  const bodyForRender = canProgressiveTranslate ? tagTranslatableBlocks(bodyHtml) : bodyHtml;
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -488,14 +499,31 @@ function renderPage(opts: {
     z-index: 1000;
     opacity: 0;
     pointer-events: none;
+    /* Remplissage progressif fluide en mode déterminé (traduction progressive,
+       la largeur est pilotée en JS bloc par bloc). */
+    transition: width 0.25s ease-out;
   }
-  .translate-progress.is-active {
-    opacity: 1;
+  .translate-progress.is-active { opacity: 1; }
+  /* Mode INDÉTERMINÉ : repli sans traduction progressive (page déjà traduite
+     côté serveur, ou JS qui bascule sur la navigation classique) — on ne connaît
+     pas la progression réelle, donc le ruban défile en boucle. */
+  .translate-progress.is-active.is-indeterminate {
+    width: 40%;
     animation: translate-progress-slide 1.1s ease-in-out infinite;
   }
   @keyframes translate-progress-slide {
     0% { margin-left: -40%; }
     100% { margin-left: 100%; }
+  }
+  /* Bref halo au moment où un bloc bascule en français, pour que l'œil suive la
+     progression sans que ce soit clignotant/agressif. */
+  @keyframes tr-just-flash {
+    from { background-color: ${journal}22; }
+    to { background-color: transparent; }
+  }
+  [data-tr-block].tr-just {
+    animation: tr-just-flash 0.9s ease-out;
+    border-radius: 2px;
   }
 </style>
 </head>
@@ -517,7 +545,7 @@ function renderPage(opts: {
     <iframe class="embed-frame" src="${escapeHtml(originalUrl)}" title="${escapeHtml(title)}" referrerpolicy="no-referrer" loading="lazy"></iframe>`
         : `<h1>${escapeHtml(title)}</h1>
     <p class="byline">${metaBits}${starHtml}</p>
-    <div class="article-body">${bodyHtml}</div>
+    <div class="article-body">${bodyForRender}</div>
     <p class="source-bottom">Source : ${kicker}${starHtml}</p>`
     }
     <p class="stamp-wrap">
@@ -552,25 +580,139 @@ function renderPage(opts: {
 </script>
   <script>
 (function () {
-  // Affiche la barre de progression noire dès le clic sur "Traduire en
-  // français ⇄" / "Texte original ↺" — le navigateur continue de peindre
-  // cette page (et donc la barre) pendant qu'il prépare la navigation vers
-  // la version traduite/originale, avant de la remplacer une fois arrivée.
-  // Pas de preventDefault : la navigation classique du lien <a> suit son
-  // cours normalement, on ajoute juste ce signal visuel avant qu'elle parte.
   var link = document.getElementById("translate-link");
   var bar = document.getElementById("translate-progress");
-  if (link && bar) {
+  if (!link || !bar) return;
+
+  // Valeurs injectées par le serveur (voir renderPage).
+  var PROGRESSIVE = ${canProgressiveTranslate ? "true" : "false"};
+  var ORIGINAL_HREF = ${JSON.stringify(originalHref)};
+  var FALLBACK_HREF = ${JSON.stringify(translateHref)};
+  var ORIG_LABEL = ${JSON.stringify(translateLabel)};
+
+  // Repli : page déjà traduite côté serveur, ou traduction progressive non
+  // applicable. Comportement d'origine — on affiche la barre indéterminée puis
+  // on laisse la navigation classique du lien <a> suivre son cours.
+  if (!PROGRESSIVE) {
     link.addEventListener("click", function () {
       bar.classList.add("is-active");
+      bar.classList.add("is-indeterminate");
+    });
+    window.addEventListener("pageshow", function () {
+      bar.classList.remove("is-active");
+      bar.classList.remove("is-indeterminate");
+    });
+    return;
+  }
+
+  // Traduction PROGRESSIVE : la page reste affichée en langue d'origine ; au
+  // clic on demande au serveur (POST) de traduire les blocs et on les fait
+  // basculer un par un dès qu'ils arrivent dans le flux, la barre se
+  // remplissant au fur et à mesure. Aucun rechargement de page.
+  var busy = false;
+  var translatedInPlace = false;
+
+  function setWidth(p) {
+    if (p < 0) p = 0;
+    if (p > 100) p = 100;
+    bar.style.width = p + "%";
+  }
+
+  link.addEventListener("click", function (e) {
+    // Une fois traduit en place, le lien redevient "Texte original" et recharge
+    // la version d'origine (rendue par le serveur, sans &translate=1).
+    if (translatedInPlace) {
+      window.location.href = ORIGINAL_HREF;
+      return;
+    }
+    e.preventDefault();
+    if (busy) return;
+    run();
+  });
+
+  window.addEventListener("pageshow", function () {
+    if (!busy) {
+      bar.classList.remove("is-active");
+      setWidth(0);
+    }
+  });
+
+  function run() {
+    var els = Array.prototype.slice.call(document.querySelectorAll(".article-body [data-tr-block]"));
+    if (els.length === 0) {
+      // Rien à traduire côté client : on laisse le repli serveur faire foi.
+      window.location.href = FALLBACK_HREF;
+      return;
+    }
+    var texts = els.map(function (el) { return (el.textContent || "").trim(); });
+    var total = els.length;
+    var done = 0;
+    var applied = 0;
+    busy = true;
+    bar.classList.add("is-active");
+    setWidth(3);
+    link.textContent = "Traduction…";
+
+    function finish() {
+      if (!busy) return;
+      busy = false;
+      setWidth(100);
+      setTimeout(function () {
+        bar.classList.remove("is-active");
+        setWidth(0);
+      }, 450);
+      if (applied > 0) {
+        translatedInPlace = true;
+        link.textContent = "Texte original ↺";
+      } else {
+        // Aucun bloc n'a pu être traduit (moteur indisponible) : on ne fait pas
+        // croire à une bascule réussie, on rend la main pour réessayer.
+        link.textContent = ORIG_LABEL;
+      }
+    }
+
+    fetch("/api/article-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texts: texts })
+    }).then(function (res) {
+      if (!res.ok || !res.body) throw new Error("flux indisponible");
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = "";
+      function pump() {
+        return reader.read().then(function (r) {
+          if (r.done) { finish(); return; }
+          buf += decoder.decode(r.value, { stream: true });
+          var lines = buf.split("\\n");
+          buf = lines.pop();
+          for (var k = 0; k < lines.length; k++) {
+            var line = lines[k];
+            if (!line || !line.trim()) continue;
+            var msg;
+            try { msg = JSON.parse(line); } catch (err) { continue; }
+            if (msg && msg.done) { finish(); return; }
+            if (msg && typeof msg.i === "number") {
+              if (msg.ok && typeof msg.text === "string" && els[msg.i]) {
+                els[msg.i].textContent = msg.text;
+                els[msg.i].classList.add("tr-just");
+                applied++;
+              }
+              done++;
+              setWidth(4 + (done / total) * 96);
+            }
+          }
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function () {
+      if (translatedInPlace) return;
+      // Flux impossible : repli sur la traduction serveur classique plutôt que
+      // de laisser l'utilisateur sans rien.
+      window.location.href = FALLBACK_HREF;
     });
   }
-  // Si l'utilisateur revient en arrière (bfcache) sur cette page pendant
-  // qu'elle était affichée "en cours de traduction", la barre resterait
-  // sinon figée active indéfiniment.
-  window.addEventListener("pageshow", function () {
-    if (bar) bar.classList.remove("is-active");
-  });
 })();
 </script>
   ${
@@ -621,14 +763,71 @@ function htmlResponse(html: string): NextResponse {
 // s'ouvrir.
 const MAX_BLOCKS_TO_TRANSLATE = 60;
 
+// Budget GLOBAL pour la traduction d'un article ouvert : tant qu'elle tourne,
+// la requête HTTP reste ouverte et l'utilisateur regarde une page blanche avec
+// la barre de progression qui défile. Passé ce délai total, on rend la main
+// immédiatement en gardant la langue d'origine pour les blocs restants. Sans ce
+// plafond, un article long dont le moteur répond lentement pouvait bloquer la
+// page une ou deux minutes ; et si le moteur ne répondait plus DU TOUT, chaque
+// bloc attendait son propre timeout l'un après l'autre —
+// MAX_BLOCKS_TO_TRANSLATE × timeout, soit jusqu'à une vingtaine de minutes de
+// page blanche (constaté en usage réel : "ça tourne en boucle, je ne sais même
+// pas si ça finira").
+const ARTICLE_TRANSLATE_BUDGET_MS = 90000;
+
+// Timeout PAR BLOC, volontairement plus court que celui du backfill de fond
+// (TIMEOUT_MS = 45s dans translate.ts) : là-bas un lot est retraité au passage
+// suivant sans que personne n'attende, et le conteneur peut être en train de
+// charger ses modèles ; ICI quelqu'un attend en direct, donc mieux vaut
+// abandonner vite un bloc récalcitrant que bloquer toute la page dessus.
+const ARTICLE_PER_BLOCK_TIMEOUT_MS = 15000;
+
+// Au-delà de ce nombre d'échecs CONSÉCUTIFS, on considère le moteur
+// indisponible et on cesse d'essayer : inutile de faire attendre un timeout à
+// l'utilisateur sur chacun des blocs restants un par un. La page rend alors la
+// version d'origine tout de suite. Seuil à 3 (et non 1) pour ne pas abandonner
+// tout l'article à cause d'un unique bloc lent sur un moteur par ailleurs sain.
+const ARTICLE_MAX_CONSECUTIVE_FAILURES = 3;
+
+// Sélecteur + règles de sélection des blocs traduisibles — UNE SEULE source,
+// partagée par les trois usages : le rendu serveur non progressif
+// (translateContentHtml), le marquage pour la traduction progressive
+// (tagTranslatableBlocks) et, indirectement, le script client qui ne cible que
+// les éléments ainsi marqués. Toute divergence désalignerait les index entre le
+// navigateur et le flux serveur.
+const TRANSLATABLE_BLOCK_SELECTOR = "p, li, blockquote, h1, h2, h3, h4, figcaption";
+function selectTranslatableBlocks(root: Element): Element[] {
+  return Array.from(root.querySelectorAll(TRANSLATABLE_BLOCK_SELECTOR))
+    .slice(0, MAX_BLOCKS_TO_TRANSLATE)
+    // Mêmes exclusions que la traduction elle-même : uniquement les blocs sans
+    // élément enfant (sinon on casserait un lien/une image en réécrivant le
+    // texte) et non vides.
+    .filter((el) => el.children.length === 0 && Boolean((el.textContent || "").trim()));
+}
+
+/**
+ * Marque, dans le HTML du corps d'article, chaque bloc traduisible d'un
+ * attribut data-tr-block="" — repère stable que le script client utilise pour
+ * retrouver EXACTEMENT le même ensemble de blocs, dans le même ordre, que ce
+ * que le flux de traduction progressive (POST plus bas) renverra. L'index d'un
+ * bloc = sa position dans cet ensemble, des deux côtés.
+ */
+function tagTranslatableBlocks(html: string): string {
+  const dom = new JSDOM(`<div id="root">${html}</div>`);
+  const root = dom.window.document.getElementById("root");
+  if (!root) return html;
+  selectTranslatableBlocks(root).forEach((el) => el.setAttribute("data-tr-block", ""));
+  return root.innerHTML;
+}
+
 async function translateContentHtml(html: string, opts: TranslateOptions): Promise<string> {
   const dom = new JSDOM(`<div id="root">${html}</div>`);
   const root = dom.window.document.getElementById("root");
   if (!root) return html;
-  const blocks = Array.from(root.querySelectorAll("p, li, blockquote, h1, h2, h3, h4, figcaption")).slice(
-    0,
-    MAX_BLOCKS_TO_TRANSLATE
-  );
+  const blocks = selectTranslatableBlocks(root);
+  const blockOpts: TranslateOptions = { ...opts, timeoutMs: ARTICLE_PER_BLOCK_TIMEOUT_MS };
+  const deadline = Date.now() + ARTICLE_TRANSLATE_BUDGET_MS;
+  let consecutiveFailures = 0;
   for (const el of blocks) {
     // On traduit le TEXTE (textContent), pas le balisage interne
     // (innerHTML) — et uniquement pour les blocs qui n'ont aucun élément
@@ -643,7 +842,21 @@ async function translateContentHtml(html: string, opts: TranslateOptions): Promi
     if (el.children.length > 0) continue;
     const original = (el.textContent || "").trim();
     if (!original) continue;
-    el.textContent = await translateBestEffort(original, opts);
+    // Budget global épuisé, ou moteur visiblement indisponible (trop d'échecs
+    // d'affilée) : on s'arrête là. textContent est déjà en langue d'origine
+    // pour ce bloc et les suivants, donc il n'y a rien à faire — on les laisse
+    // tels quels.
+    if (Date.now() >= deadline || consecutiveFailures >= ARTICLE_MAX_CONSECUTIVE_FAILURES) break;
+    // translateOrNull (et pas translateBestEffort) pour DISTINGUER un échec
+    // d'une vraie traduction : best-effort renverrait le texte d'origine dans
+    // les deux cas, empêchant de détecter que le moteur ne répond plus.
+    const translated = await translateOrNull(original, blockOpts);
+    if (translated !== null) {
+      el.textContent = translated;
+      consecutiveFailures = 0;
+    } else {
+      consecutiveFailures++;
+    }
   }
   return root.innerHTML;
 }
@@ -655,7 +868,9 @@ async function translateArticle(title: string, bodyHtml: string): Promise<{ titl
   const { libretranslateUrl, libretranslateApiKey } = await getSettings();
   const opts = { libretranslateUrl, libretranslateApiKey };
   const [translatedTitle, translatedBody] = await Promise.all([
-    translateBestEffort(title, opts),
+    // Titre : même timeout court que les blocs (utilisateur en attente), pas
+    // les 45s du backfill.
+    translateBestEffort(title, { ...opts, timeoutMs: ARTICLE_PER_BLOCK_TIMEOUT_MS }),
     translateContentHtml(bodyHtml, opts)
   ]);
   return { title: translatedTitle, bodyHtml: translatedBody };
@@ -821,6 +1036,90 @@ async function fetchArticleHtml(
   if (viaMorss && "html" in viaMorss) return viaMorss;
 
   return direct; // les deux ont échoué : on renvoie l'erreur de la tentative directe (plus parlante)
+}
+
+/**
+ * Traduction PROGRESSIVE d'un article ouvert (en flux). Le navigateur envoie la
+ * liste des textes de blocs extraits du DOM déjà affiché (chaque bloc porte
+ * data-tr-block, posé par tagTranslatableBlocks — voir le script client dans
+ * renderPage) ; on renvoie EN FLUX, une ligne JSON par bloc dès qu'il est prêt
+ * ({i, ok, text}), de sorte que la page fasse basculer les blocs en français
+ * l'un après l'autre sans se recharger, avec une barre qui se remplit. La ligne
+ * finale {done:true} clôt le flux. Mêmes garde-fous que le rendu serveur non
+ * progressif (translateContentHtml) : timeout court par bloc, budget global,
+ * abandon rapide si le moteur ne répond plus — pour ne jamais laisser la page
+ * tourner indéfiniment.
+ */
+export async function POST(req: NextRequest): Promise<Response> {
+  let payload: unknown = null;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ error: "corps JSON invalide" }, { status: 400 });
+  }
+  const rawTexts: unknown = (payload as { texts?: unknown } | null)?.texts;
+  if (!Array.isArray(rawTexts)) {
+    return NextResponse.json({ error: "texts[] requis" }, { status: 400 });
+  }
+  // Mêmes bornes de volume que le chemin serveur (plafond de blocs).
+  const texts = rawTexts.slice(0, MAX_BLOCKS_TO_TRANSLATE).map((t) => (typeof t === "string" ? t : ""));
+
+  const { libretranslateUrl, libretranslateApiKey } = await getSettings();
+  const blockOpts: TranslateOptions = {
+    libretranslateUrl,
+    libretranslateApiKey,
+    timeoutMs: ARTICLE_PER_BLOCK_TIMEOUT_MS
+  };
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (obj: unknown) => controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      // Pas d'instance configurée : rien à traduire, on le signale et on ferme.
+      if (!libretranslateUrl) {
+        send({ done: true, reason: "no-engine" });
+        controller.close();
+        return;
+      }
+      const deadline = Date.now() + ARTICLE_TRANSLATE_BUDGET_MS;
+      let consecutiveFailures = 0;
+      for (let i = 0; i < texts.length; i++) {
+        const original = texts[i].trim();
+        if (!original) {
+          // Bloc vide : rien à traduire, on avance (le client garde la v.o.).
+          send({ i, ok: false });
+          continue;
+        }
+        // Budget global épuisé, ou moteur visiblement indisponible : on clôt le
+        // flux tout de suite, le client garde la langue d'origine pour le reste.
+        if (Date.now() >= deadline || consecutiveFailures >= ARTICLE_MAX_CONSECUTIVE_FAILURES) {
+          send({ done: true, reason: "budget" });
+          controller.close();
+          return;
+        }
+        const translated = await translateOrNull(original, blockOpts);
+        if (translated !== null) {
+          send({ i, ok: true, text: translated });
+          consecutiveFailures = 0;
+        } else {
+          send({ i, ok: false });
+          consecutiveFailures++;
+        }
+      }
+      send({ done: true });
+      controller.close();
+    }
+  });
+
+  return new NextResponse(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      // Désactive le buffering d'un éventuel reverse-proxy (nginx/traefik) pour
+      // que le flux arrive réellement bloc par bloc, et non d'un coup à la fin.
+      "X-Accel-Buffering": "no"
+    }
+  });
 }
 
 export async function GET(req: NextRequest) {

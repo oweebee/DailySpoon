@@ -48,6 +48,13 @@ export type TranslateOptions = {
   /** Clé d'accès si l'instance est protégée (Settings.libretranslateApiKey).
    *  Absente = aucune clé transmise. */
   libretranslateApiKey?: string;
+  /** Délai maximal de CE seul appel, en millisecondes — remplace la valeur par
+   *  défaut TIMEOUT_MS. Sert à la traduction à la demande d'un article ouvert
+   *  (article-proxy), où quelqu'un attend en direct et où mieux vaut un timeout
+   *  par bloc plus court que celui, généreux, du backfill de fond (qui, lui,
+   *  doit tolérer un conteneur en train de charger ses modèles). Absent =
+   *  TIMEOUT_MS. */
+  timeoutMs?: number;
 };
 
 /**
@@ -66,7 +73,7 @@ export async function translateDetailed(text: string, options: TranslateOptions 
 
   const targetLang = options.targetLang || "fr";
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_MS);
   try {
     const res = await fetch(`${baseUrl}/translate`, {
       method: "POST",
