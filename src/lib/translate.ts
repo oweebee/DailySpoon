@@ -143,3 +143,65 @@ export async function translateOrNull(text: string, options: TranslateOptions = 
 export async function translateBestEffort(text: string, options: TranslateOptions = {}): Promise<string> {
   return (await translateOrNull(text, options)) ?? text;
 }
+
+/**
+ * Traduit PLUSIEURS textes en UNE SEULE requête (le champ "q" de LibreTranslate
+ * accepte un tableau, et renvoie alors un tableau de traductions dans le même
+ * ordre).
+ *
+ * POURQUOI — la traduction progressive d'un article ouvert envoyait jusqu'ici
+ * une requête HTTP par bloc ET par élément interne, soit des centaines d'appels
+ * pour un article un peu long. Deux conséquences constatées en usage réel :
+ * le plafond de cadence de l'instance (LT_REQ_LIMIT, en requêtes par minute)
+ * finissait par rejeter des appels, et l'empilement de connexions n'aidait pas
+ * un conteneur déjà juste en mémoire. Regrouper divise le nombre d'appels
+ * d'autant, sans rien changer au travail réel du moteur.
+ *
+ * Renvoie :
+ *   - un tableau de MÊME LONGUEUR que l'entrée (une entrée à null = ce texte
+ *     précis n'a pas pu être traduit) ;
+ *   - ou null si la requête groupée ELLE-MÊME a échoué (moteur muet, refus,
+ *     réponse de forme inattendue). L'appelant doit alors retomber sur des
+ *     appels un par un : c'est ce qui rend l'appel groupé sans risque même si
+ *     l'instance ne gère pas les tableaux.
+ */
+export async function translateBatchOrNull(
+  texts: string[],
+  options: TranslateOptions = {}
+): Promise<(string | null)[] | null> {
+  if (texts.length === 0) return [];
+
+  const baseUrl = (options.libretranslateUrl || "").replace(/\/+$/, "");
+  if (!baseUrl) return null;
+
+  const targetLang = options.targetLang || "fr";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_MS);
+  try {
+    const res = await fetch(`${baseUrl}/translate`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        q: texts,
+        source: "auto",
+        target: targetLang,
+        format: "text",
+        ...(options.libretranslateApiKey ? { api_key: options.libretranslateApiKey } : {})
+      })
+    });
+    if (!res.ok) return null;
+
+    const data: any = await res.json().catch(() => null);
+    const out = data?.translatedText;
+    // Forme inattendue (instance qui ne gère pas les tableaux, réponse
+    // tronquée...) : on le signale comme un échec DU LOT, pas comme des
+    // traductions vides — l'appelant réessaiera un par un.
+    if (!Array.isArray(out) || out.length !== texts.length) return null;
+    return out.map((v: unknown) => (typeof v === "string" && v.trim() ? v : null));
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}

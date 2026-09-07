@@ -8,7 +8,7 @@ import { getRedlibInstances, isRedditHostname, isRedditImageHostname, isRedditVi
 import { isAlreadyMorssUrl, splitIntoReadableParagraphs, BROWSER_USER_AGENT } from "@/lib/text";
 import { isForbiddenProxyTarget } from "@/lib/urlGuard";
 import { hoistNestedArticleIfClearlyBetter, deepTrimJunk } from "@/lib/articleClean";
-import { translateBestEffort, translateOrNull, type TranslateOptions } from "@/lib/translate";
+import { translateBestEffort, translateOrNull, translateBatchOrNull, type TranslateOptions } from "@/lib/translate";
 
 // jsdom a besoin du runtime Node complet (pas edge).
 export const runtime = "nodejs";
@@ -913,6 +913,24 @@ const ARTICLE_STREAM_BUDGET_MS = 420000;
 // simple nombre de blocs.
 const MAX_STREAM_STRINGS = 800;
 
+// Les textes sont envoyés au moteur PAR LOTS plutôt qu'un par un. Constaté en
+// usage réel : un appel HTTP par bloc et par lien, ça faisait des centaines
+// d'appels pour un seul article — assez pour dépasser le plafond de cadence de
+// l'instance (LT_REQ_LIMIT) et pour empiler les connexions sur un conteneur
+// déjà juste en mémoire. La traduction s'arrêtait alors net au milieu.
+// Le lot reste petit exprès : le but est de diviser le nombre d'appels, pas de
+// tout envoyer d'un bloc — les blocs continuent d'apparaître au fil de l'eau.
+const STREAM_BATCH_MAX_ITEMS = 8;
+// Volume de caractères par lot, gardé bien sous LT_CHAR_LIMIT (5000 côté
+// instance) puisque cette limite s'applique à la requête entière.
+const STREAM_BATCH_MAX_CHARS = 2500;
+// Un lot contient plusieurs textes : il lui faut plus de temps qu'un texte seul.
+const STREAM_BATCH_TIMEOUT_MS = 45000;
+// Respiration avant de retenter un lot : une surcharge passagère ou un
+// redémarrage du conteneur se résorbe souvent en une poignée de secondes, et
+// réessayer dans la milliseconde ne ferait qu'ajouter à la charge.
+const STREAM_RETRY_PAUSE_MS = 1500;
+
 // Timeout PAR BLOC, volontairement plus court que celui du backfill de fond
 // (TIMEOUT_MS = 45s dans translate.ts) : là-bas un lot est retraité au passage
 // suivant sans que personne n'attende, et le conteneur peut être en train de
@@ -1242,15 +1260,59 @@ export async function POST(req: NextRequest): Promise<Response> {
         controller.close();
         return;
       }
-      const deadline = Date.now() + ARTICLE_STREAM_BUDGET_MS;
-      let consecutiveFailures = 0;
+      const batchOpts: TranslateOptions = { ...blockOpts, timeoutMs: STREAM_BATCH_TIMEOUT_MS };
+      const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      // Découpage en lots, bornés à la fois en nombre de textes et en volume de
+      // caractères. Les textes vides sont réglés tout de suite : le client
+      // attend une réponse pour CHAQUE index avant de réécrire un bloc, donc en
+      // oublier un le laisserait en attente pour toujours.
+      const batches: number[][] = [];
+      let current: number[] = [];
+      let currentChars = 0;
       for (let i = 0; i < texts.length; i++) {
         const original = texts[i].trim();
         if (!original) {
-          // Bloc vide : rien à traduire, on avance (le client garde la v.o.).
           send({ i, ok: false });
           continue;
         }
+        if (
+          current.length > 0 &&
+          (current.length >= STREAM_BATCH_MAX_ITEMS || currentChars + original.length > STREAM_BATCH_MAX_CHARS)
+        ) {
+          batches.push(current);
+          current = [];
+          currentChars = 0;
+        }
+        current.push(i);
+        currentChars += original.length;
+      }
+      if (current.length > 0) batches.push(current);
+
+      const deadline = Date.now() + ARTICLE_STREAM_BUDGET_MS;
+      let consecutiveFailures = 0;
+      // Passe à false si l'on constate que l'instance refuse les requêtes
+      // groupées mais répond bien texte par texte — on finit alors l'article
+      // dans ce mode plutôt que de réessayer un groupage voué à l'échec.
+      let batchSupported = true;
+
+      // Traduit les textes d'un lot un par un et renvoie true si au moins un a
+      // abouti (sert à savoir si le moteur répond encore).
+      const sendOneByOne = async (indices: number[]): Promise<boolean> => {
+        let anyOk = false;
+        for (const i of indices) {
+          const translated = await translateOrNull(texts[i].trim(), blockOpts);
+          if (translated !== null) {
+            send({ i, ok: true, text: translated });
+            anyOk = true;
+          } else {
+            send({ i, ok: false });
+          }
+        }
+        return anyOk;
+      };
+
+      for (const batch of batches) {
         // Budget global épuisé, ou moteur visiblement indisponible : on clôt le
         // flux tout de suite, le client garde la langue d'origine pour le reste.
         if (Date.now() >= deadline || consecutiveFailures >= ARTICLE_MAX_CONSECUTIVE_FAILURES) {
@@ -1258,14 +1320,50 @@ export async function POST(req: NextRequest): Promise<Response> {
           controller.close();
           return;
         }
-        const translated = await translateOrNull(original, blockOpts);
-        if (translated !== null) {
-          send({ i, ok: true, text: translated });
-          consecutiveFailures = 0;
-        } else {
-          send({ i, ok: false });
-          consecutiveFailures++;
+
+        if (!batchSupported) {
+          consecutiveFailures = (await sendOneByOne(batch)) ? 0 : consecutiveFailures + 1;
+          continue;
         }
+
+        const payload = batch.map((i) => texts[i].trim());
+        let out = await translateBatchOrNull(payload, batchOpts);
+        if (out === null) {
+          // Une hésitation du moteur (surcharge passagère, conteneur qui
+          // redémarre) ne doit pas condamner tout l'article : on le laisse
+          // respirer et on retente le lot une fois.
+          await pause(STREAM_RETRY_PAUSE_MS);
+          out = await translateBatchOrNull(payload, batchOpts);
+        }
+
+        if (out === null) {
+          // Le lot ne passe décidément pas. Un seul texte témoin permet de
+          // distinguer les deux causes possibles : moteur réellement muet, ou
+          // instance qui répond mais ne gère pas les tableaux.
+          const probe = await translateOrNull(payload[0], blockOpts);
+          if (probe === null) {
+            for (const i of batch) send({ i, ok: false });
+            consecutiveFailures++;
+          } else {
+            batchSupported = false;
+            send({ i: batch[0], ok: true, text: probe });
+            await sendOneByOne(batch.slice(1));
+            consecutiveFailures = 0;
+          }
+          continue;
+        }
+
+        let anyOk = false;
+        for (let k = 0; k < batch.length; k++) {
+          const translated = out[k];
+          if (translated !== null) {
+            send({ i: batch[k], ok: true, text: translated });
+            anyOk = true;
+          } else {
+            send({ i: batch[k], ok: false });
+          }
+        }
+        consecutiveFailures = anyOk ? 0 : consecutiveFailures + 1;
       }
       send({ done: true });
       controller.close();
