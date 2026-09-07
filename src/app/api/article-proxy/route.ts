@@ -515,6 +515,12 @@ function renderPage(opts: {
     0% { margin-left: -40%; }
     100% { margin-left: 100%; }
   }
+  /* Pendant la traduction, tout ce qui est encore en langue d'origine est
+     estompé ; chaque bloc retrouve sa teinte pleine au moment où sa traduction
+     arrive. On voit ainsi l'avancement descendre dans la page, en plus de la
+     barre du haut. */
+  [data-tr-block] { transition: opacity 0.35s ease; }
+  [data-tr-block].tr-pending { opacity: 0.45; }
   /* Bref halo au moment où un bloc bascule en français, pour que l'œil suive la
      progression sans que ce soit clignotant/agressif. */
   @keyframes tr-just-flash {
@@ -637,6 +643,28 @@ function renderPage(opts: {
     }
   });
 
+  // Construit, pour un bloc, la chaîne à faire traduire. Le balisage interne
+  // (lien, gras, italique...) est remplacé par un repère {0}, {1}... : la phrase
+  // reste donc entière et cohérente pour le moteur, et les éléments d'origine
+  // sont réinsérés APRÈS traduction, à la place où le repère a atterri — même si
+  // le français en change l'ordre. C'est ce qui permet de traduire un paragraphe
+  // contenant un lien sans le casser.
+  function buildTemplate(el) {
+    var parts = [];
+    var inlines = [];
+    var kids = el.childNodes;
+    for (var n = 0; n < kids.length; n++) {
+      var node = kids[n];
+      if (node.nodeType === 3) {
+        parts.push(node.nodeValue || "");
+      } else if (node.nodeType === 1) {
+        parts.push("{" + inlines.length + "}");
+        inlines.push(node);
+      }
+    }
+    return { template: parts.join(""), inlines: inlines };
+  }
+
   function run() {
     var els = Array.prototype.slice.call(document.querySelectorAll(".article-body [data-tr-block]"));
     if (els.length === 0) {
@@ -644,18 +672,109 @@ function renderPage(opts: {
       window.location.href = FALLBACK_HREF;
       return;
     }
-    var texts = els.map(function (el) { return (el.textContent || "").trim(); });
-    var total = els.length;
+
+    // Une entrée par bloc ; "texts" est la liste à plat envoyée au serveur
+    // (le gabarit du bloc, puis le texte propre de chacun de ses éléments
+    // internes). Le serveur reste un simple traducteur de chaînes : c'est ici
+    // qu'on sait à quel bloc chaque index appartient.
+    var entries = [];
+    var texts = [];
+    var owner = [];
+    for (var b = 0; b < els.length; b++) {
+      var el = els[b];
+      var built = buildTemplate(el);
+      // Un bloc sans la moindre lettre (une image seule, un séparateur...) n'a
+      // rien à traduire.
+      if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(built.template)) continue;
+      var entry = {
+        el: el,
+        inlines: built.inlines,
+        templateIndex: texts.length,
+        inlineIndices: [],
+        remaining: 1
+      };
+      owner[texts.length] = entry;
+      texts.push(built.template.trim());
+      for (var q = 0; q < built.inlines.length; q++) {
+        owner[texts.length] = entry;
+        entry.inlineIndices.push(texts.length);
+        entry.remaining++;
+        texts.push((built.inlines[q].textContent || "").trim());
+      }
+      entries.push(entry);
+    }
+    if (entries.length === 0) {
+      window.location.href = FALLBACK_HREF;
+      return;
+    }
+
+    var results = new Array(texts.length);
+    var total = texts.length;
     var done = 0;
     var applied = 0;
     busy = true;
     bar.classList.add("is-active");
     setWidth(3);
     link.textContent = "Traduction…";
+    // Tout ce qui est encore en langue d'origine passe en estompé ; chaque bloc
+    // reprend sa teinte pleine dès que sa traduction est appliquée.
+    for (var g = 0; g < entries.length; g++) entries[g].el.classList.add("tr-pending");
+
+    // Réinsère la traduction dans le bloc. Les repères sont vérifiés AVANT de
+    // toucher au DOM : s'il en manque un (le moteur l'a avalé), on ne touche à
+    // rien et le bloc reste en langue d'origine — jamais de bloc mutilé.
+    function applyEntry(e) {
+      var tpl = results[e.templateIndex];
+      var ok = false;
+      if (typeof tpl === "string" && tpl.trim()) {
+        if (e.inlines.length === 0) {
+          e.el.textContent = tpl;
+          ok = true;
+        } else {
+          var complete = true;
+          for (var k = 0; k < e.inlines.length; k++) {
+            if (tpl.indexOf("{" + k + "}") === -1) { complete = false; break; }
+          }
+          if (complete) {
+            var frag = document.createDocumentFragment();
+            var re = /\\{(\\d+)\\}/g;
+            var last = 0;
+            var m;
+            while ((m = re.exec(tpl)) !== null) {
+              if (m.index > last) frag.appendChild(document.createTextNode(tpl.slice(last, m.index)));
+              var node = e.inlines[parseInt(m[1], 10)];
+              if (node) {
+                var inlineText = results[e.inlineIndices[parseInt(m[1], 10)]];
+                // On ne réécrit le texte d'un élément interne que s'il est
+                // lui-même en texte nu (sinon on écraserait son propre balisage).
+                if (typeof inlineText === "string" && inlineText && node.children.length === 0) {
+                  node.textContent = inlineText;
+                }
+                frag.appendChild(node);
+              }
+              last = m.index + m[0].length;
+            }
+            if (last < tpl.length) frag.appendChild(document.createTextNode(tpl.slice(last)));
+            while (e.el.firstChild) e.el.removeChild(e.el.firstChild);
+            e.el.appendChild(frag);
+            ok = true;
+          }
+        }
+      }
+      e.el.classList.remove("tr-pending");
+      if (ok) {
+        e.el.classList.add("tr-just");
+        applied++;
+      }
+    }
 
     function finish() {
       if (!busy) return;
       busy = false;
+      // Un bloc jamais traduit (flux interrompu, budget atteint, moteur muet)
+      // ne doit pas rester estompé pour toujours : il reprend sa teinte pleine,
+      // simplement en langue d'origine.
+      for (var f = 0; f < entries.length; f++) entries[f].el.classList.remove("tr-pending");
       setWidth(100);
       setTimeout(function () {
         bar.classList.remove("is-active");
@@ -693,10 +812,14 @@ function renderPage(opts: {
             try { msg = JSON.parse(line); } catch (err) { continue; }
             if (msg && msg.done) { finish(); return; }
             if (msg && typeof msg.i === "number") {
-              if (msg.ok && typeof msg.text === "string" && els[msg.i]) {
-                els[msg.i].textContent = msg.text;
-                els[msg.i].classList.add("tr-just");
-                applied++;
+              if (msg.ok && typeof msg.text === "string") results[msg.i] = msg.text;
+              // Un bloc n'est réécrit qu'une fois TOUTES ses pièces reçues
+              // (son gabarit + le texte de chacun de ses éléments internes),
+              // sinon on le reconstruirait avec des morceaux manquants.
+              var e = owner[msg.i];
+              if (e) {
+                e.remaining--;
+                if (e.remaining === 0) applyEntry(e);
               }
               done++;
               setWidth(4 + (done / total) * 96);
@@ -775,6 +898,21 @@ const MAX_BLOCKS_TO_TRANSLATE = 60;
 // pas si ça finira").
 const ARTICLE_TRANSLATE_BUDGET_MS = 90000;
 
+// Budget du chemin PROGRESSIF (flux), bien plus large que celui ci-dessus : là
+// où le rendu serveur bloquant fait patienter devant une page blanche — d'où
+// les 90s —, ici les blocs basculent au fil de l'eau. L'utilisateur lit déjà le
+// début pendant que la suite arrive, et rien ne l'empêche de faire autre chose,
+// donc écourter la traduction d'un article long n'apporterait rien : ça
+// laisserait juste la fin en langue d'origine sans raison. L'abandon rapide en
+// cas de moteur muet (échecs consécutifs) protège toujours du cas "LibreTranslate
+// ne répond plus".
+const ARTICLE_STREAM_BUDGET_MS = 420000;
+
+// Plafond de chaînes acceptées par le flux. Une chaîne = un gabarit de bloc OU
+// le texte d'un élément interne (lien, gras) — il en faut donc plus que le
+// simple nombre de blocs.
+const MAX_STREAM_STRINGS = 800;
+
 // Timeout PAR BLOC, volontairement plus court que celui du backfill de fond
 // (TIMEOUT_MS = 45s dans translate.ts) : là-bas un lot est retraité au passage
 // suivant sans que personne n'attende, et le conteneur peut être en train de
@@ -805,18 +943,42 @@ function selectTranslatableBlocks(root: Element): Element[] {
     .filter((el) => el.children.length === 0 && Boolean((el.textContent || "").trim()));
 }
 
+// Plafond de blocs pour la traduction PROGRESSIVE, bien plus haut que celui du
+// rendu serveur bloquant : ici rien ne bloque la page (les blocs basculent au
+// fil de l'eau et l'utilisateur lit déjà le début pendant que la suite arrive),
+// donc rien ne justifie de s'arrêter à 60 blocs sur un article long.
+const MAX_PROGRESSIVE_BLOCKS = 200;
+
 /**
  * Marque, dans le HTML du corps d'article, chaque bloc traduisible d'un
  * attribut data-tr-block="" — repère stable que le script client utilise pour
- * retrouver EXACTEMENT le même ensemble de blocs, dans le même ordre, que ce
- * que le flux de traduction progressive (POST plus bas) renverra. L'index d'un
- * bloc = sa position dans cet ensemble, des deux côtés.
+ * retrouver EXACTEMENT le même ensemble de blocs, dans le même ordre.
+ *
+ * Contrairement à selectTranslatableBlocks (rendu serveur, qui ne sait traiter
+ * que du texte nu), on retient ICI AUSSI les blocs contenant du balisage
+ * interne — liens, gras, italique. C'était la cause du "à moitié traduit" :
+ * dans un article réel, la plupart des paragraphes contiennent au moins un lien
+ * ou un mot en gras, et ils restaient tous en langue d'origine. Le script
+ * client sait les traduire sans les casser (repères {0}, {1}... à la place des
+ * éléments internes, réinsérés après traduction — voir buildTemplate/applyEntry).
+ *
+ * Seule exclusion restante : les blocs qui CONTIENNENT eux-mêmes un autre bloc
+ * traduisible (ex. un <blockquote> qui enveloppe un <p>). Sans ça, le même
+ * texte serait traduit deux fois et les deux réécritures se marcheraient dessus
+ * dans le DOM. On ne garde donc que les blocs "feuilles" — leurs enfants
+ * éventuels ne sont alors que du balisage en ligne, ce que le client gère.
  */
 function tagTranslatableBlocks(html: string): string {
   const dom = new JSDOM(`<div id="root">${html}</div>`);
   const root = dom.window.document.getElementById("root");
   if (!root) return html;
-  selectTranslatableBlocks(root).forEach((el) => el.setAttribute("data-tr-block", ""));
+  Array.from(root.querySelectorAll(TRANSLATABLE_BLOCK_SELECTOR))
+    .filter(
+      (el) =>
+        Boolean((el.textContent || "").trim()) && el.querySelector(TRANSLATABLE_BLOCK_SELECTOR) === null
+    )
+    .slice(0, MAX_PROGRESSIVE_BLOCKS)
+    .forEach((el) => el.setAttribute("data-tr-block", ""));
   return root.innerHTML;
 }
 
@@ -1061,8 +1223,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!Array.isArray(rawTexts)) {
     return NextResponse.json({ error: "texts[] requis" }, { status: 400 });
   }
-  // Mêmes bornes de volume que le chemin serveur (plafond de blocs).
-  const texts = rawTexts.slice(0, MAX_BLOCKS_TO_TRANSLATE).map((t) => (typeof t === "string" ? t : ""));
+  const texts = rawTexts.slice(0, MAX_STREAM_STRINGS).map((t) => (typeof t === "string" ? t : ""));
 
   const { libretranslateUrl, libretranslateApiKey } = await getSettings();
   const blockOpts: TranslateOptions = {
@@ -1081,7 +1242,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         controller.close();
         return;
       }
-      const deadline = Date.now() + ARTICLE_TRANSLATE_BUDGET_MS;
+      const deadline = Date.now() + ARTICLE_STREAM_BUDGET_MS;
       let consecutiveFailures = 0;
       for (let i = 0; i < texts.length; i++) {
         const original = texts[i].trim();
