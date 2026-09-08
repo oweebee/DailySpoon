@@ -77,6 +77,24 @@ export function CategoryColumn({
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
+  // En vue compacte, chaque carte fait environ moitié moins de hauteur : on
+  // affiche donc DEUX FOIS plus d'articles par rubrique (lot initial ET pas de
+  // chargement doublés), ce qui garde une hauteur de colonne comparable à la
+  // vue normale tout en montrant deux fois plus de titres.
+  const initialCount = compact ? INITIAL_COUNT * 2 : INITIAL_COUNT;
+  const step = compact ? STEP * 2 : STEP;
+
+  // visibleCount démarre à INITIAL_COUNT (5) pour que le rendu serveur et la
+  // première peinture client coïncident (compact est relu après montage — voir
+  // DirectView, même raison que le fuseau horaire). Dès que compact est actif,
+  // on remonte le plancher à initialCount SANS jamais réduire un compteur déjà
+  // agrandi par un "afficher plus" : repasser en vue normale ne fait donc pas
+  // disparaître d'articles déjà chargés.
+  useEffect(() => {
+    if (!compact) return;
+    setVisibleCount((c) => Math.min(Math.max(c, initialCount), articles.length));
+  }, [compact, initialCount, articles.length]);
+
   const visible = articles.slice(0, visibleCount);
   const remaining = articles.length - visible.length;
 
@@ -88,7 +106,7 @@ export function CategoryColumn({
       if (listRef.current) setLockedHeight(listRef.current.getBoundingClientRect().height);
       setExpanded(true);
     }
-    setVisibleCount((c) => Math.min(c + STEP, articles.length));
+    setVisibleCount((c) => Math.min(c + step, articles.length));
   }
 
   // Défilement "à l'infini" : soit à l'intérieur de l'encart figé (desktop,
@@ -105,7 +123,7 @@ export function CategoryColumn({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisibleCount((c) => Math.min(c + STEP, articles.length));
+          setVisibleCount((c) => Math.min(c + step, articles.length));
         }
       },
       // 1200 px d'avance et non 400 : une carte d'article fait déjà 400 à
@@ -118,7 +136,7 @@ export function CategoryColumn({
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [watching, scrollExpand, articles.length]);
+  }, [watching, scrollExpand, articles.length, step]);
 
   return (
     // Le filet/padding séparant les colonnes visuelles est désormais posé sur
@@ -185,7 +203,7 @@ export function CategoryColumn({
             // partout ailleurs : la traduction n'est pas touchée.
             <article
               key={article.id}
-              className="article-card flex items-start gap-3 border-2 border-ink bg-ink/[0.07] p-2.5"
+              className="article-card relative flex items-start gap-3 border-2 border-ink bg-ink/[0.07] p-2.5"
             >
               {article.imageUrl && (
                 <ArticleLink
@@ -196,8 +214,10 @@ export function CategoryColumn({
                   <ArticleImage
                     src={article.imageUrl}
                     alt={directTitle(article)}
-                    // Pas de tampon-date ni de médaille sur une vignette de
+                    // Pas de tampon-date ni de médaille SUR la vignette de
                     // 64 px : le cachet ferait presque la taille de l'image.
+                    // La médaille se pose plutôt en bas à droite de la CARTE,
+                    // voir plus bas.
                     dateLabel={null}
                     medal={false}
                     className="h-full w-full"
@@ -216,6 +236,21 @@ export function CategoryColumn({
                 </h3>
                 <SourceLine article={article} showDate={false} showFavorite={showFavorite} />
               </div>
+              {/* Médaille (couronne) posée en BAS À DROITE de la carte compacte,
+                  à moitié de sa taille normale — la version pleine fait 53 px de
+                  haut (voir ArticleImage), on la met donc à ~27 px ici. Léger
+                  débord du coin, comme la version normale déborde le coin
+                  haut-gauche de la photo. Décorative : aria-hidden + non
+                  cliquable, elle ne gêne pas le lien du titre en dessous. */}
+              {showMedal && article.medal && (
+                <img
+                  src="/badges/wax-seal.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="pointer-events-none absolute z-10 select-none"
+                  style={{ right: "-6px", bottom: "-7px", height: "27px", width: "auto" }}
+                />
+              )}
             </article>
           ) : (
             <article key={article.id} className="article-card border-2 border-ink bg-ink/[0.07] p-4">
@@ -278,7 +313,7 @@ export function CategoryColumn({
           >
             {scrollExpand
               ? "Afficher plus d'articles"
-              : `Suite — encore ${Math.min(STEP, remaining)} de plus (${remaining} au total)`}
+              : `Suite — encore ${Math.min(step, remaining)} de plus (${remaining} au total)`}
           </button>
           <div
             aria-hidden="true"
