@@ -88,6 +88,7 @@ export function EditionView({
   articles,
   categoryOrder = [],
   clampSummary = false,
+  compact = false,
   date,
   mastheadAction,
   navExtra,
@@ -113,6 +114,10 @@ export function EditionView({
   /** Limite l'aperçu de texte à 10 lignes (page "En direct") — pour lire la
    *  suite, on ouvre l'article via la photo ou le lien source. */
   clampSummary?: boolean;
+  /** Bascule "vue compacte" (voir DirectView) — relayée aux colonnes via
+   *  CategoryGrid. N'affecte que les colonnes de rubriques ; le grand encart
+   *  "À la une" du desktop garde sa mise en page. */
+  compact?: boolean;
 }) {
   if (articles.length === 0) {
     return (
@@ -259,6 +264,7 @@ export function EditionView({
       <CategoryGrid
         initialCategories={columns}
         clampSummary={clampSummary}
+        compact={compact}
         date={date}
         mastheadAction={mastheadAction}
         navExtra={navExtra}

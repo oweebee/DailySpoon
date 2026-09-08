@@ -7,6 +7,10 @@ import { ArticleLink } from "./ArticleLink";
 import { WesternMagnifier } from "./WesternMagnifier";
 import { Masthead } from "./Masthead";
 
+// Clé de mémorisation de la préférence "vue compacte" dans le navigateur
+// (localStorage) : conservée d'une visite à l'autre, propre à cet appareil.
+const COMPACT_KEY = "dailyspoon:direct:compact";
+
 export function DirectView({
   initialArticles,
   categoryOrder = [],
@@ -63,6 +67,34 @@ export function DirectView({
 
   const isSearching = query.trim().length > 0;
 
+  // Vue compacte (bascule via le timbre "Vue compacte", posé à côté de
+  // "Télégraphier les nouvelles") : ne change QUE la mise en forme des cartes
+  // de rubrique — miniature carrée + titre + source, sans aperçu de texte —
+  // pour tenir beaucoup plus d'articles à l'écran. Aucune incidence sur les
+  // données ni la traduction (mêmes titres, traduits si dispo). Initialisée à
+  // false puis relue APRÈS montage : lire localStorage pendant le rendu
+  // provoquerait un écart d'hydratation serveur/navigateur (voir la note
+  // équivalente sur le fuseau horaire dans EditionView).
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(COMPACT_KEY) === "1") setCompact(true);
+    } catch {
+      /* localStorage indisponible (navigation privée…) : on reste en vue normale */
+    }
+  }, []);
+  function toggleCompact() {
+    setCompact((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(COMPACT_KEY, next ? "1" : "0");
+      } catch {
+        /* best-effort : sans stockage, la bascule reste valable le temps de la session */
+      }
+      return next;
+    });
+  }
+
   // Champ de recherche transmis au Masthead pour être posé À DROITE du menu,
   // après "Admin" — et non plus sur une ligne à lui juste en dessous. Son
   // état reste ici : c'est DirectView qui s'en sert pour remplacer la liste
@@ -83,6 +115,33 @@ export function DirectView({
     </label>
   );
 
+  // Timbre "Vue compacte / complète", posé À CÔTÉ de "Télégraphier les
+  // nouvelles" dans le même groupe d'action du bandeau (le slot "action" du
+  // Masthead est une rangée flex — voir Masthead : les deux timbres s'y
+  // alignent). Le libellé annonce la vue vers laquelle on bascule, comme
+  // "Télégraphier" annonce son action.
+  const compactToggle = (
+    <span className="inline-flex flex-col items-center">
+      <button
+        type="button"
+        onClick={toggleCompact}
+        aria-pressed={compact}
+        className="stamp-button font-display uppercase"
+      >
+        <span>Vue</span>
+        <span>{compact ? "complète" : "compacte"}</span>
+      </button>
+    </span>
+  );
+  // Le timbre de bascule S'AJOUTE à l'action reçue de la page (Télégraphier),
+  // sans la remplacer — c'est ce groupe combiné qu'on passe au Masthead.
+  const actionWithToggle = (
+    <>
+      {compactToggle}
+      {mastheadAction}
+    </>
+  );
+
   return (
     // "shell-fill" : maillon de la chaîne de hauteur qui descend du <main>
     // jusqu'au carrousel (voir globals.css). Un maillon manquant et le
@@ -93,7 +152,7 @@ export function DirectView({
           composant client. Le laisser dans la page (composant serveur)
           rendait impossible de l'y faire descendre. */}
       <div className="hidden md:block">
-        <Masthead date={date} syncedAt={syncedAt} action={mastheadAction} navExtra={searchField} />
+        <Masthead date={date} syncedAt={syncedAt} action={actionWithToggle} navExtra={searchField} />
       </div>
 
       {/* Bandeau MOBILE, rendu ici et une seule fois — le carrousel n'en pose
@@ -111,7 +170,7 @@ export function DirectView({
           date={date}
           syncedAt={syncedAt}
           compact
-          action={mastheadAction}
+          action={actionWithToggle}
           titleAside={searchField}
         />
       </div>
@@ -132,6 +191,7 @@ export function DirectView({
           articles={initialArticles}
           categoryOrder={categoryOrder}
           clampSummary
+          compact={compact}
           date={date}
           mastheadAction={mastheadAction}
           showMasthead={false}

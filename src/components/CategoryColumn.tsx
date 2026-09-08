@@ -18,6 +18,7 @@ export function CategoryColumn({
   onDragEnd,
   onDropHere,
   clampSummary = false,
+  compact = false,
   showMedal = true,
   showDateStamp = true,
   showFavorite = true,
@@ -37,6 +38,13 @@ export function CategoryColumn({
   /** Limite l'aperçu à 10 lignes (page "En direct") — pour lire la suite,
    *  on ouvre l'article via la photo ou le lien source. */
   clampSummary?: boolean;
+  /** Mode compact (bascule sur /direct, voir DirectView) : chaque article se
+   *  résume à une miniature carrée à gauche, le titre (traduit si dispo) et la
+   *  source à droite — pas de grande image ni d'aperçu de texte, pour tenir
+   *  beaucoup plus d'articles à l'écran. Ne change RIEN aux données affichées
+   *  (mêmes titres, même traduction) : seule la mise en forme de la carte
+   *  change. */
+  compact?: boolean;
   /** La page d'accueil (FrontPageView) n'a pas la notion de médaille, de
    *  tampon-date sur la photo (toujours l'édition du jour) ni de favoris —
    *  ces trois options permettent de les masquer, tout en gardant le
@@ -168,32 +176,75 @@ export function CategoryColumn({
           // "article-card" : simple point d'accroche pour le thème (voir
           // globals.css). En Material, le fond gris est conservé — c'est lui
           // qui délimite la carte — mais le trait de contour disparaît.
-          <article key={article.id} className="article-card border-2 border-ink bg-ink/[0.07] p-4">
-            {article.imageUrl && (
-              <ArticleLink
-                href={directHref(article)}
-                title={directTitle(article)}
-                className="mb-2 block aspect-[16/9] w-full"
-              >
-                <ArticleImage
-                  src={article.imageUrl}
-                  alt={directTitle(article)}
-                  dateLabel={showDateStamp ? formatStamp(article.publishedAt) : null}
-                  medal={showMedal ? article.medal : false}
-                  className="h-full w-full"
-                />
-              </ArticleLink>
-            )}
-            <h3 className="font-display text-sm font-bold leading-snug">{directTitle(article)}</h3>
-            <p
-              className={`mt-1 text-sm leading-snug text-neutral-700 ${
-                clampSummary ? "line-clamp-[10]" : ""
-              }`}
+          compact ? (
+            // Carte COMPACTE : miniature carrée à gauche, titre + source à
+            // droite, pas d'aperçu de texte. Le titre devient cliquable (la
+            // grande image, seul lien d'ouverture en mode normal, laisse ici
+            // place à une petite vignette — sans titre cliquable, la cible
+            // serait minuscule). directTitle gère titre traduit/original comme
+            // partout ailleurs : la traduction n'est pas touchée.
+            <article
+              key={article.id}
+              className="article-card flex items-start gap-3 border-2 border-ink bg-ink/[0.07] p-2.5"
             >
-              {directText(article)}
-            </p>
-            <SourceLine article={article} showDate={!article.imageUrl} showFavorite={showFavorite} />
-          </article>
+              {article.imageUrl && (
+                <ArticleLink
+                  href={directHref(article)}
+                  title={directTitle(article)}
+                  className="block aspect-square w-16 shrink-0"
+                >
+                  <ArticleImage
+                    src={article.imageUrl}
+                    alt={directTitle(article)}
+                    // Pas de tampon-date ni de médaille sur une vignette de
+                    // 64 px : le cachet ferait presque la taille de l'image.
+                    dateLabel={null}
+                    medal={false}
+                    className="h-full w-full"
+                  />
+                </ArticleLink>
+              )}
+              <div className="min-w-0 flex-1">
+                <h3 className="font-display text-sm font-bold leading-snug">
+                  <ArticleLink
+                    href={directHref(article)}
+                    title={directTitle(article)}
+                    className="hover:underline"
+                  >
+                    {directTitle(article)}
+                  </ArticleLink>
+                </h3>
+                <SourceLine article={article} showDate={false} showFavorite={showFavorite} />
+              </div>
+            </article>
+          ) : (
+            <article key={article.id} className="article-card border-2 border-ink bg-ink/[0.07] p-4">
+              {article.imageUrl && (
+                <ArticleLink
+                  href={directHref(article)}
+                  title={directTitle(article)}
+                  className="mb-2 block aspect-[16/9] w-full"
+                >
+                  <ArticleImage
+                    src={article.imageUrl}
+                    alt={directTitle(article)}
+                    dateLabel={showDateStamp ? formatStamp(article.publishedAt) : null}
+                    medal={showMedal ? article.medal : false}
+                    className="h-full w-full"
+                  />
+                </ArticleLink>
+              )}
+              <h3 className="font-display text-sm font-bold leading-snug">{directTitle(article)}</h3>
+              <p
+                className={`mt-1 text-sm leading-snug text-neutral-700 ${
+                  clampSummary ? "line-clamp-[10]" : ""
+                }`}
+              >
+                {directText(article)}
+              </p>
+              <SourceLine article={article} showDate={!article.imageUrl} showFavorite={showFavorite} />
+            </article>
+          )
         ))}
         {(expanded || autoInfinite) && remaining > 0 && (
           <div ref={sentinelRef} className="py-3 text-center text-[0.6rem] italic uppercase tracking-[0.2em] text-sepia/70">
