@@ -256,7 +256,10 @@ export function CategoryColumn({
                   alt=""
                   aria-hidden="true"
                   className="pointer-events-none absolute z-10 select-none"
-                  style={{ right: "-6px", bottom: "-7px", height: "27px", width: "auto" }}
+                  // Posée À L'INTÉRIEUR du coin bas-droite (insets positifs) et
+                  // non en débord : sur une carte compacte, la couronne qui
+                  // dépassait le bord se voyait "sortir" de l'article.
+                  style={{ right: "4px", bottom: "4px", height: "27px", width: "auto" }}
                 />
               )}
             </article>
