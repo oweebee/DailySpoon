@@ -225,7 +225,15 @@ export function CategoryColumn({
                 </ArticleLink>
               )}
               <div className="min-w-0 flex-1">
-                <h3 className="font-display text-sm font-bold leading-snug">
+                {/* "break-words" INDISPENSABLE ici : la colonne texte du compact
+                    est étroite (la vignette prend 64 px), et un titre contenant
+                    un mot très long sans espace — typique des titres Reddit à
+                    underscores ou d'une URL brute — déborderait sinon la colonne
+                    et rendrait la carte plus large que l'écran (le <main> masque
+                    le débordement du document, mais le carrousel, en
+                    overflow-x:auto, laisse alors la carte défiler
+                    horizontalement au-delà de l'écran). Vérifié en headless. */}
+                <h3 className="break-words font-display text-sm font-bold leading-snug">
                   <ArticleLink
                     href={directHref(article)}
                     title={directTitle(article)}

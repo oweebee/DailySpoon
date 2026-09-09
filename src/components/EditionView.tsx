@@ -343,12 +343,23 @@ export function SourceLine({
   const formatted = showDate ? formatPublished(article.publishedAt) : null;
   return (
     <p
-      className={`mt-1 flex items-center gap-1.5 text-xs italic text-sepia ${
+      // "min-w-0" : sans lui, un nom de flux d'un seul tenant très long (rare,
+      // mais ex. "un-domaine-tres-long.example.com") ne pourrait pas rétrécir
+      // sous sa largeur de contenu et déborderait la carte — surtout en vue
+      // compacte, où la colonne texte est étroite. Combiné au "break-words" du
+      // lien juste en dessous, le nom passe alors à la ligne au lieu de pousser
+      // la carte hors écran (vérifié en headless). Sans effet sur les noms
+      // courts, qui tiennent sur une ligne comme avant.
+      className={`mt-1 flex min-w-0 items-center gap-1.5 text-xs italic text-sepia ${
         center ? "justify-center" : ""
       }`}
     >
       {formatted && <span>{formatted} · </span>}
-      <ArticleLink href={directHref(article)} title={directTitle(article)} className="hover:underline">
+      <ArticleLink
+        href={directHref(article)}
+        title={directTitle(article)}
+        className="min-w-0 break-words hover:underline"
+      >
         Source : {article.feedTitle || article.sourceTitle}
       </ArticleLink>
       {showFavorite && <FavoriteStar articleId={article.id} initialFavorite={article.favorite} />}
