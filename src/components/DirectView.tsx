@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { EditionView, SourceLine, formatStamp, directTitle, directText, directHref, type ArticleLike, type CategoryOrderEntry } from "./EditionView";
 import { ArticleImage } from "./ArticleImage";
 import { ArticleLink } from "./ArticleLink";
@@ -83,6 +84,30 @@ export function DirectView({
       /* localStorage indisponible (navigation privée…) : on reste en vue normale */
     }
   }, []);
+
+  // Auto-refresh : toutes les 60 s, on interroge /api/articles/latest-check.
+  // Si le syncedAt de la dernière édition a changé (nouvelle télégraphie),
+  // router.refresh() re-exécute le composant serveur et recharge les articles
+  // sans rechargement complet de la page.
+  const router = useRouter();
+  const syncedAtRef = useRef<string | null>(
+    syncedAt ? new Date(syncedAt).toISOString() : null
+  );
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch("/api/articles/latest-check");
+        const body: { syncedAt: string | null } = await res.json().catch(() => ({ syncedAt: null }));
+        if (body.syncedAt && body.syncedAt !== syncedAtRef.current) {
+          syncedAtRef.current = body.syncedAt;
+          router.refresh();
+        }
+      } catch {
+        /* réseau indisponible : on réessaie au prochain tick */
+      }
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [router]);
   function toggleCompact() {
     setCompact((v) => {
       const next = !v;
